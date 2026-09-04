@@ -50,6 +50,17 @@ export const BORNES = {
   fuseau: 100,
   /** Les dimensions de fenêtre. Au-delà, c’est du bruit, pas un écran. */
   viewport: 100_000,
+  /** Le titre de la carte de compréhension — une phrase, sans point final. */
+  titre: 200,
+  /** Le résumé de la carte — 1 à 3 phrases. */
+  resume: 1_000,
+  /** La question du bot. ⛔ Deux phrases au maximum (01-Specs/entretien.md §3). */
+  question: 400,
+  /**
+   * Le motif d’une question. ⚠️ Journalisé, jamais affiché au collaborateur —
+   *    il sert à la mise au point du prompt (01-Specs/entretien.md).
+   */
+  motif: 500,
 } as const
 
 /** Les types de capture acceptés. ⛔ Liste close. */
@@ -63,3 +74,19 @@ export const TYPES_AUDIO = [
   'audio/mpeg',
   'audio/wav',
 ] as const
+
+/**
+ * Le chemin d’un tour d’entretien.
+ *
+ * ⚠️ Une fonction et non un gabarit : l’identifiant d’un retour est un cuid, et
+ *    le concaténer à la main sur deux sites d’appel finit toujours par produire
+ *    un `//` ou un `undefined` dans une URL.
+ */
+export function cheminTour(retour: string): string {
+  return `${CHEMIN_RETOURS}/${encodeURIComponent(retour)}/tour`
+}
+
+/** Le chemin de fin d’entretien — envoi manuel ou abandon. */
+export function cheminFin(retour: string): string {
+  return `${CHEMIN_RETOURS}/${encodeURIComponent(retour)}/fin`
+}

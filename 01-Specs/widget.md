@@ -143,6 +143,24 @@ Voir [entretien.md] pour le comportement du bot. Côté widget :
 - micro et champ texte restent disponibles pour répondre ;
 - **« Envoyer maintenant »** est présent à chaque tour, sans exception.
 
+Deux boutons, et un seul est primaire :
+
+| Bouton | Ce qu’il fait |
+|---|---|
+| **Répondre** | envoie la réponse et les corrections, demande le tour suivant. Désactivé quand il n’y a rien à envoyer |
+| **Envoyer maintenant** | termine l’entretien. ⛔ **Jamais désactivé pendant un entretien**, champ vide compris |
+
+⛔ **La carte n’a pas de bouton « valider ».** On corrige, ça part avec le tour suivant ou avec
+l’envoi. Un bouton de validation ferait croire qu’on remplit un formulaire — l’exact contraire du
+message ([DESIGN.md](../04-Architecture/DESIGN.md)).
+
+⚠️ **Quand le bot n’a plus de question, le widget envoie tout seul.** On ne retient personne : la
+carte mise à jour, puis l’accusé. Et **si le modèle ne répond pas, la carte n’apparaît pas** — le
+champ texte reste, « Envoyer » fonctionne, et le widget ne s’excuse pas.
+
+⚠️ **Refermer le panneau en cours d’entretien n’est pas une perte** : le retour est conservé et
+envoyé en l’état, marqué `abandonne`. Quitter l’onglet non plus — l’abandon part en `keepalive`.
+
 ### Envoyé
 
 Un accusé sobre, deux secondes, puis fermeture automatique — et le focus revient au lanceur.

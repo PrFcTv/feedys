@@ -223,6 +223,48 @@ type TourEntretien = {
 ⚠️ **Le champ `motif` n’est jamais affiché au collaborateur.** Il sert à la mise au point : quand
 une question est mauvaise, c’est le motif qui dit pourquoi le modèle l’a choisie.
 
+## Comment ça se passe sur le fil
+
+Deux routes, et le widget ne compte rien.
+
+| Route | Ce qu’elle fait |
+|---|---|
+| `POST /api/retours/:id/tour` | un tour : rend `{ comprehension, question, motif }` |
+| `POST /api/retours/:id/fin` | l’entretien se termine — `envoi` ou `abandon` |
+
+⛔ **Les deux sont bornées par le `produit_id` déduit de la clé publique**, jamais par un
+paramètre de requête. Un identifiant de retour deviné ne donne accès à rien chez un autre produit.
+
+⛔ **Elles sont limitées en débit, plus serré que l’ingestion** : un tour appelle le modèle, donc
+il coûte. C’est le seul endroit du produit où le bruit se paie en argent et pas en lignes.
+
+### Le compte des relances
+
+⛔ **Une ligne `bot` du fil = une question posée.** Le compte se fait donc sur ce qui s’est
+réellement passé, en base, et pas sur un compteur envoyé par le widget. Forger la requête ne donne
+pas une troisième relance : il faudrait forger le fil.
+
+⚠️ Conséquence : **une ligne `bot` n’est écrite que si le bot a posé une question.** Un dernier
+tour sans question ne laisse pas de trace dans le fil — sa carte est rendue au widget, et c’est la
+**synthèse** qui est l’artefact structuré ([D-013](../00-Projet/DECISIONS_LOG.md)).
+
+### Ce que la carte devient quand on la corrige
+
+⛔ **La carte n’est pas stockée.** Une correction entre dans le fil comme ce qu’elle est — la
+personne qui reprend le bot — sous la forme d’une ligne `collaborateur` préfixée
+`Correction · ` : `Correction · Écran — Liste des mandats`.
+
+⚠️ **Elle voyage avec le tour suivant, ou avec la fin.** C’est ce qui permet de n’avoir aucun
+bouton « valider » sans jamais perdre une correction, y compris quand on corrige puis qu’on clique
+immédiatement sur « Envoyer maintenant ». Idem pour ce qui vient d’être écrit : **le texte en cours
+part avec la fin**, parce qu’on a cliqué sur « Envoyer », pas sur « jeter ».
+
+### Quand `comprehension` vaut `null`
+
+Quand le transcript n’a rien d’intelligible, le bot relance **sans carte**. Une compréhension
+fabriquée sur du vide serait un mensonge, et la carte est précisément l’endroit où le produit
+promet de ne pas mentir.
+
 ## Modes de défaillance à traiter explicitement
 
 | Cas | Comportement attendu |
@@ -235,3 +277,21 @@ une question est mauvaise, c’est le motif qui dit pourquoi le modèle l’a ch
 
 ⛔ **Aucun de ces cas ne perd le retour.** C’est l’invariant : une fois que quelqu’un a parlé, sa
 parole arrive au développeur, quoi qu’il advienne du modèle, du réseau ou du navigateur.
+
+⚠️ **L’abandon passe par `pagehide` et une requête `keepalive`.** Sans elle, le navigateur annule
+l’appel au moment où la page se ferme, et le retour resterait `en_cours` pour toujours — ce qui
+n’est pas une perte de parole, mais une perte de statut, et personne ne le verrait.
+
+## La mise au point du prompt
+
+```bash
+pnpm entretien:rejouer -- --retour <id> [--modele <id>] [--prompt]
+```
+
+L’outil rejoue la boucle sur un retour existant, **sans widget et sans navigateur**. À chaque
+endroit où le bot avait parlé, il montre côte à côte **ce qui avait été demandé** et **ce que le
+prompt d’aujourd’hui demanderait**. `--prompt` imprime le prompt système assemblé : quand une
+question est mauvaise, la première chose à regarder est ce que le modèle a réellement lu.
+
+⛔ **Il n’écrit rien** — ni message, ni statut, ni synthèse. Un outil de mise au point qui modifie
+ce qu’il mesure ne mesure plus rien.

@@ -10,6 +10,8 @@ import { parseArgs } from 'node:util'
 export const USAGE_PRODUIT =
   'Usage : pnpm produit:creer -- --nom "VictorIA" --domaine victoria.exemple.fr'
 
+export const USAGE_REJOUER = 'Usage : pnpm entretien:rejouer -- --retour <id> [--modele <id>] [--prompt]'
+
 /**
  * ⚠️ `pnpm produit:creer -- --nom …` transmet le `--` tel quel dans `argv`, et
  *    `parseArgs` le prend pour un argument positionnel. On le retire d’abord —
@@ -33,4 +35,32 @@ export function lireArgumentsProduit(argv: readonly string[]): { nom: string; do
   if (!nom || !domaine) throw new Error(USAGE_PRODUIT)
 
   return { nom, domaine }
+}
+
+/**
+ * ⚠️ `--prompt` imprime le prompt système assemblé plutôt que de le deviner.
+ *    C’est la moitié de l’outil : quand une question est mauvaise, la première
+ *    chose à regarder est ce que le modèle a réellement lu.
+ */
+export function lireArgumentsRejouer(argv: readonly string[]): {
+  retour: string
+  modele: string | undefined
+  prompt: boolean
+} {
+  const args = [...argv]
+  while (args[0] === '--') args.shift()
+
+  const { values } = parseArgs({
+    args,
+    options: {
+      retour: { type: 'string' },
+      modele: { type: 'string' },
+      prompt: { type: 'boolean' },
+    },
+  })
+
+  const retour = values.retour?.trim()
+  if (!retour) throw new Error(USAGE_REJOUER)
+
+  return { retour, modele: values.modele?.trim() || undefined, prompt: values.prompt === true }
 }

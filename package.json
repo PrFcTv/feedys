@@ -18,6 +18,7 @@
     "db:migrate": "tsx apps/serveur/outils/migrer.ts",
     "db:generate": "prisma generate",
     "produit:creer": "tsx apps/serveur/outils/creer-produit.ts",
+    "entretien:rejouer": "tsx apps/serveur/outils/entretien-rejouer.ts",
     "widget:demo": "pnpm --filter @feedys/widget build && tsx packages/widget/demo/serveur.ts"
   },
   "devDependencies": {
