@@ -9,6 +9,8 @@ import type { MotifRefus } from '../../../domaine/retours/ingestion'
 import { corpsTropGros, ingerer } from '../../../domaine/retours/ingestion'
 import { portsIngestion } from '../../../infra/composition'
 
+import { ipDe, json, preflight } from './_reponses'
+
 /** ⚠️ `pg` et le système de fichiers : la route ne tourne pas sur l’edge. */
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,44 +25,8 @@ const STATUT: Readonly<Record<MotifRefus, number>> = {
   stockage_indisponible: 503,
 }
 
-/**
- * ⚠️ Le préflight ne porte PAS la clé — `Access-Control-Request-Headers` ne
- *    donne que des noms d’en-têtes. Il n’y a donc rien à autoriser à ce
- *    moment-là, et rien à divulguer non plus : l’origine est renvoyée telle
- *    quelle, et c’est le POST qui l’accepte ou la refuse contre le domaine du
- *    produit (domaine/retours/origine.ts).
- */
-function enTetesCors(origine: string | null): Record<string, string> {
-  return {
-    'access-control-allow-origin': origine ?? '*',
-    'access-control-allow-methods': 'POST, OPTIONS',
-    'access-control-allow-headers': `content-type, ${EN_TETE_CLE}`,
-    'access-control-max-age': '86400',
-    vary: 'Origin',
-  }
-}
-
-function json(corps: unknown, statut: number, origine: string | null): Response {
-  return new Response(JSON.stringify(corps), {
-    status: statut,
-    headers: { 'content-type': 'application/json; charset=utf-8', ...enTetesCors(origine) },
-  })
-}
-
-/**
- * L’IP telle que le proxy la rapporte.
- *
- * ⚠️ Elle sert UNIQUEMENT à limiter le débit. Elle n’est ni stockée, ni
- *    journalisée, ni attachée au retour : le dépôt est public et la liste de ce
- *    qu’on garde est close (01-Specs/widget.md).
- */
-function ipDe(requete: Request): string {
-  const transmise = requete.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-  return transmise || requete.headers.get('x-real-ip') || 'inconnue'
-}
-
 export function OPTIONS(requete: Request): Response {
-  return new Response(null, { status: 204, headers: enTetesCors(requete.headers.get('origin')) })
+  return preflight(requete)
 }
 
 export async function POST(requete: Request): Promise<Response> {

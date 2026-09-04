@@ -337,3 +337,39 @@ native au navigateur. ⚠️ Ou, plus probablement, l’observation que l’arr�
 en usage réel — auquel cas la réponse la moins chère reste le second clic, pas cinq mégaoctets.
 
 ⛔ **Ce qui ne la renverse PAS** : la qualité supérieure de Silero. Elle n’a jamais été en cause.
+
+---
+
+## D-013 — La carte de compréhension n’est pas stockée. Le fil l’est.
+
+**2026-09-04**
+
+L’entretien produit à chaque tour une **carte de compréhension** — type, titre, résumé, écran,
+récurrence. Elle est rendue au widget, corrigée là, et **elle n’est écrite dans aucune colonne**.
+Ce qui est écrit, c’est le **fil** : ce que la personne a dit, les questions du bot, et les
+corrections qu’elle a faites, chacune sous forme d’une ligne `collaborateur` préfixée
+`Correction · `.
+
+**Pourquoi ne pas la stocker, alors qu’on la calcule.** Trois raisons, et la troisième suffirait.
+
+1. **Le schéma n’a pas de place pour elle, et c’était voulu.** `0001_socle.sql` a été écrit en
+   sachant que P-007 et P-008 venaient : il donne à `messages` un `texte` immuable et un `motif`,
+   et il donne à `syntheses` un `contenu` jsonb. La carte est un état intermédiaire, pas un
+   livrable ; lui ouvrir une colonne reviendrait à faire du `jsonb` un fourre-tout, ce que
+   [conventions-db.md](../04-Architecture/conventions-db.md) interdit.
+2. **Elle est recalculable, et la synthèse la recalcule.** À la fin de l’entretien,
+   `generateObject` relit le fil entier et produit la structure qui compte. Stocker en plus une
+   compréhension intermédiaire, c’est se donner deux vérités et le devoir de les réconcilier.
+3. ⛔ **Une correction est de la parole, pas un diff.** « non, c’est l’écran d’à côté » est
+   quelque chose que quelqu’un a dit. En faire une ligne du fil est plus vrai qu’un `UPDATE` sur
+   une carte — et ça la rend immuable, comme le reste de ce qui a été dit
+   ([conventions-db.md](../04-Architecture/conventions-db.md) §Ce qu’on n’efface pas).
+
+**La conséquence qu’il faut connaître.** Une ligne `bot` n’est écrite **que si le bot a posé une
+question**. C’est ce qui rend le compte des relances exact et non interprétable — et donc ce qui
+rend la troisième relance impossible côté serveur, sur le fil en base plutôt que sur un compteur
+qu’un client pourrait forger ([D-006]).
+
+**Ce qui la renverserait** : un back-office qui voudrait montrer « ce que le bot avait compris à
+chaque tour » plutôt que ce qui a été dit. On ajouterait alors une colonne à `messages`, avec sa
+migration et sa justification — pas un `jsonb` fourre-tout.

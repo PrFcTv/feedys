@@ -197,6 +197,22 @@ button, textarea {
 
 .envoyer[disabled] { opacity: .45; cursor: default }
 
+/* ⚠️ Répondre est SECONDAIRE : « Envoyer maintenant » ne doit jamais avoir
+      l’air de l’issue de secours. On ne retient personne (01-Specs/entretien.md
+      §règle 5). */
+.repondre {
+  margin-right: auto;
+  padding: var(--w-2) var(--w-3);
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon-s);
+  background: var(--w-fond);
+  color: var(--w-encre-2);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.repondre[disabled] { opacity: .45; cursor: default }
+
 /* ── LE MICRO — le geste proposé, jamais imposé ─────────────────────────────
    ⛔ Sans Web Speech, ce bloc n’est pas rendu du tout : il ne se grise pas et
       ne s’excuse pas. On ne mentionne jamais ce qui manque ([D-003]). */
@@ -312,6 +328,105 @@ button, textarea {
 /* ⚠️ Le compteur informe, il ne presse pas : pas de couleur, pas de gras. */
 .ecoute__compteur { font-variant-numeric: tabular-nums }
 
+/* ── EN ENTRETIEN — la carte de compréhension ───────────────────────────────
+   ⛔ Ce n’est PAS un message de chat : c’est une fiche dont chaque champ se
+      corrige sur place. Fond --w-fond-2, bord --w-bord, PAS d’ombre — elle est
+      posée DANS le fil, pas au-dessus (DESIGN.md §La carte de compréhension).
+   ⛔ Et elle n’a pas de bouton « valider » : on corrige, ça part avec le tour
+      suivant. Un bouton de validation ferait croire à un formulaire. */
+
+.carte {
+  margin-top: var(--w-3);
+  padding: var(--w-3);
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon-s);
+  background: var(--w-fond-2);
+  /* ⚠️ 140 ms, fondu + 4 px : dire qu’une chose nouvelle est là, rien de plus
+        (DESIGN.md §Le mouvement). */
+  animation: w-carte 140ms ease;
+}
+
+@keyframes w-carte {
+  from { opacity: 0; transform: translateY(4px) }
+  to   { opacity: 1; transform: none }
+}
+
+.carte__entete {
+  margin: 0 0 var(--w-2);
+  color: var(--w-encre-3);
+  font-size: 13px;
+}
+
+.carte__champ {
+  display: block;
+  margin-top: var(--w-2);
+  border-radius: var(--w-rayon-s);
+}
+
+.carte__libelle {
+  display: block;
+  color: var(--w-encre-3);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+/* ⚠️ Un contrôle natif qui RESSEMBLE à du texte tant qu’on ne le touche pas.
+      Au survol, un fond subtil et un liseré : l’affordance doit se découvrir
+      sans mode d’emploi. Pas de crayon en icône — le curseur texte le dit
+      déjà, et une icône de plus dans 360 px se paie cher. */
+.carte__valeur {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  padding: var(--w-1) var(--w-2);
+  border: 1px solid transparent;
+  border-radius: var(--w-rayon-s);
+  background: transparent;
+  color: var(--w-encre);
+  font: inherit;
+  font-size: 14px;
+  resize: none;
+  overflow: hidden;
+}
+
+.carte__titre { font-weight: 600 }
+
+.carte__valeur:hover:not([disabled]) {
+  border-color: var(--w-bord);
+  background: var(--w-fond);
+}
+
+.carte__valeur:focus {
+  border-color: var(--w-bord);
+  background: var(--w-fond);
+  outline: 2px solid var(--w-accent);
+  outline-offset: 1px;
+  overflow: auto;
+}
+
+.carte__valeur[disabled] { color: var(--w-encre-2); opacity: 1 }
+
+/* ⚠️ La flèche du select est rendue par le navigateur ; on ne la remplace pas.
+      Un select maison, c’est le clavier et le lecteur d’écran à refaire. */
+.carte__choix { appearance: auto; padding-left: var(--w-1) }
+
+/* ⚠️ La question du bot est SOUS la carte, jamais dedans (01-Specs/widget.md
+      §En entretien). Et 16 px : c’est la seule chose à lire à ce moment-là. */
+.question {
+  margin: var(--w-4) 0 var(--w-2);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+/* ⚠️ Le bot qui lit : une ligne, pas un squelette animé. On attend une seconde,
+      pas un chargement de page. */
+.attente {
+  margin: var(--w-3) 0 0;
+  color: var(--w-encre-3);
+  font-size: 13px;
+}
+
 /* ── ENVOYÉ — l’accusé ──────────────────────────────────────────────────────
    ⛔ Pas de numéro de suivi, pas de « vous serez notifié », pas de lien vers un
       statut. On ne promet rien qu’on ne tiendra pas (01-Specs/widget.md). */
@@ -345,7 +460,7 @@ button, textarea {
       l’information, pas de la décoration, et qui est donc conservée
       (DESIGN.md §Le mouvement). */
 @media (prefers-reduced-motion: reduce) {
-  .lanceur, .lanceur__libelle, .panneau, .accuse, .micro__bouton {
+  .lanceur, .lanceur__libelle, .panneau, .accuse, .carte, .micro__bouton {
     transition: none !important;
     animation: none !important;
   }

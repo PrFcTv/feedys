@@ -26,6 +26,8 @@ import path from 'node:path'
 
 import { empreinte } from '../domaine/actifs/entetes'
 
+import { racineDepot } from './racine'
+
 export type NomActif = 'widget.js' | 'snapdom.js'
 
 export interface Actif {
@@ -94,27 +96,6 @@ function cheminDe(nom: NomActif): string | undefined {
   for (const relatif of CANDIDATS[nom]) {
     const complet = path.join(/*turbopackIgnore: true*/ racine, relatif)
     if (existsSync(/*turbopackIgnore: true*/ complet)) return complet
-  }
-
-  return undefined
-}
-
-/**
- * La racine du dépôt, trouvée en remontant depuis le dossier de travail.
- *
- * ⚠️ `next dev` tourne avec `apps/serveur` pour dossier courant, `pnpm dev`
- *    depuis la racine. Les deux doivent marcher sans configuration : un
- *    `/widget.js` en 503 sur un poste se diagnostique très mal.
- */
-function racineDepot(): string | undefined {
-  let dossier = process.cwd()
-
-  for (let remontees = 0; remontees < 6; remontees += 1) {
-    if (existsSync(/*turbopackIgnore: true*/ path.join(dossier, 'pnpm-workspace.yaml'))) return dossier
-
-    const parent = path.dirname(dossier)
-    if (parent === dossier) break
-    dossier = parent
   }
 
   return undefined

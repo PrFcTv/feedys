@@ -9,8 +9,10 @@ avec ses sept tables, ses privilèges et son runner de migrations. Un retour ent
 ligne de `<script>` chez l’hôte, un lanceur, un panneau, un champ texte qui va jusqu’en base, le
 tout dans un shadow DOM fermé qui survit à une page volontairement hostile. **Et le geste central
 existe** : on maintient, on parle, l’onde suit vraiment la voix, le transcript s’écrit dessous, on
-relâche, on relit, on envoie — et `source` vaut `voix`. Il reste le bot : l’entretien, puis la
-synthèse. C’est là que le produit cesse d’être un formulaire dicté.
+relâche, on relit, on envoie — et `source` vaut `voix`. **Et le bot parle** : le retour part, une carte de
+compréhension revient, corrigeable champ par champ, avec au plus deux questions — la limite est
+tenue par le serveur, sur le fil en base, et aucune défaillance ne perd la parole. Il reste la
+synthèse : la note que le développeur lit.
 
 | Prompt | État |
 |---|---|
@@ -20,7 +22,8 @@ synthèse. C’est là que le produit cesse d’être un formulaire dicté.
 | P-004 · la collecte de contexte | ✅ fait |
 | P-005 · la coquille du widget | ✅ fait |
 | P-006 · la dictée | ✅ fait |
-| P-007 → P-014 | à faire |
+| P-007 · la boucle d’entretien | ✅ fait |
+| P-008 → P-014 | à faire |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 

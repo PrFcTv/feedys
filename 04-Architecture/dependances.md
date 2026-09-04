@@ -39,9 +39,9 @@ un emprunt d’idée, à citer dans `ATTRIBUTIONS.md`.
 | Paquet | Licence | ★ | Rôle |
 |---|---|---|---|
 | `next` | MIT | — | serveur, API, back-office |
-| `ai` (Vercel AI SDK) | Apache-2.0 | 26 570 | `generateObject` — la synthèse **typée**, pas du texte à reparser |
-| `@ai-sdk/anthropic` | Apache-2.0 | — | Claude |
-| `zod` | MIT | — | schémas — partagés entre validation d’API et `generateObject`. ⚠️ Déclaré par `packages/widget`, qui porte le contrat de transport ; le serveur l’atteint en important `contrat.ts`. ⛔ Il n’entre pas dans `widget.js` : le widget n’importe le contrat qu’en `import type` |
+| `ai` (Vercel AI SDK) | Apache-2.0 | 26 570 | `generateObject` — la sortie **typée**, pas du texte à reparser. ⚠️ **Installé le 2026-09-04 en 7.0.92**, dans `apps/serveur` uniquement |
+| `@ai-sdk/anthropic` | Apache-2.0 | — | Claude. ⚠️ **Installé le 2026-09-04 en 4.0.49** |
+| `zod` | MIT | — | schémas — partagés entre validation d’API et `generateObject`. ⚠️ Déclaré par `packages/widget`, qui porte le contrat de transport ; le serveur l’atteint en important `contrat.ts`. ⚠️ **Et déclaré aussi par `apps/serveur` depuis le 2026-09-04, à la version EXACTE de `packages/widget` (4.5.4)** : la sortie du modèle a besoin d’un schéma qui n’est pas du transport, et faire descendre ce schéma dans le paquet MIT ferait importer de la logique au serveur depuis MIT. Deux déclarations, une seule copie — pnpm dédoublonne à version identique, et deux instances de zod rendraient les types incompatibles. ⛔ Il n’entre pas dans `widget.js` : le widget n’importe le contrat qu’en `import type` |
 | `@prisma/client` | Apache-2.0 | — | accès base |
 | `shadcn` (copié) | MIT | 122 975 | composants de chat de juin 2026, **variante Base UI** |
 | `nodemailer` | MIT | — | envoi de la note |

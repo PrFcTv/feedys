@@ -32,6 +32,8 @@ export {
   PREFIXE_SECRET,
   TYPES_AUDIO,
   TYPES_CAPTURE,
+  cheminFin,
+  cheminTour,
 } from './transport'
 
 /**
@@ -136,10 +138,130 @@ export const SchemaErreur = z
   })
   .strict()
 
+/**
+ * ─── L’ENTRETIEN ────────────────────────────────────────────────────────────
+ *
+ * ⛔ Ce qui suit décrit des FORMES de requêtes et de réponses, et rien d’autre.
+ *    La règle des deux relances, la machine à états et le choix des questions
+ *    sont de la logique métier : ils vivent dans `apps/serveur/domaine/entretien`,
+ *    du côté AGPL. Les faire descendre ici ferait importer de la logique au
+ *    serveur depuis un paquet MIT, et la frontière n’aurait plus de sens
+ *    (CLAUDE.md §frontière de licence).
+ *
+ * ⛔ Et surtout : la limite de deux relances est appliquée par le SERVEUR. Le
+ *    widget ne la connaît pas, ne la compte pas, et ne pourrait pas la
+ *    contourner en forgeant une requête — c’est tout l’intérêt.
+ */
+
+/**
+ * Ce que le bot a compris, en champs corrigeables sur place.
+ *
+ * ⚠️ Ce n’est PAS un message de chat : c’est une fiche dont chaque champ se
+ *    corrige d’un clic. Corriger une carte coûte un clic sur le champ faux ;
+ *    corriger une phrase oblige à réexpliquer (01-Specs/entretien.md).
+ */
+export const SchemaComprehension = z
+  .object({
+    type: z.enum(['bug', 'idee', 'question', 'gene']),
+    /** Une phrase, sans point final. */
+    titre: z.string().min(1).max(BORNES.titre),
+    /** 1 à 3 phrases, à la 3e personne. */
+    resume: z.string().min(1).max(BORNES.resume),
+    /** ⚠️ Déduit du contexte, jamais demandé (01-Specs/entretien.md §1). */
+    ecran: z.string().max(BORNES.ecran).optional(),
+    recurrence: z.enum(['premiere_fois', 'deja_vu', 'systematique']).optional(),
+  })
+  .strict()
+
+/**
+ * Le corps de `POST /api/retours/:id/tour`.
+ *
+ * ⚠️ Tout est facultatif : le PREMIER tour n’apporte rien de neuf — la parole
+ *    d’origine est déjà en base, écrite par l’ingestion. Le widget demande
+ *    simplement au bot de la lire.
+ */
+export const SchemaCorpsTour = z
+  .object({
+    /** Ce que la personne vient de dire ou d’écrire en réponse. */
+    texte: z.string().max(BORNES.texte).optional(),
+    /** Le transcript avant correction à la main. On garde les hésitations. */
+    transcriptBrut: z.string().max(BORNES.texte).optional(),
+    /**
+     * Ce que la personne a corrigé sur la carte, rendu en clair par le widget.
+     *
+     * ⚠️ La carte n’a pas de bouton « valider » : on corrige, ça part avec le
+     *    tour suivant ou avec l’envoi. Une correction n’est donc jamais perdue,
+     *    et elle entre dans le fil comme ce qu’elle est — la personne qui
+     *    reprend le bot (04-Architecture/DESIGN.md §La carte de compréhension).
+     */
+    corrections: z.string().max(BORNES.texte).optional(),
+    source: z.enum(['voix', 'texte']).optional(),
+  })
+  .strict()
+
+/**
+ * Ce qu’un tour rend.
+ *
+ * ⚠️ `comprehension` est nullable, et ce n’est pas de la prudence : quand le
+ *    transcript est vide ou inintelligible, le bot relance sans prétendre avoir
+ *    compris quoi que ce soit. Une carte vide serait un mensonge.
+ *
+ * ⚠️ `question: null` veut dire « l’entretien est terminé » — soit le bot estime
+ *    en savoir assez, soit la limite de relances est atteinte. Le widget ne fait
+ *    pas la différence, et n’a pas à la faire.
+ */
+export const SchemaTourRendu = z
+  .object({
+    comprehension: SchemaComprehension.nullable(),
+    question: z.string().max(BORNES.question).nullable(),
+    /**
+     * Pourquoi cette question.
+     *
+     * ⛔ JAMAIS AFFICHÉ AU COLLABORATEUR. Il est journalisé et sert à la mise au
+     *    point du prompt : quand une question est mauvaise, c’est le motif qui
+     *    dit pourquoi le modèle l’a choisie (01-Specs/entretien.md).
+     */
+    motif: z.string().max(BORNES.motif),
+  })
+  .strict()
+
+/**
+ * Le corps de `POST /api/retours/:id/fin`.
+ *
+ * ⛔ `abandonne` n’est pas un échec : « le retour est conservé et envoyé en
+ *    l’état ». Un retour partiel vaut mieux que rien, et aucun mode de
+ *    défaillance ne perd la parole de quelqu’un (01-Specs/entretien.md).
+ */
+export const SchemaCorpsFin = z
+  .object({
+    raison: z.enum(['envoi', 'abandon']),
+    /**
+     * ⛔ Ce que la personne venait d’écrire quand elle a cliqué sur « Envoyer
+     *    maintenant ». Il PART AVEC LA FIN plutôt que d’être perdu : quelqu’un
+     *    qui a tapé une phrase puis décidé d’en finir n’a pas voulu la jeter.
+     */
+    texte: z.string().max(BORNES.texte).optional(),
+    transcriptBrut: z.string().max(BORNES.texte).optional(),
+    corrections: z.string().max(BORNES.texte).optional(),
+  })
+  .strict()
+
+/** Ce que la fin rend. Le widget n’en a besoin que pour cesser d’attendre. */
+export const SchemaFinRendue = z
+  .object({
+    statut: z.enum(['envoye', 'abandonne']),
+  })
+  .strict()
+
 export type Contexte = z.infer<typeof SchemaContexte>
 export type CorpsRetour = z.infer<typeof SchemaCorpsRetour>
 export type RetourCree = z.infer<typeof SchemaRetourCree>
 export type Erreur = z.infer<typeof SchemaErreur>
+export type Comprehension = z.infer<typeof SchemaComprehension>
+export type CorpsTour = z.infer<typeof SchemaCorpsTour>
+export type TourRendu = z.infer<typeof SchemaTourRendu>
+export type CorpsFin = z.infer<typeof SchemaCorpsFin>
+export type FinRendue = z.infer<typeof SchemaFinRendue>
 /** Une capture d’écran jointe. */
 export type FichierCapture = NonNullable<Contexte['capture']>
 /** Un enregistrement audio joint. */
@@ -158,7 +280,21 @@ export type Analyse<T> = { readonly ok: true; readonly valeur: T } | { readonly 
  *    et d’autre de la frontière de licence.
  */
 export function analyserCorpsRetour(valeur: unknown): Analyse<CorpsRetour> {
-  const resultat = SchemaCorpsRetour.safeParse(valeur)
+  return analyser(SchemaCorpsRetour, valeur)
+}
+
+/** Analyse le corps d’un tour d’entretien. */
+export function analyserCorpsTour(valeur: unknown): Analyse<CorpsTour> {
+  return analyser(SchemaCorpsTour, valeur)
+}
+
+/** Analyse le corps d’une fin d’entretien. */
+export function analyserCorpsFin(valeur: unknown): Analyse<CorpsFin> {
+  return analyser(SchemaCorpsFin, valeur)
+}
+
+function analyser<T>(schema: z.ZodType<T>, valeur: unknown): Analyse<T> {
+  const resultat = schema.safeParse(valeur)
 
   if (resultat.success) {
     return { ok: true, valeur: resultat.data }

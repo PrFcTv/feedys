@@ -15,7 +15,8 @@ import { act } from 'preact/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Configuration } from './configuration'
-import type { Contexte, CorpsRetour } from './contrat'
+import type { Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour } from './contrat'
+import type { ResultatTour } from './entretien'
 import type { Resultat } from './envoi'
 import { monter } from './montage'
 import type { Ports } from './ui/Widget'
@@ -27,6 +28,14 @@ const CONFIGURATION: Configuration = {
 }
 
 const CONTEXTE: Contexte = { url: 'https://victoria.exemple.fr/dossiers' }
+
+/** ⚠️ Écrite à la main. ⛔ Jamais un vrai retour copié d’une base (CLAUDE.md §Secrets). */
+const CARTE: Comprehension = {
+  type: 'bug',
+  titre: 'Le tri par date se réinitialise au retour sur la page',
+  resume: 'La personne repose le tri à chaque navigation.',
+  ecran: 'Liste des dossiers',
+}
 
 const vraiAttachShadow = Element.prototype.attachShadow
 let racines: ShadowRoot[] = []
@@ -57,12 +66,31 @@ function installer(remplacements: Partial<Ports> = {}) {
     return { ok: true, retour: 'ret_1' }
   })
 
+  // ⚠️ Le cas ordinaire : le bot comprend et pose UNE question. Les cas
+  //    particuliers — modèle muet, plus de question — sont surchargés au test.
+  const tours: CorpsTour[] = []
+  const demanderTour = vi.fn(async (_retour: string, corps: CorpsTour): Promise<ResultatTour> => {
+    tours.push(corps)
+    return {
+      ok: true,
+      tour: { comprehension: CARTE, question: 'C’est nouveau ?', motif: 'la récurrence' },
+    }
+  })
+
+  const fins: CorpsFin[] = []
+  const terminer = vi.fn(async (_retour: string, corps: CorpsFin): Promise<boolean> => {
+    fins.push(corps)
+    return true
+  })
+
   // ⚠️ Le montage passe par `act` : sans lui, les effets de Preact sont
   //    programmés par `requestAnimationFrame`, que `act` n’intercepte que
   //    pendant son propre appel. `brancher` ne serait alors jamais branché.
   let montage!: ReturnType<typeof monter>
   void act(() => {
-    montage = monter(CONFIGURATION, { ports: { collecter, envoyer, ...remplacements } })
+    montage = monter(CONFIGURATION, {
+      ports: { collecter, envoyer, demanderTour, terminer, ...remplacements },
+    })
   })
 
   const racine = racines[0]
@@ -74,6 +102,10 @@ function installer(remplacements: Partial<Ports> = {}) {
     collecter,
     envoyer,
     envois,
+    demanderTour,
+    tours,
+    terminer,
+    fins,
     hote: document.querySelector('feedys-widget') as HTMLElement,
     trouver: <T extends Element>(selecteur: string) => racine.querySelector<T>(selecteur),
   }
@@ -104,6 +136,20 @@ async function cliquerEnvoyer(racine: ShadowRoot): Promise<void> {
     racine.querySelector<HTMLButtonElement>('.envoyer')!.click()
   })
   await calmer()
+}
+
+async function cliquerRepondre(racine: ShadowRoot): Promise<void> {
+  await act(async () => {
+    racine.querySelector<HTMLButtonElement>('.repondre')!.click()
+  })
+  await calmer()
+}
+
+/** Écrire puis envoyer : la parole est en base, l’entretien commence. */
+async function entrerEnEntretien(racine: ShadowRoot, texte = 'le tri par date se remet à zéro'): Promise<void> {
+  await ouvrir(racine)
+  await ecrire(racine, texte)
+  await cliquerEnvoyer(racine)
 }
 
 async function ecrire(racine: ShadowRoot, texte: string): Promise<void> {
@@ -245,14 +291,11 @@ describe('OUVERT — l’accueil', () => {
   })
 })
 
-describe('ENVOYÉ — l’accusé', () => {
-  it('envoie le texte avec son contexte, déclare source « texte », puis se ferme', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { racine, envois, trouver } = installer()
+describe('EN ENTRETIEN — la carte de compréhension', () => {
+  it('envoie le texte avec son contexte, déclare source « texte », puis demande un tour', async () => {
+    const { racine, envois, tours, trouver } = installer()
 
-    await ouvrir(racine)
-    await ecrire(racine, '  le tri par date se remet à zéro  ')
-    await cliquerEnvoyer(racine)
+    await entrerEnEntretien(racine, '  le tri par date se remet à zéro  ')
 
     expect(envois).toEqual([
       {
@@ -262,6 +305,190 @@ describe('ENVOYÉ — l’accusé', () => {
         contexte: CONTEXTE,
       },
     ])
+    // ⚠️ Le premier tour n’apporte rien : la parole est déjà en base.
+    expect(tours).toEqual([{}])
+    expect(trouver('.carte')).not.toBeNull()
+  })
+
+  it('⛔ pose la question SOUS la carte, jamais dedans', async () => {
+    const { racine, trouver } = installer()
+
+    await entrerEnEntretien(racine)
+
+    const carte = trouver('.carte')!
+    const question = trouver('.question')!
+    expect(question.textContent).toBe('C’est nouveau ?')
+    expect(carte.contains(question)).toBe(false)
+    // ⚠️ La question est annoncée, pas seulement affichée.
+    expect(question.getAttribute('role')).toBe('status')
+    // ⛔ La carte vient avant la question dans l’ordre du document.
+    expect(carte.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('⛔ n’a AUCUN bouton de validation — on corrige, ça part avec le tour suivant', async () => {
+    const { racine, trouver } = installer()
+
+    await entrerEnEntretien(racine)
+
+    const boutons = [...trouver('.carte')!.querySelectorAll('button')]
+    expect(boutons).toHaveLength(0)
+    expect(trouver('.carte')!.textContent).not.toMatch(/valider|enregistrer|confirmer/i)
+  })
+
+  it('⛔ « Envoyer maintenant » est visible ET actif à chaque tour, champ vide compris', async () => {
+    const { racine, trouver } = installer()
+
+    await entrerEnEntretien(racine)
+
+    const envoyer = trouver<HTMLButtonElement>('.envoyer')!
+    expect(envoyer.textContent).toContain('Envoyer maintenant')
+    expect(envoyer.disabled).toBe(false)
+  })
+
+  it('garde micro et champ texte disponibles pour répondre', async () => {
+    const { racine, trouver } = installer({ dicteeDisponible: () => true })
+
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.micro')).not.toBeNull()
+    expect(trouver('.champ')).not.toBeNull()
+  })
+
+  it('emporte la réponse au tour suivant, et vide le champ', async () => {
+    const { racine, tours } = installer()
+
+    await entrerEnEntretien(racine)
+    await ecrire(racine, 'non ça a toujours fait ça')
+    await cliquerRepondre(racine)
+
+    expect(tours[1]).toEqual({ texte: 'non ça a toujours fait ça' })
+    expect(champDe(racine).value).toBe('')
+  })
+
+  it('emporte la CORRECTION d’un champ, en clair, avec le tour suivant', async () => {
+    const { racine, tours, trouver } = installer()
+
+    await entrerEnEntretien(racine)
+
+    const ecran = trouver<HTMLInputElement>('.carte input.carte__valeur')!
+    await act(async () => {
+      ecran.value = 'Liste des mandats'
+      ecran.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await cliquerRepondre(racine)
+
+    expect(tours[1]).toEqual({ corrections: 'Écran — Liste des mandats' })
+  })
+
+  it('⛔ n’envoie aucune correction quand rien n’a été corrigé', async () => {
+    const { racine, tours } = installer()
+
+    await entrerEnEntretien(racine)
+    await ecrire(racine, 'oui')
+    await cliquerRepondre(racine)
+
+    expect(tours[1]).not.toHaveProperty('corrections')
+  })
+
+  it('⛔ modèle muet : pas de carte, le champ reste, « Envoyer » fonctionne', async () => {
+    const { racine, trouver, fins } = installer({
+      demanderTour: async (): Promise<ResultatTour> => ({ ok: false }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.carte')).toBeNull()
+    expect(trouver('.question')).toBeNull()
+    expect(trouver('.champ')).not.toBeNull()
+
+    await cliquerEnvoyer(racine)
+    expect(fins).toEqual([{ raison: 'envoi' }])
+  })
+
+  it('⛔ ce que la personne venait d’écrire part AVEC « Envoyer maintenant »', async () => {
+    const { racine, fins } = installer()
+
+    await entrerEnEntretien(racine)
+    await ecrire(racine, 'et ça me ralentit tous les matins')
+    await cliquerEnvoyer(racine)
+
+    expect(fins).toEqual([{ raison: 'envoi', texte: 'et ça me ralentit tous les matins' }])
+  })
+
+  it('⛔ le panneau refermé en cours d’entretien marque un abandon, il ne perd rien', async () => {
+    const { racine, fins, trouver } = installer()
+
+    await entrerEnEntretien(racine)
+    await act(async () => {
+      trouver<HTMLButtonElement>('.fermer')!.click()
+    })
+    await calmer()
+
+    expect(fins).toEqual([{ raison: 'abandon' }])
+  })
+
+  it('rouvrir après un abandon donne un panneau NEUF, pas la carte d’un entretien clos', async () => {
+    const { racine, trouver } = installer()
+
+    await entrerEnEntretien(racine)
+    await act(async () => {
+      trouver<HTMLButtonElement>('.fermer')!.click()
+    })
+    await calmer()
+    await ouvrir(racine)
+
+    expect(trouver('.carte')).toBeNull()
+    expect(trouver('.question')).toBeNull()
+    expect(trouver<HTMLButtonElement>('.envoyer')!.textContent).toContain('Envoyer')
+    expect(trouver<HTMLButtonElement>('.envoyer')!.disabled).toBe(true)
+  })
+
+  it('la carte reste à l’écran, figée, pendant l’envoi', async () => {
+    let libere!: () => void
+    const attendue = new Promise<void>((resoudre) => {
+      libere = resoudre
+    })
+
+    const { racine, trouver } = installer({
+      terminer: async () => {
+        await attendue
+        return true
+      },
+    })
+
+    await entrerEnEntretien(racine)
+    await cliquerEnvoyer(racine)
+
+    const champs = [...trouver('.carte')!.querySelectorAll<HTMLInputElement>('.carte__valeur')]
+    expect(champs.length).toBeGreaterThan(0)
+    expect(champs.every((champ) => champ.disabled)).toBe(true)
+
+    libere()
+    await calmer()
+  })
+
+  it('plus rien à demander : on envoie, on ne retient personne', async () => {
+    const { racine, fins, trouver } = installer({
+      demanderTour: async (): Promise<ResultatTour> => ({
+        ok: true,
+        tour: { comprehension: CARTE, question: null, motif: 'j’en sais assez' },
+      }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    expect(fins).toEqual([{ raison: 'envoi' }])
+    expect(trouver('.accuse')?.textContent).toContain('C’est parti.')
+  })
+})
+
+describe('ENVOYÉ — l’accusé', () => {
+  it('conclut sur un accusé sobre, puis se ferme', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { racine, trouver } = installer()
+
+    await entrerEnEntretien(racine)
+    await cliquerEnvoyer(racine)
 
     // ⛔ Pas de numéro de suivi, pas de « vous serez notifié ».
     expect(trouver('.accuse')?.textContent).toContain('C’est parti.')
@@ -274,12 +501,11 @@ describe('ENVOYÉ — l’accusé', () => {
     expect(trouver('.panneau')).toBeNull()
   })
 
-  it('repart d’un champ vide au retour suivant', async () => {
+  it('repart d’un champ vide et sans carte au retour suivant', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { racine } = installer()
+    const { racine, trouver } = installer()
 
-    await ouvrir(racine)
-    await ecrire(racine, 'quelque chose')
+    await entrerEnEntretien(racine, 'quelque chose')
     await cliquerEnvoyer(racine)
     await act(async () => {
       vi.advanceTimersByTime(2_000)
@@ -287,6 +513,7 @@ describe('ENVOYÉ — l’accusé', () => {
     await ouvrir(racine)
 
     expect(champDe(racine).value).toBe('')
+    expect(trouver('.carte')).toBeNull()
   })
 })
 
@@ -335,9 +562,9 @@ describe('L’envoi qui rate', () => {
 
     expect(envois).toHaveLength(2)
     expect(envois[1]?.texte).toBe('le tri par date se remet à zéro')
-    // Le brouillon est parti : c’est l’accusé qui occupe le panneau, plus le champ.
-    expect(trouver('.accuse')?.textContent).toContain('C’est parti.')
-    expect(trouver('.champ')).toBeNull()
+    // Le brouillon est parti, et l’entretien a commencé tout seul.
+    expect(champDe(racine).value).toBe('')
+    expect(trouver('.carte')).not.toBeNull()
   })
 })
 

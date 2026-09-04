@@ -74,6 +74,20 @@ export const DEBIT = {
   parIp: { max: 20, fenetreMs: 60_000 },
 } as const
 
+/**
+ * Les compteurs de l’entretien — plus serrés, et pour une autre raison.
+ *
+ * ⛔ Un tour APPELLE LE MODÈLE. C’est le seul endroit du produit où le bruit ne
+ *    coûte pas des lignes en base mais de l’argent. Un entretien complet, c’est
+ *    au plus trois tours et une fin : dix par minute et par IP laissent passer
+ *    deux entretiens à la minute pour une même personne, ce qui est déjà
+ *    au-dessus de tout usage réel.
+ */
+export const DEBIT_ENTRETIEN = {
+  parCle: { max: 30, fenetreMs: 60_000 },
+  parIp: { max: 10, fenetreMs: 60_000 },
+} as const
+
 export interface PortDebit {
   /** `false` = trop de passages. Enregistre le passage au passage. */
   autoriser(cle: string, maintenant: number): boolean
@@ -87,5 +101,23 @@ export function creerDebitIngestion(): {
   return {
     cle: new Limiteur(DEBIT.parCle.max, DEBIT.parCle.fenetreMs),
     ip: new Limiteur(DEBIT.parIp.max, DEBIT.parIp.fenetreMs),
+  }
+}
+
+/**
+ * Les deux limiteurs de l’entretien.
+ *
+ * ⚠️ Distincts de ceux de l’ingestion, et pas seulement par leurs chiffres :
+ *    partager les compteurs ferait qu’un produit bavard à l’ingestion
+ *    empêcherait ses entretiens d’aboutir — c’est-à-dire perdrait la partie du
+ *    produit qui a de la valeur pour protéger celle qui n’en a pas.
+ */
+export function creerDebitEntretien(): {
+  cle: PortDebit
+  ip: PortDebit
+} {
+  return {
+    cle: new Limiteur(DEBIT_ENTRETIEN.parCle.max, DEBIT_ENTRETIEN.parCle.fenetreMs),
+    ip: new Limiteur(DEBIT_ENTRETIEN.parIp.max, DEBIT_ENTRETIEN.parIp.fenetreMs),
   }
 }

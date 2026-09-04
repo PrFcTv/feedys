@@ -86,6 +86,10 @@ function installer({ dispo = true }: { dispo?: boolean } = {}) {
       ports: {
         collecter: async () => CONTEXTE,
         envoyer,
+        // ⚠️ L’entretien est bouchonné : ce fichier recette LA DICTÉE, et un
+        //    port réel enverrait un `fetch` que personne n’attend.
+        demanderTour: async () => ({ ok: false }),
+        terminer: async () => true,
         dicteeDisponible: () => dispo,
         dictee: { dicter: moteur.dicter, ouvrirMicro: micro.ouvrir },
       },

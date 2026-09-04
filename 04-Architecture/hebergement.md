@@ -41,6 +41,7 @@ remarque pas côté serveur : il se remarque chez les quatre hôtes, en même te
 | `FEEDYS_MODELE` | l’identifiant du modèle. **Explicite, jamais un défaut implicite** — il est journalisé dans chaque synthèse |
 | `SMTP_URL`, `FEEDYS_EMAIL_DE`, `FEEDYS_EMAIL_A` | l’envoi de la note |
 | `FEEDYS_STOCKAGE` | où vont les captures et l’audio — un volume monté |
+| `FEEDYS_PROMPTS` | le dossier qui contient `systeme.md`. ⚠️ En développement il se déduit de la racine du dépôt ; en conteneur il n’y a ni `apps/`, ni `domaine/` à côté du serveur — la variable est alors obligatoire |
 
 ⛔ **Aucun secret dans le dépôt.** Il est **public** : la règle est absolue, elle vaut aussi pour
 la documentation, les exemples et les fixtures. Les exemples utilisent `exemple.fr`.

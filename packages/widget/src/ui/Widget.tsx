@@ -1,5 +1,5 @@
 /**
- * La coquille : FERMÉ, OUVERT, EN ÉCOUTE, ENVOYÉ.
+ * La coquille : FERMÉ, OUVERT, EN ÉCOUTE, EN ENTRETIEN, ENVOYÉ.
  *
  * ⛔ LE MICRO EST PROPOSÉ, JAMAIS IMPOSÉ. Le champ texte est au MÊME niveau de
  *    visibilité, atteignable au clavier, sur le même écran — pas derrière un
@@ -10,15 +10,22 @@
  * ⛔ Et sur un navigateur sans Web Speech, le bloc micro DISPARAÎT sans un mot.
  *    On ne s’excuse pas d’une absence ([D-003]).
  *
+ * ⛔ « ENVOYER MAINTENANT » EST VISIBLE À CHAQUE TOUR, SANS EXCEPTION, ET
+ *    JAMAIS DÉSACTIVÉ PENDANT L’ENTRETIEN. On ne piège personne dans un
+ *    entretien (01-Specs/entretien.md §règle 5).
+ *
  * ⚠️ Le composant ne connaît ni le réseau ni snapdom : il reçoit ses ports, et
  *    c’est ce qui le rend recettable sans serveur et sans micro.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 
-import type { Contexte, CorpsRetour } from '../contrat'
+import type { Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour, TourRendu } from '../contrat'
 import { dicteeDisponible } from '../dictee/reconnaissance'
 import type { Resultat } from '../envoi'
+import type { ResultatTour } from '../entretien'
+import { rendreCorrections } from '../entretien'
 
+import { Carte } from './Carte'
 import { Ecoute } from './Ecoute'
 import { piegerFocus } from './focus'
 import { Micro } from './Micro'
@@ -38,6 +45,18 @@ export interface Ports {
    */
   readonly collecter: () => Promise<Contexte>
   readonly envoyer: (corps: CorpsRetour) => Promise<Resultat>
+  /**
+   * Un tour d’entretien. ⛔ Le widget ne compte rien : il demande, il lit
+   * `question`, et `null` veut dire que c’est fini. La limite de deux relances
+   * est appliquée par le serveur (01-Specs/entretien.md §2).
+   */
+  readonly demanderTour: (retour: string, corps: CorpsTour) => Promise<ResultatTour>
+  /**
+   * La fin de l’entretien. ⚠️ `garderEnVie` sert le panneau qu’on referme en
+   * quittant la page : sans lui, le navigateur annule la requête et l’abandon
+   * ne serait jamais enregistré.
+   */
+  readonly terminer: (retour: string, corps: CorpsFin, garderEnVie?: boolean) => Promise<boolean>
   /** Reçoit de quoi piloter le widget depuis `window.feedys`. */
   readonly brancher?: (commandes: Commandes) => void
   /** Injectable pour les tests. Par défaut : `navigator.onLine`. */
@@ -55,7 +74,7 @@ export interface Ports {
 /** L’accusé reste deux secondes. Assez pour être lu, trop peu pour gêner. */
 const DUREE_ACCUSE = 2_000
 
-type Phase = 'repos' | 'envoi' | 'envoye'
+type Phase = 'repos' | 'envoi' | 'entretien' | 'envoye'
 
 /**
  * ⚠️ `source` mesure le pari du produit : la part de retours dictés
@@ -75,6 +94,15 @@ export function Widget(ports: Ports) {
   /** Le transcript AVANT correction à la main. On garde les hésitations : elles portent du sens. */
   const [transcriptBrut, setTranscriptBrut] = useState('')
 
+  /** L’identifiant du retour, une fois la parole en base. */
+  const [retour, setRetour] = useState<string | null>(null)
+  const [tour, setTour] = useState<TourRendu | null>(null)
+  /** La carte telle qu’elle est à l’écran — corrections comprises. */
+  const [carte, setCarte] = useState<Comprehension | null>(null)
+  /** ⚠️ Ce que le bot avait compris. C’est la RÉFÉRENCE du diff, pas un doublon. */
+  const [carteOrigine, setCarteOrigine] = useState<Comprehension | null>(null)
+  const [attente, setAttente] = useState(false)
+
   const lanceur = useRef<HTMLButtonElement | null>(null)
   const panneau = useRef<HTMLDivElement | null>(null)
   const champ = useRef<HTMLTextAreaElement | null>(null)
@@ -92,12 +120,6 @@ export function Widget(ports: Ports) {
       return true
     })
   }, [ports])
-
-  const fermer = useCallback(() => {
-    rendreLeFocus.current = true
-    setOuvert(false)
-    setAvis('')
-  }, [])
 
   /**
    * ⛔ La disponibilité est décidée UNE fois. Elle ne peut pas changer en cours
@@ -117,9 +139,98 @@ export function Widget(ports: Ports) {
     },
   })
 
-  useEffect(() => {
-    ports.brancher?.({ ouvrir, fermer })
-  }, [ports, ouvrir, fermer])
+  /** Ce que la personne a corrigé sur la carte, ou rien. */
+  const corrections =
+    carte && carteOrigine ? rendreCorrections(carteOrigine, carte) : ''
+
+  /** Ce qu’elle vient de dire ou d’écrire, prêt à partir. */
+  const apport = useCallback((): { texte?: string; transcriptBrut?: string } => {
+    const contenu = texte.trim()
+    if (contenu === '') return {}
+    return { texte: contenu, ...(transcriptBrut === '' ? {} : { transcriptBrut }) }
+  }, [texte, transcriptBrut])
+
+  const oublierApport = useCallback(() => {
+    setTexte('')
+    setTranscriptBrut('')
+    setSource('texte')
+  }, [])
+
+  /**
+   * ⛔ La fin. Elle est appelée par « Envoyer maintenant », par la fermeture du
+   *    panneau, et par `question: null` — trois chemins, un seul appel, et le
+   *    serveur décide du statut.
+   */
+  const conclure = useCallback(
+    async (raison: 'envoi' | 'abandon', garderEnVie = false): Promise<void> => {
+      const identifiant = retour
+      if (identifiant === null) return
+
+      const corps: CorpsFin = {
+        raison,
+        ...apport(),
+        ...(corrections === '' ? {} : { corrections }),
+      }
+
+      // ⚠️ On sort de l’entretien AVANT d’attendre le réseau : la personne a
+      //    cliqué, elle ne doit pas voir un panneau figé. `retour` remis à null
+      //    interdit du même coup un second envoi pendant celui-ci.
+      oublierApport()
+      setRetour(null)
+      setTour(null)
+
+      if (raison === 'envoi') {
+        // ⚠️ La carte reste à l’écran, figée, pendant l’envoi : « carte mise à
+        //    jour, puis envoi » (01-Specs/entretien.md §Deux échanges). Elle
+        //    part avec l’accusé.
+        setPhase('envoi')
+      } else {
+        // Le panneau est déjà refermé. On remet tout à zéro pour la prochaine
+        // ouverture : rouvrir sur la carte d’un entretien clos n’aurait aucun
+        // sens, et les boutons ne pointeraient plus sur rien.
+        setPhase('repos')
+        setCarte(null)
+        setCarteOrigine(null)
+      }
+
+      await ports.terminer(identifiant, corps, garderEnVie)
+
+      // ⛔ Même si la fin échoue, on ne dit rien et on n’insiste pas : le retour
+      //    est en base depuis le premier tour. C’est son statut qui est
+      //    approximatif, pas la parole (01-Specs/entretien.md).
+      if (raison === 'envoi') setPhase('envoye')
+    },
+    [apport, corrections, oublierApport, ports, retour],
+  )
+
+  const fermer = useCallback(() => {
+    rendreLeFocus.current = true
+    setOuvert(false)
+    setAvis('')
+    // ⛔ Le panneau refermé en cours d’entretien N’EST PAS UNE PERTE : le retour
+    //    est conservé et envoyé en l’état, marqué `abandonne`.
+    if (phase === 'entretien') void conclure('abandon')
+  }, [conclure, phase])
+
+  /** Demande un tour et pose la carte. ⚠️ Un échec ne dit rien : il n’affiche pas de carte. */
+  const jouer = useCallback(
+    async (identifiant: string, corps: CorpsTour): Promise<void> => {
+      setAttente(true)
+      const resultat = await ports.demanderTour(identifiant, corps)
+      setAttente(false)
+
+      if (!resultat.ok) {
+        // ⛔ La carte n’apparaît pas, le champ texte reste, « Envoyer » marche.
+        setTour(null)
+        return
+      }
+
+      setTour(resultat.tour)
+      setCarte(resultat.tour.comprehension)
+      setCarteOrigine(resultat.tour.comprehension)
+    },
+    [ports],
+  )
 
   const expedier = useCallback(async () => {
     const contenu = texte.trim()
@@ -141,10 +252,11 @@ export function Widget(ports: Ports) {
 
     if (resultat.ok) {
       enAttente.current = false
-      setTexte('')
-      setTranscriptBrut('')
-      setSource('texte')
-      setPhase('envoye')
+      oublierApport()
+      // ⛔ La parole est en base. Tout ce qui suit peut échouer sans rien perdre.
+      setRetour(resultat.retour)
+      setPhase('entretien')
+      void jouer(resultat.retour, {})
       return
     }
 
@@ -153,7 +265,32 @@ export function Widget(ports: Ports) {
     // ⚠️ On garde le brouillon et on repart tout seul à la reconnexion, sans
     //    rien demander (01-Specs/widget.md §Ce que le widget ne fait jamais).
     enAttente.current = resultat.reessayable && !(ports.enLigne ?? parDefautEnLigne)()
-  }, [ports, texte, source, transcriptBrut])
+  }, [jouer, oublierApport, ports, texte, source, transcriptBrut])
+
+  /** Répondre à la question du bot — ou simplement lui envoyer une correction. */
+  const repondre = useCallback(() => {
+    const identifiant = retour
+    if (identifiant === null) return
+
+    const corps: CorpsTour = {
+      ...apport(),
+      ...(corrections === '' ? {} : { corrections }),
+    }
+
+    oublierApport()
+    setCarteOrigine(carte)
+    void jouer(identifiant, corps)
+  }, [apport, carte, corrections, jouer, oublierApport, retour])
+
+  useEffect(() => {
+    ports.brancher?.({ ouvrir, fermer })
+  }, [ports, ouvrir, fermer])
+
+  // ── Plus rien à demander : on envoie, sans retenir personne ────────────────
+  useEffect(() => {
+    if (phase !== 'entretien' || attente || tour === null || tour.question !== null) return
+    void conclure('envoi')
+  }, [phase, attente, tour, conclure])
 
   // ── L’accusé, puis la fermeture ────────────────────────────────────────────
   useEffect(() => {
@@ -161,6 +298,8 @@ export function Widget(ports: Ports) {
 
     const minuterie = setTimeout(() => {
       setPhase('repos')
+      setCarte(null)
+      setCarteOrigine(null)
       rendreLeFocus.current = true
       setOuvert(false)
     }, DUREE_ACCUSE)
@@ -182,6 +321,23 @@ export function Widget(ports: Ports) {
     globalThis.addEventListener?.('online', reprendre)
     return () => globalThis.removeEventListener?.('online', reprendre)
   }, [])
+
+  // ── L’onglet qu’on quitte pendant un entretien ─────────────────────────────
+  //    ⛔ Le retour est conservé et envoyé en l’état. `pagehide` et pas
+  //       `beforeunload` : c’est le seul que les navigateurs mobiles déclenchent.
+  const dernierConclure = useRef(conclure)
+  dernierConclure.current = conclure
+
+  useEffect(() => {
+    if (phase !== 'entretien') return
+
+    const quitter = (): void => {
+      void dernierConclure.current('abandon', true)
+    }
+
+    globalThis.addEventListener?.('pagehide', quitter)
+    return () => globalThis.removeEventListener?.('pagehide', quitter)
+  }, [phase])
 
   // ── Le focus : dans le champ à l’ouverture, sur le lanceur à la fermeture ──
   useLayoutEffect(() => {
@@ -206,6 +362,8 @@ export function Widget(ports: Ports) {
   }, [ouvert, phase, fermer, dictee.ecoute])
 
   const vide = texte.trim() === ''
+  const enEntretien = phase === 'entretien'
+  const rienAEnvoyer = vide && corrections === ''
 
   return (
     <>
@@ -228,6 +386,24 @@ export function Widget(ports: Ports) {
           ) : (
             <>
               <div class="corps">
+                {/* ⛔ La carte d’abord, la question DESSOUS — jamais dedans
+                       (01-Specs/widget.md §En entretien). */}
+                {carte !== null && (
+                  <Carte valeurs={carte} surCorrection={setCarte} fige={phase === 'envoi'} />
+                )}
+
+                {attente && carte === null && (
+                  <p class="attente" role="status">
+                    Un instant…
+                  </p>
+                )}
+
+                {tour?.question != null && (
+                  <p class="question" role="status">
+                    {tour.question}
+                  </p>
+                )}
+
                 {dictee.ecoute !== null && <Ecoute dictee={dictee} />}
 
                 {/*
@@ -265,8 +441,12 @@ export function Widget(ports: Ports) {
                       ref={champ}
                       value={texte}
                       disabled={phase === 'envoi'}
-                      aria-label="Votre retour"
-                      placeholder="Ce qui vous a bloqué, ou l’idée qui vient de vous venir."
+                      aria-label={enEntretien ? 'Votre réponse' : 'Votre retour'}
+                      placeholder={
+                        enEntretien
+                          ? 'Répondez, ou corrigez la fiche au-dessus.'
+                          : 'Ce qui vous a bloqué, ou l’idée qui vient de vous venir.'
+                      }
                       onInput={(evenement) => {
                         setTexte(evenement.currentTarget.value)
                       }}
@@ -284,13 +464,26 @@ export function Widget(ports: Ports) {
                      état (01-Specs/widget.md §En écoute). */}
               {dictee.ecoute === null && (
                 <div class="pied">
+                  {enEntretien && (
+                    <button
+                      class="repondre"
+                      type="button"
+                      disabled={rienAEnvoyer || attente}
+                      onClick={repondre}
+                    >
+                      Répondre
+                    </button>
+                  )}
+
+                  {/* ⛔ Pendant l’entretien, il n’est JAMAIS désactivé. On ne
+                         retient personne (01-Specs/entretien.md §règle 5). */}
                   <button
                     class="envoyer"
                     type="button"
-                    disabled={vide || phase === 'envoi'}
-                    onClick={() => void expedier()}
+                    disabled={enEntretien ? false : vide || phase === 'envoi'}
+                    onClick={() => (enEntretien ? void conclure('envoi') : void expedier())}
                   >
-                    {phase === 'envoi' ? 'Envoi…' : 'Envoyer'}
+                    {phase === 'envoi' ? 'Envoi…' : enEntretien ? 'Envoyer maintenant' : 'Envoyer'}
                   </button>
                 </div>
               )}
