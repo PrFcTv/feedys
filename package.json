@@ -13,12 +13,17 @@
     "build": "turbo run build",
     "typecheck": "tsc -p tsconfig.json && turbo run typecheck",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:migrate": "tsx apps/serveur/outils/migrer.ts",
+    "db:generate": "prisma generate"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "24.13.3",
     "eslint": "10.9.1",
+    "prisma": "7.10.0",
+    "tsx": "4.23.13",
     "turbo": "2.10.12",
     "typescript": "6.0.3",
     "typescript-eslint": "8.69.0",

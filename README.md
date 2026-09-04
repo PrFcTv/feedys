@@ -41,8 +41,8 @@ des milliers d’inconnus. Détail : [00-Projet/VISION.md](00-Projet/VISION.md).
 
 ## Statut
 
-🚧 **En construction.** Le socle est posé — monorepo, licences, lint de frontière, CI. Le produit
-lui-même n’est pas encore écrit. La séquence de travail est dans
+🚧 **En construction.** Le socle est posé — monorepo, licences, lint de frontière, CI, et la base
+avec ses migrations. Le produit lui-même n’est pas encore écrit. La séquence de travail est dans
 [05-Prompts/MVP.md](05-Prompts/MVP.md), et l’avancement dans
 [00-Projet/ROADMAP.md](00-Projet/ROADMAP.md).
 
@@ -55,9 +55,9 @@ autrui) · PostgreSQL + Prisma · Vercel AI SDK + Claude · Docker.
 
 ```bash
 pnpm install
+cp .env.example .env.local        # puis renseigner les valeurs — db:migrate en a besoin
 docker compose up -d postgres
 pnpm db:migrate
-cp .env.example .env.local        # puis renseigner les valeurs
 pnpm dev
 pnpm widget:demo                  # le widget dans une fausse app hôte hostile
 ```

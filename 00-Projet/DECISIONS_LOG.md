@@ -195,3 +195,28 @@ seul garde-fou de l’invariant le plus fragile du projet ([licences.md]). Le tr
 
 **Ce qui la renverserait** : une version de `typescript-eslint` qui accepte `typescript@^7`. Le
 jour où c’est le cas, la migration est un changement de numéro dans quatre `package.json`.
+
+---
+
+## D-009 — Le rôle applicatif n’est pas propriétaire de ses tables
+
+**2026-09-04**
+
+`0001_socle.sql` crée un rôle de **groupe** `feedys_app`, sans connexion propre, et lui accorde
+`SELECT, INSERT, UPDATE` sur les six tables métier, `SELECT, INSERT` sur `audit`, et ⛔ **aucun
+`DELETE` nulle part**.
+
+⚠️ **Cette précaution ne vaut que si `DATABASE_URL` n’est pas le propriétaire des tables.** Un
+propriétaire contourne tous les `GRANT` : la zone gelée serait modifiable, la parole effaçable, et
+**rien ne le signalerait** — pas une erreur, pas un test rouge. C’est exactement le mode de
+défaillance silencieuse qu’on cherche à éviter.
+
+En production, `DATABASE_URL` utilise donc un rôle de login **membre de `feedys_app`**, distinct
+du rôle qui applique les migrations.
+
+**Pourquoi des privilèges plutôt qu’une règle de code.** Une règle de code ne protège que le code
+qui la respecte. Le jour où quelqu’un ouvre `psql` avec les identifiants de l’application pour
+« corriger vite fait une typo dans un message », c’est Postgres qui doit dire non.
+
+**Ce qui la renverserait** : rien de connu. L’ouverture d’un `DELETE` se ferait table par table,
+avec sa justification écrite dans la migration qui l’ouvre.

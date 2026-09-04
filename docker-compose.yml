@@ -1,0 +1,36 @@
+# Le Postgres du poste. Un conteneur, une base — 04-Architecture/hebergement.md.
+#
+# ⛔ Le dépôt est public : aucune valeur réelle ici. `feedys/feedys` est un
+#    identifiant de poste, pas un secret. Les vraies valeurs vivent dans
+#    .env.local, ignoré par git.
+#
+#   docker compose up -d postgres
+#   pnpm db:migrate
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: feedys-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: feedys
+      POSTGRES_PASSWORD: feedys
+      POSTGRES_DB: feedys
+    ports:
+      # Le port de l’HÔTE seulement. Un autre Postgres occupe parfois déjà 5432
+      # sur un poste : FEEDYS_PORT_PG=5434 suffit à cohabiter, et DATABASE_URL
+      # suit dans .env.local.
+      - '${FEEDYS_PORT_PG:-5432}:5432'
+    volumes:
+      # ⚠️ /var/lib/postgresql, et non .../data : depuis Postgres 18 l’image
+      #    range les données dans un sous-dossier par version majeure, pour que
+      #    pg_upgrade --link puisse travailler sans traverser un point de montage.
+      - feedys-donnees:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U feedys -d feedys']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  feedys-donnees:

@@ -3,13 +3,15 @@
 ## Où on en est
 
 **Le socle est posé, le produit n’existe pas encore.** Le monorepo s’installe, se construit et se
-vérifie ; la frontière de licence est tenue par le lint et prouvée par un test. Rien du produit
-lui-même n’est écrit : ni ingestion, ni widget, ni entretien.
+vérifie ; la frontière de licence est tenue par le lint et prouvée par un test ; la base existe,
+avec ses sept tables, ses privilèges et son runner de migrations. Rien du produit lui-même n’est
+écrit : ni ingestion, ni widget, ni entretien.
 
 | Prompt | État |
 |---|---|
 | P-001 · le squelette du monorepo | ✅ fait |
-| P-002 → P-014 | à faire |
+| P-002 · le schéma et les migrations | ✅ fait |
+| P-003 → P-014 | à faire |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
