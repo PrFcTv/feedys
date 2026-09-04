@@ -10,6 +10,11 @@ out/
 .turbo/
 prisma/genere/
 
+# Écrits — et réécrits — par `next dev` (Next 16). Le AGENTS.md du dépôt est
+# rédigé à la main : on ne mélange pas les deux.
+apps/serveur/AGENTS.md
+apps/serveur/CLAUDE.md
+
 .env
 .env.*.local
 .env.local

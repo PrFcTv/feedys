@@ -1,0 +1,238 @@
+/**
+ * La feuille de style du widget, servie dans le shadow DOM.
+ *
+ * ⛔ AUCUN HEX ICI. Les couleurs vivent dans `tokens.ts`, et rien d’autre ne
+ *    doit en écrire une — 04-Architecture/DESIGN.md. `tokens.test.ts` le vérifie.
+ *
+ * ⚠️ Le lanceur et le panneau se DÉCALQUENT sur Intercom Messenger
+ *    (04-Architecture/references-visuelles.md) : dimensions, ancrage, transition
+ *    d’ouverture, le lanceur qui devient une croix. Ce qu’on lui laisse : la
+ *    bulle d’accueil automatique, les avatars, le badge de non-lus. Feedys ne
+ *    réclame jamais l’attention.
+ */
+import { TOKENS } from './tokens'
+
+/**
+ * ⚠️ Le mouvement est court et jamais décoratif (DESIGN.md §Le mouvement) :
+ *    180 ms pour dire d’où vient le panneau, 200 ms pour conclure un envoi.
+ *    Rien d’autre ne bouge — pas de rebond, pas de `spring`, pas d’entrée en
+ *    cascade.
+ */
+const REGLES = `
+*, *::before, *::after { box-sizing: border-box }
+
+button, textarea {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--w-accent);
+  outline-offset: 2px;
+}
+
+/* ── FERMÉ — le lanceur ─────────────────────────────────────────────────────
+   ⛔ Il ne pulse pas, ne rebondit pas, n’affiche pas de badge. Au survol, il
+      s’élargit et révèle son libellé. Rien ne réclame l’attention. */
+
+.lanceur {
+  position: absolute;
+  bottom: var(--w-ancrage);
+  right: var(--w-ancrage);
+  left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--w-2);
+  height: 48px;
+  padding: 0 var(--w-4);
+  border: 0;
+  border-radius: 999px;
+  background: var(--w-accent);
+  color: var(--w-accent-encre);
+  box-shadow: var(--w-ombre);
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+  transition: transform 180ms cubic-bezier(.32,.72,0,1);
+}
+
+.lanceur:hover { transform: translateY(-1px) }
+.lanceur:active { transform: translateY(0) }
+
+.lanceur__libelle {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0;
+  transition: max-width 180ms cubic-bezier(.32,.72,0,1), opacity 180ms ease;
+}
+
+.lanceur:hover .lanceur__libelle,
+.lanceur:focus-visible .lanceur__libelle,
+.lanceur[aria-expanded="true"] .lanceur__libelle {
+  max-width: 9rem;
+  opacity: 1;
+}
+
+.icone { display: block; flex: none }
+
+/* ── OUVERT — le panneau ──────────────────────────────────────────────────── */
+
+.panneau {
+  position: absolute;
+  bottom: calc(var(--w-ancrage) + 48px + var(--w-2));
+  right: var(--w-ancrage);
+  left: auto;
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  max-width: calc(100vw - 2 * var(--w-ancrage));
+  max-height: min(560px, calc(100vh - 2 * var(--w-ancrage) - 56px));
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon);
+  background: var(--w-fond);
+  box-shadow: var(--w-ombre);
+  pointer-events: auto;
+  overflow: hidden;
+  transform-origin: bottom right;
+  animation: w-ouvrir 180ms cubic-bezier(.32,.72,0,1);
+}
+
+@keyframes w-ouvrir {
+  from { opacity: 0; transform: translateY(8px) scale(.98) }
+  to   { opacity: 1; transform: none }
+}
+
+.entete {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--w-2);
+  padding: var(--w-4) var(--w-4) var(--w-2);
+}
+
+.titre {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+.fermer {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--w-rayon-s);
+  background: transparent;
+  color: var(--w-encre-2);
+  cursor: pointer;
+}
+
+.fermer:hover { background: var(--w-fond-2); color: var(--w-encre) }
+
+.corps {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--w-4) var(--w-4);
+}
+
+/* ⚠️ Le champ texte est au même niveau de visibilité que le micro (P-006), pas
+      caché derrière un lien : quelqu’un en open space doit pouvoir écrire sans
+      avoir l’impression de contourner le produit (01-Specs/widget.md). */
+.champ {
+  display: block;
+  width: 100%;
+  min-height: 104px;
+  padding: var(--w-3);
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon-s);
+  background: var(--w-fond);
+  font-size: 14px;
+  resize: vertical;
+}
+
+.champ::placeholder { color: var(--w-encre-3) }
+
+.avis {
+  margin-top: var(--w-3);
+  padding: var(--w-2) var(--w-3);
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon-s);
+  background: var(--w-fond-2);
+  color: var(--w-encre-2);
+  font-size: 13px;
+}
+
+.avis:empty { display: none }
+
+.pied {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--w-2);
+  padding: var(--w-3) var(--w-4);
+  border-top: 1px solid var(--w-bord);
+  background: var(--w-fond);
+}
+
+.envoyer {
+  padding: var(--w-2) var(--w-4);
+  border: 0;
+  border-radius: var(--w-rayon-s);
+  background: var(--w-accent);
+  color: var(--w-accent-encre);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.envoyer[disabled] { opacity: .45; cursor: default }
+
+/* ── ENVOYÉ — l’accusé ──────────────────────────────────────────────────────
+   ⛔ Pas de numéro de suivi, pas de « vous serez notifié », pas de lien vers un
+      statut. On ne promet rien qu’on ne tiendra pas (01-Specs/widget.md). */
+
+.accuse {
+  padding: var(--w-8) var(--w-4);
+  animation: w-conclure 200ms ease;
+}
+
+.accuse strong { display: block; font-size: 16px; font-weight: 600 }
+.accuse p { margin: var(--w-1) 0 0; color: var(--w-encre-2) }
+
+@keyframes w-conclure {
+  from { opacity: 0 }
+  to   { opacity: 1 }
+}
+
+/* ── Ancrage à gauche, sur configuration de l’hôte ─────────────────────────── */
+
+:host([data-position="bas-gauche"]) .lanceur,
+:host([data-position="bas-gauche"]) .panneau {
+  right: auto;
+  left: var(--w-ancrage);
+}
+
+:host([data-position="bas-gauche"]) .panneau { transform-origin: bottom left }
+
+/* ── ⛔ prefers-reduced-motion ─────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .lanceur, .lanceur__libelle, .panneau, .accuse {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+`
+
+/** La feuille complète : les tokens, puis les règles. */
+export const FEUILLE = `${TOKENS}${REGLES}`

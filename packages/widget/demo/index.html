@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fausse application hôte — recette du widget Feedys</title>
+
+    <!--
+      ⛔ CETTE PAGE EST HOSTILE EXPRÈS.
+
+      Le widget vit dans un shadow DOM, injecté dans la page d’autrui. Trois
+      classes de défauts n’existent que là, et sont invisibles quand on le teste
+      dans le back-office :
+
+        · les styles de l’hôte qui fuient dedans (ou l’inverse) ;
+        · le z-index, les position: fixed et les modales de l’hôte qui passent
+          par-dessus ;
+        · les collisions de globales.
+
+      D’où ce reset global, ces !important partout, et cette modale à
+      z-index: 9999. Un widget qui survit à cette page survit en production.
+      Voir CLAUDE.md §Le widget ne se recette pas chez lui.
+    -->
+    <style>
+      /* ── Le reset global le plus grossier qu’on puisse écrire ──────────────
+           Ce qui suit se transmet par HÉRITAGE, et l’héritage traverse la
+           frontière du shadow DOM — y compris fermé. C’est la fuite que le
+           widget doit couper tout seul, par un `all: initial` sur son :host. */
+      *,
+      *::before,
+      *::after {
+        box-sizing: content-box !important;
+        font-family: 'Comic Sans MS', 'Chalkboard SE', cursive !important;
+        line-height: 2.4 !important;
+        letter-spacing: 0.14em !important;
+        text-transform: uppercase !important;
+        color: #b30047 !important;
+        border-radius: 0 !important;
+        outline-offset: 0 !important;
+      }
+
+      /* ── L’attaque directe sur l’élément du widget ─────────────────────────
+           `position: static` le décroche de son ancrage ; `transform`, `filter`
+           et `contain` le déforment. Seule une déclaration EN LIGNE et
+           `!important` gagne contre celles-ci — c’est ce que fait `montage.tsx`.
+
+           ⚠️ Sur `body > *`, et surtout PAS sur `*` : posés sur `body`
+              lui-même, `transform` et `contain` en feraient le bloc conteneur
+              de tout `position: fixed` de la page. Le bandeau et la modale de
+              l’hôte tomberaient avec le widget, et l’épreuve ne prouverait plus
+              rien — aucun logiciel métier ne fait ça. */
+      body > * {
+        position: static !important;
+        transform: skewX(3deg) !important;
+        filter: saturate(1.8) !important;
+        contain: layout !important;
+      }
+
+      html,
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: repeating-linear-gradient(45deg, #fff3d6, #fff3d6 18px, #ffe4b3 18px, #ffe4b3 36px) !important;
+      }
+
+      /* ── Une fausse application métier ─────────────────────────────────── */
+      .app {
+        display: grid !important;
+        grid-template-columns: 220px 1fr !important;
+        min-height: 100vh !important;
+      }
+
+      .cote {
+        padding: 20px !important;
+        background: #2b0b3f !important;
+        color: #ffd24d !important;
+      }
+
+      .cote * {
+        color: #ffd24d !important;
+      }
+
+      .principal {
+        padding: 20px 28px !important;
+      }
+
+      table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+
+      th,
+      td {
+        padding: 6px 10px !important;
+        border: 2px dashed #b30047 !important;
+        text-align: left !important;
+      }
+
+      button {
+        padding: 8px 14px !important;
+        border: 3px solid #b30047 !important;
+        background: #ffd24d !important;
+        cursor: pointer !important;
+      }
+
+      /* ── La modale à z-index 9999 ──────────────────────────────────────── */
+      .modale {
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 9999 !important;
+        display: none !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: rgba(43, 11, 63, 0.7) !important;
+      }
+
+      .modale[data-ouverte='oui'] {
+        display: flex !important;
+      }
+
+      .modale__boite {
+        max-width: 420px !important;
+        padding: 24px !important;
+        background: #fff !important;
+        border: 4px solid #b30047 !important;
+      }
+
+      /* ⚠️ Une barre fixe en bas à droite, là où le widget s’ancre. Si le
+           lanceur passe dessous, c’est ici qu’on le voit. */
+      .bandeau {
+        position: fixed !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        z-index: 5000 !important;
+        padding: 10px 16px !important;
+        background: #b30047 !important;
+        color: #fff !important;
+      }
+
+      .bandeau * {
+        color: #fff !important;
+      }
+
+      .recette {
+        margin-top: 24px !important;
+        padding: 12px 16px !important;
+        background: #fff !important;
+        border: 2px solid #2b0b3f !important;
+        text-transform: none !important;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="app">
+      <nav class="cote">
+        <p><strong>Cabinet</strong></p>
+        <p>Dossiers</p>
+        <p>Échéances</p>
+        <p>Documents</p>
+      </nav>
+
+      <main class="principal">
+        <h1>Dossiers</h1>
+
+        <p>
+          <button type="button" id="ouvrir-modale">Ouvrir une modale à z-index 9999</button>
+        </p>
+
+        <table id="liste-dossiers">
+          <thead>
+            <tr>
+              <th>Référence</th>
+              <th id="colonne-date">Date</th>
+              <th>État</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>DOS-1042</td>
+              <td>14/03</td>
+              <td>En cours</td>
+            </tr>
+            <tr>
+              <td>DOS-1043</td>
+              <td>02/04</td>
+              <td>À valider</td>
+            </tr>
+            <tr>
+              <td>DOS-1044</td>
+              <td>19/05</td>
+              <td>Clos</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="recette">
+          <p><strong>Ce qu’on vérifie ici, et nulle part ailleurs</strong></p>
+          <ol>
+            <li>Le lanceur est ancré en bas à droite, droit, non déformé, au-dessus de la modale et du bandeau.</li>
+            <li>Rien de la page ne fuit dedans : ni la police, ni les majuscules, ni la couleur, ni l’interlignage.</li>
+            <li>Tout le parcours au clavier : <kbd>Tab</kbd> jusqu’au lanceur, <kbd>Entrée</kbd>, le focus part dans le
+              champ, il ne sort plus du panneau, <kbd>Échap</kbd> ferme et rend le focus au lanceur.</li>
+            <li>Un retour écrit part vraiment : <code>201</code> sur <code>POST /api/retours</code>, puis l’accusé.</li>
+            <li>La console n’a pas une seule erreur — c’est un résultat de test.</li>
+          </ol>
+          <p>
+            Le widget est chargé depuis <code>__FEEDYS_URL__</code>. Lancez <code>pnpm dev</code> à côté, et créez un
+            produit sur le domaine <code>localhost</code> :
+            <code>pnpm produit:creer -- --nom "Démo" --domaine localhost</code>.
+          </p>
+        </div>
+      </main>
+    </div>
+
+    <div class="bandeau">Bandeau de l’hôte — z-index 5000</div>
+
+    <div class="modale" id="modale" role="dialog" aria-modal="true" aria-label="Modale de l’hôte">
+      <div class="modale__boite">
+        <p>Modale de l’hôte, à z-index 9999.</p>
+        <p>Le lanceur Feedys doit rester visible et cliquable par-dessus.</p>
+        <button type="button" id="fermer-modale">Fermer</button>
+      </div>
+    </div>
+
+    <script>
+      document.getElementById('ouvrir-modale').addEventListener('click', function () {
+        document.getElementById('modale').dataset.ouverte = 'oui'
+      })
+      document.getElementById('fermer-modale').addEventListener('click', function () {
+        document.getElementById('modale').dataset.ouverte = 'non'
+      })
+    </script>
+
+    <!--
+      L’intégration réelle, celle des logiciels métier : UNE ligne.
+      ⚠️ Et une collision de globale volontaire juste avant : l’hôte pose son
+         jeton d’identité dans window.feedys (D-005). Le widget doit le
+         COMPLÉTER, jamais l’écraser.
+    -->
+    <script>
+      window.feedys = { identite: 'jeton-de-demonstration' }
+    </script>
+    <script src="__FEEDYS_URL__/widget.js" data-cle="__FEEDYS_CLE__" defer></script>
+  </body>
+</html>

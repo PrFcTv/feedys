@@ -54,7 +54,8 @@ node --env-file-if-exists=.env.local -e '…'   # s’en servir sans afficher la
 
 ## Le service du widget
 
-`GET /widget.js` sert le bundle avec :
+`GET /widget.js` sert le bundle, et `GET /snapdom.js` la capture d’écran qui l’accompagne
+([D-011](../00-Projet/DECISIONS_LOG.md)). Les deux, avec :
 
 ```
 Cache-Control: public, max-age=300, stale-while-revalidate=86400
@@ -68,6 +69,13 @@ cherché à éviter.
 
 ⚠️ **`Access-Control-Allow-Origin: *` sur le script seulement.** Les routes d’API, elles, vérifient
 l’origine contre le `domaine` du produit déduit de la clé.
+
+⚠️ **Et `Cross-Origin-Resource-Policy: cross-origin`**, sans quoi un hôte qui a activé COEP bloque
+le script — avec une erreur qui ne ressemble à rien de reconnaissable, chez lui, un mardi matin.
+
+⚠️ **L’emplacement des deux fichiers se déduit du dossier de travail** en développement, et de
+`FEEDYS_ACTIFS` en production — un dossier unique qui les contient tous les deux. Le conteneur
+(P-013) le pose ; sans lui, il n’y a ni `packages/`, ni `node_modules/` à côté du serveur.
 
 ## Ce qui doit être surveillé
 
