@@ -41,8 +41,10 @@ des milliers d’inconnus. Détail : [00-Projet/VISION.md](00-Projet/VISION.md).
 
 ## Statut
 
-🚧 **En construction.** Le dépôt contient sa documentation et ses licences. La séquence de travail
-est dans [05-Prompts/MVP.md](05-Prompts/MVP.md).
+🚧 **En construction.** Le socle est posé — monorepo, licences, lint de frontière, CI. Le produit
+lui-même n’est pas encore écrit. La séquence de travail est dans
+[05-Prompts/MVP.md](05-Prompts/MVP.md), et l’avancement dans
+[00-Projet/ROADMAP.md](00-Projet/ROADMAP.md).
 
 ## Stack
 
@@ -107,3 +109,5 @@ Emprunts et attributions : [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
 | Le widget | [01-Specs/widget.md](01-Specs/widget.md) |
 | La note produite | [01-Specs/synthese.md](01-Specs/synthese.md) |
 | L’architecture | [04-Architecture/architecture.md](04-Architecture/architecture.md) |
+| Ce qu’on prend sur l’étagère, et pourquoi | [04-Architecture/dependances.md](04-Architecture/dependances.md) |
+| Quoi décalquer plutôt qu’inventer | [04-Architecture/references-visuelles.md](04-Architecture/references-visuelles.md) |
