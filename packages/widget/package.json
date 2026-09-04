@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "preact": "10.29.8"
+    "preact": "10.29.8",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@preact/preset-vite": "2.10.6",
