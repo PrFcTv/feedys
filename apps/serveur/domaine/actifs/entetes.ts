@@ -31,12 +31,63 @@ export function empreinte(hexadecimal: string): string {
   return `"${hexadecimal}"`
 }
 
-export function entetesActif(etag: string, octets: number): Record<string, string> {
+/**
+ * L’encodage servi. `undefined` : le fichier part tel quel.
+ *
+ * ⛔ CE N’EST PAS UNE OPTIMISATION. Le budget du widget est de 60 Ko **gzip**
+ *    (01-Specs/widget.md §4) et l’acceptation de P-014 le mesure **sur le
+ *    fichier servi, pas sur le build local**. Servi en clair, `widget.js` pèse
+ *    76 Ko chez l’hôte : le budget serait tenu dans un test et faux en
+ *    production, ce qui est la pire des deux situations.
+ */
+export type Encodage = 'br' | 'gzip'
+
+/**
+ * Ce que le client accepte, dans notre ordre de préférence.
+ *
+ * ⚠️ Brotli d’abord — il gagne encore ~15 % sur gzip pour du JavaScript, et il
+ *    est compris par tout ce qui exécute le widget (D-003 : Chrome ou Edge).
+ *
+ * ⚠️ Analyse volontairement grossière : on cherche un jeton, on ne lit ni les
+ *    facteurs de qualité, ni `identity;q=0`. Un client qui refuserait vraiment
+ *    gzip reçoit le fichier en clair, ce qui marche.
+ */
+export function encodageAccepte(entete: string | null | undefined): Encodage | undefined {
+  if (!entete) return undefined
+
+  const jetons = entete
+    .toLowerCase()
+    .split(',')
+    .map((valeur) => valeur.split(';')[0]?.trim() ?? '')
+
+  if (jetons.includes('br')) return 'br'
+  if (jetons.includes('gzip')) return 'gzip'
+  return undefined
+}
+
+/**
+ * ⚠️ L’empreinte porte l’encodage. Deux représentations d’un même fichier ne
+ *    sont pas le même octet : un cache intermédiaire qui les confondrait
+ *    servirait du brotli à qui n’en veut pas.
+ */
+export function empreinteEncodee(etag: string, encodage: Encodage | undefined): string {
+  return encodage === undefined ? etag : `${etag.slice(0, -1)}-${encodage}"`
+}
+
+export function entetesActif(
+  etag: string,
+  octets: number,
+  encodage?: Encodage,
+): Record<string, string> {
   return {
     'content-type': TYPE_JS,
     'content-length': String(octets),
     'cache-control': CACHE,
     etag,
+    ...(encodage === undefined ? {} : { 'content-encoding': encodage }),
+    // ⛔ Sans lui, un cache partagé sert le brotli à un client qui ne l’accepte
+    //    pas, et l’hôte reçoit du binaire à la place d’un script.
+    vary: 'Accept-Encoding',
     // ⚠️ Sur le SCRIPT seulement. Les routes d’API, elles, vérifient l’origine
     //    contre le `domaine` du produit déduit de la clé
     //    (domaine/retours/origine.ts).

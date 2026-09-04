@@ -6,7 +6,12 @@
  * ⚠️ Le dossier commence par `_` : Next ignore les dossiers privés, ce fichier
  *    n’est donc pas une route.
  */
-import { dejaAJour, entetesActif } from '../../domaine/actifs/entetes'
+import {
+  dejaAJour,
+  empreinteEncodee,
+  encodageAccepte,
+  entetesActif,
+} from '../../domaine/actifs/entetes'
 import type { NomActif } from '../../infra/actifs'
 import { lireActif } from '../../infra/actifs'
 
@@ -30,9 +35,15 @@ export async function servirActif(nom: NomActif, requete: Request): Promise<Resp
     })
   }
 
-  const entetes = entetesActif(actif.etag, actif.contenu.byteLength)
+  // ⛔ Compressé dès que le client l’accepte. Le budget du widget est en gzip,
+  //    et l’acceptation de P-014 le mesure sur le fichier SERVI.
+  const encodage = encodageAccepte(requete.headers.get('accept-encoding'))
+  const corps = encodage === undefined ? actif.contenu : actif.compresse[encodage]
+  const etag = empreinteEncodee(actif.etag, encodage)
 
-  if (dejaAJour(requete.headers.get('if-none-match'), actif.etag)) {
+  const entetes = entetesActif(etag, corps.byteLength, encodage)
+
+  if (dejaAJour(requete.headers.get('if-none-match'), etag)) {
     // ⚠️ Un 304 ne porte pas de corps, donc pas de `content-length`.
     const { 'content-length': _ignore, ...sansLongueur } = entetes
     return new Response(null, { status: 304, headers: sansLongueur })
@@ -42,5 +53,5 @@ export async function servirActif(nom: NomActif, requete: Request): Promise<Resp
     return new Response(null, { status: 200, headers: entetes })
   }
 
-  return new Response(new Uint8Array(actif.contenu), { status: 200, headers: entetes })
+  return new Response(new Uint8Array(corps), { status: 200, headers: entetes })
 }
