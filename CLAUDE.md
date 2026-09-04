@@ -100,10 +100,13 @@ pnpm widget:demo      # page de démonstration : le widget dans une fausse app h
                       # dans le back-office — voir §Le widget ne se recette pas chez lui
 pnpm produit:creer -- --nom "VictorIA" --domaine victoria.example
                       # crée un produit et imprime sa clé publique + son secret UNE fois
-pnpm entretien:rejouer -- --retour <id>
+pnpm entretien:rejouer -- --retour <id> [--synthese] [--prompt] [--modele <id>]
                       # rejoue la boucle d’entretien sur un retour existant, sans widget.
                       # C’est l’outil de mise au point du prompt : on change le prompt,
                       # on rejoue sur dix vrais retours, on compare.
+                      # --synthese rejoue LA NOTE plutôt que les questions ;
+                      # --prompt imprime le prompt système assemblé.
+                      # ⛔ Il n’écrit rien.
 ```
 
 ### ⚠️ Le widget ne se recette pas chez lui

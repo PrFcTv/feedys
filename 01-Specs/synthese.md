@@ -74,6 +74,79 @@ bot s’arrête tôt, **donc il doit dire ce qu’il n’a pas obtenu.**
 elle est vide dans 90 % des cas, c’est le prompt qui ment ; si elle a six entrées, c’est
 l’entretien qui a échoué.
 
+## Comment elle est produite
+
+⛔ **Une fois, à la fin de l’entretien**, par le port `aval` de
+`domaine/entretien/tour.ts` §`terminerEntretien` — appelé **après** la clôture, et dont l’échec est
+avalé. Les trois chemins de [entretien.md](entretien.md) y mènent :
+
+| Fin | Statut du retour | Ce qu’en sait le modèle |
+|---|---|---|
+| envoi manuel | `envoye` | « la personne a envoyé quand elle a jugé que c’était dit » |
+| deux relances atteintes | `envoye` | « l’entretien s’est arrêté sur la limite, pas parce qu’il était complet » |
+| abandon | `abandonne` | « la personne a refermé le panneau ; rien n’est confirmé » |
+
+⛔ **Une synthèse qui rate ne perd rien.** Le retour est en base depuis l’ingestion et clos depuis
+la fin d’entretien ; il lui manque sa note, c’est tout, et la note est rejouable.
+
+### Le schéma est UNE définition
+
+Le même objet zod — `domaine/synthese/schema.ts` — est passé à `generateObject`, **qui en fait le
+JSON Schema envoyé au modèle**, et sert à relire ce qu’on a stocké. Deux définitions du même objet
+divergent toujours, et la divergence se découvre le jour où une note arrive tronquée.
+
+⛔ Il est `.strict()`, ce qui rend l’interdit **vérifiable** : `priorite`, `severite`, `score`,
+`cause_probable` sont refusés, pas ignorés.
+
+### ⛔ Le verbatim tient par construction, pas par docilité
+
+Le prompt demande au modèle de citer mot pour mot. **Ce n’est pas suffisant, et on ne s’en
+contente pas** : `domaine/synthese/verbatim.ts` **remplace** chaque citation par la tranche exacte
+du message d’origine, et **jette** celles qu’il ne retrouve pas.
+
+⚠️ La recherche tolère les blancs et la casse — un modèle recopie fidèlement mais re-ponctue et
+met une majuscule au premier mot — mais **ce qu’on garde est toujours découpé dans le texte
+d’origine**. La propriété « la citation est une sous-chaîne exacte » est donc vraie par
+construction, et le test qui la vérifie teste notre code, pas la docilité d’un modèle.
+
+⚠️ Une citation jetée est **journalisée** : c’est le signal qu’un prompt dérive vers la
+reformulation, et on veut le voir avant les utilisateurs.
+
+### Ce que le serveur ne laisse pas décider au modèle
+
+`confiance` est plafonnée à `basse` dans deux cas, parce qu’ils ne se lisent pas dans le fil
+([D-014](../00-Projet/DECISIONS_LOG.md)) :
+
+- **la personne est partie en cours d’entretien** — le fil s’arrête, mais rien n’y dit que c’est
+  un abandon ;
+- **aucune citation n’a survécu à la vérification** — si on n’a pas réussi à citer la personne,
+  on ne prétend pas l’avoir bien comprise.
+
+Le reste — transcript pauvre, reformulation non confirmée — est demandé au prompt, parce que ça se
+lit dans le fil et que le modèle le lit mieux qu’une règle.
+
+### Ce qui est écrit
+
+| Colonne | Contenu |
+|---|---|
+| `contenu` | l’objet entier, en `jsonb` |
+| `confiance` | **extraite en colonne typée**, en plus du jsonb — c’est dessus qu’on filtre |
+| `modele` | l’identifiant que le fournisseur dit avoir utilisé, pas celui qu’on a demandé |
+| `jetons_entree`, `jetons_sortie` | nullables : un fournisseur muet sur sa consommation ne fait pas échouer la note |
+
+Dans la même transaction, `type`, `titre` et `zone` sont recopiés sur le **retour**. ⛔ Ce sont des
+**étiquettes**, corrigeables à la main ; ni le résumé, ni les citations, ni le fil ne le sont.
+
+### La mise au point du prompt
+
+```bash
+pnpm entretien:rejouer -- --retour <id> --synthese [--prompt] [--modele <id>]
+```
+
+La note est rendue telle que le développeur la lirait, **citations passées par la vérification
+verbatim** — les citations jetées sont affichées comme telles. C’est là qu’on voit un prompt qui
+dérive.
+
 ## Le rendu par email
 
 Sujet :

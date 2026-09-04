@@ -11,8 +11,10 @@ tout dans un shadow DOM fermé qui survit à une page volontairement hostile. **
 existe** : on maintient, on parle, l’onde suit vraiment la voix, le transcript s’écrit dessous, on
 relâche, on relit, on envoie — et `source` vaut `voix`. **Et le bot parle** : le retour part, une carte de
 compréhension revient, corrigeable champ par champ, avec au plus deux questions — la limite est
-tenue par le serveur, sur le fil en base, et aucune défaillance ne perd la parole. Il reste la
-synthèse : la note que le développeur lit.
+tenue par le serveur, sur le fil en base, et aucune défaillance ne perd la parole. **Et la note
+existe** : à la fin de l’entretien, une synthèse typée est produite et stockée, avec des citations
+verbatim garanties par le code plutôt que demandées au modèle. Il reste à la faire sortir — email,
+back-office, MCP.
 
 | Prompt | État |
 |---|---|
@@ -23,7 +25,8 @@ synthèse : la note que le développeur lit.
 | P-005 · la coquille du widget | ✅ fait |
 | P-006 · la dictée | ✅ fait |
 | P-007 · la boucle d’entretien | ✅ fait |
-| P-008 → P-014 | à faire |
+| P-008 · la synthèse | ✅ fait |
+| P-009 → P-014 | à faire |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
