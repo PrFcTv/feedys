@@ -124,3 +124,48 @@ jobs:
           name: playwright-traces
           path: test-results/
           retention-days: 7
+
+  # ⚠️ Le sixième check. Il ne pousse rien nulle part : il prouve que l’image se
+  #    construit, ce qui est exactement ce qu’une CI peut prouver sans secrets.
+  #    Un Dockerfile ne casse jamais à l’écriture, il casse à la construction.
+  image:
+    name: docker build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: feedys:ci
+          build-args: |
+            FEEDYS_VERSION=ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ⛔ Une image qui se construit mais refuse de démarrer sans base n’est pas
+      #    prouvée par la construction seule. On vérifie les deux refus qui
+      #    comptent — variables absentes, base injoignable — et leur message.
+      - name: refuse de démarrer sans ses variables
+        run: |
+          sortie=$(docker run --rm feedys:ci 2>&1 || true)
+          echo "$sortie"
+          echo "$sortie" | grep -q 'variable(s) obligatoire(s) absente(s)'
+
+      - name: refuse de démarrer sans base
+        env:
+          DATABASE_URL: postgresql://feedys:feedys@base-absente:5432/feedys
+          FEEDYS_URL_PUBLIQUE: http://localhost:3000
+          ANTHROPIC_API_KEY: cle-de-ci
+          FEEDYS_MODELE: claude-sonnet-5
+          FEEDYS_BO_MOT_DE_PASSE: mot-de-passe-de-ci
+          FEEDYS_CLE_CHIFFREMENT: cle-de-ci
+        run: |
+          sortie=$(docker run --rm -e DATABASE_URL -e FEEDYS_URL_PUBLIQUE -e ANTHROPIC_API_KEY -e FEEDYS_MODELE -e FEEDYS_BO_MOT_DE_PASSE -e FEEDYS_CLE_CHIFFREMENT feedys:ci 2>&1 || true)
+          echo "$sortie"
+          echo "$sortie" | grep -q 'la base ne répond pas'

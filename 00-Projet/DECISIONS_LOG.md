@@ -457,3 +457,37 @@ vérifier. Le format de Feedys est `<charge base64url>.<HMAC-SHA256 base64url>` 
 exemple si Feedys devenait un service partagé entre plusieurs organisations. Il faudrait alors des
 signatures asymétriques (Ed25519), l’hôte gardant sa clé privée et Feedys ne stockant que la
 publique. Ce n’est pas la forme de D-005, qui décrit une instance, un développeur, ses produits.
+
+---
+
+## D-016 — Le démarrage vit dans `instrumentation.ts`, pas dans un script d’entrée
+
+**2026-09-04**
+
+Les six étapes du démarrage — variables, base, migrations, empreintes, widget, écoute
+([hebergement.md](../04-Architecture/hebergement.md)) — tournent dans le hook `register()` de
+Next, et non dans un script lancé avant le serveur.
+
+**Le motif est l’image.** Elle porte le serveur autonome de Next (`output: 'standalone'`) : ni
+`pnpm`, ni `tsx`, ni la hiérarchie du dépôt, ni `node_modules` complet — c’est ce qui la tient à
+~320 Mo. Un script d’entrée écrit en TypeScript aurait donc demandé **un second empaquetage**
+(esbuild, ou une compilation à part) uniquement pour appliquer des migrations. `register()` est
+appelé par Next lui-même au bootstrap et voit tout le code de l’application : le runner de
+migrations, la lecture du widget, les contrôles. Zéro dépendance de plus.
+
+⛔ **Un échec tue le processus** (`process.exit(1)`). Un serveur à moitié démarré qui répond 500 à
+tout est pire qu’un conteneur qui redémarre en boucle sous les yeux de l’exploitant — le second se
+voit, le premier se découvre chez les hôtes.
+
+⚠️ **Sur un poste, les mêmes contrôles n’avertissent que.** `pnpm dev` doit démarrer sans Postgres,
+sans clé de modèle et sans widget construit ; hebergement.md dit déjà de l’étape 5 qu’elle est « un
+garde-fou de production, pas un test ». La bascule est `NODE_ENV`.
+
+**Ce qu’on accepte en échange.** Next imprime son « Ready » avant que `register()` n’ait fini : la
+ligne apparaît, puis les contrôles parlent, puis le processus sert ou meurt. C’est cosmétiquement
+regrettable et sans conséquence — Next n’exécute aucun code de requête avant que le hook ne soit
+résolu, et un refus tue le processus en quelques centaines de millisecondes.
+
+**Ce qui la renverserait** : un besoin de migrer **sans** démarrer le serveur — un job de
+déploiement séparé, par exemple. `pnpm db:migrate` couvre déjà ce cas sur un poste ; en conteneur,
+il faudrait alors le second empaquetage qu’on a évité ici.
