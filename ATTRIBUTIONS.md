@@ -12,7 +12,23 @@ et distribué avec le logiciel.
 
 | Ce qu’on a pris | Source | Licence | Où c’est |
 |---|---|---|---|
-| — | — | — | — |
+| L’**échelle de stratégies de sélecteur** — `data-testid` → id → `name` → `placeholder` → `aria-label` → classes stables → chemin `nth-of-type`, chacune retenue seulement si elle désigne un élément et un seul ; et les deux tests « cette classe est-elle fabriquée par l’outillage ? » et « cet id vient-il de `useId` ? » | [`@fasterfixes/core`](https://github.com/manucoffin/faster-fixes) 0.0.7 | MIT · © 2026 FasterFixes | `packages/widget/src/contexte/selecteur.ts` |
+| L’**ordre des tests de la chaîne d’agent** — Firefox, puis Edge, puis Opera, puis Chrome, puis Safari, chacun disqualifiant les suivants | idem | MIT | `packages/widget/src/contexte/navigateur.ts` |
+| La **liste des paramètres d’URL sensibles** à expurger | idem | MIT | `packages/widget/src/contexte/url.ts` |
+
+⚠️ **Vérifié à la source le 2026-09-04** : le dépôt `faster-fixes` est AGPL-3.0 à sa racine, mais
+les paquets publiés `@fasterfixes/core` et `@fasterfixes/react` portent chacun leur propre fichier
+`LICENSE` MIT et un champ `"license": "MIT"`. C’est l’artefact publié qui a été lu, pas le dépôt.
+
+⛔ **Ce qui a été délibérément REFUSÉ du même code**, parce que hors de la liste close de
+[01-Specs/widget.md](01-Specs/widget.md) :
+
+- `nearbyText` — le texte autour de l’élément visé. Du contenu de la page de l’hôte.
+- `getReactComponentPath` et `getSourceFile` — la fibre React lue au travers du DOM.
+- `createDiagnosticsRecorder` — l’instrumentation de `console`, `fetch` et `XMLHttpRequest`.
+- `STORAGE_KEY_TOKEN` — un identifiant de visiteur écrit en `localStorage`.
+
+Ce refus est le vrai contenu de cet emprunt : on a pris la mécanique, pas le périmètre.
 
 ## Idées et structures reprises
 
@@ -22,7 +38,7 @@ mois plus tard, de savoir où aller voir quand on bute sur le même problème.
 | Idée | Source | Licence de la source |
 |---|---|---|
 | **La découpe de licence** — racine AGPL, paquets widget et MCP en MIT | [FasterFixes](https://github.com/manucoffin/faster-fixes) | AGPL-3.0 + MIT |
-| La forme de la collecte de contexte — sélecteur DOM, arbre de composants, navigateur | [`@fasterfixes/react`](https://github.com/manucoffin/faster-fixes) | MIT |
+| La forme de la collecte de contexte — sélecteur DOM, navigateur, capture à l’ouverture. ⛔ Le périmètre, lui, n’est pas repris : voir §Code emprunté | [`@fasterfixes/react`](https://github.com/manucoffin/faster-fixes) | MIT |
 | La forme des outils MCP et le modèle produit + clé d’API | [Quackback](https://github.com/QuackbackIO/quackback) | AGPL-3.0 |
 | Le geste de la note vocale — maintenir, relâcher, glisser pour annuler | WhatsApp, Telegram | — |
 
@@ -42,7 +58,7 @@ leur motif dans [04-Architecture/dependances.md](04-Architecture/dependances.md)
 | `preact` | MIT | Jason Miller et contributeurs |
 | `speech-to-element` | MIT | Ovidijus Parsiunas |
 | `@ricky0123/vad` | ISC | ricky0123 |
-| `snapdom` | MIT | Zumerlab |
+| `@zumer/snapdom` | MIT | Zumerlab |
 | `@floating-ui/dom` | MIT | Floating UI contributors |
 | `ai` (AI SDK) | Apache-2.0 | Vercel, Inc. |
 | `next` | MIT | Vercel, Inc. |

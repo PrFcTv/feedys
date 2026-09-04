@@ -27,7 +27,7 @@ pour rendre un service de confort est refusée, même impeccable par ailleurs.
 | `preact` | MIT | 38 850 | socle | 3 Ko contre 130 Ko pour React. C’est ce chiffre qui a décidé [D-004] |
 | `speech-to-element` | MIT | 21 | dictée | l’enrobage Web Speech extrait de `deep-chat`, du même auteur, éprouvé. On prend le moteur sans le composant |
 | `@ricky0123/vad` | ISC | 2 046 | arrêt sur silence | détection d’activité vocale (Silero, WASM). C’est lui qui permet le mode mains libres |
-| `snapdom` | MIT | 8 066 | capture | rapide et moderne. ⛔ **Pas `html2canvas`** : 31 921 ★ et plus un commit depuis juillet 2024 |
+| `@zumer/snapdom` | MIT | 8 066 | capture | rapide et moderne. ⛔ **Pas `html2canvas`** : 31 921 ★ et plus un commit depuis juillet 2024. ⚠️ Le nom est `@zumer/snapdom` — `snapdom` tout court est une bibliothèque d’état sans rapport, à 0.1.2. ⛔ **Servi, pas empaqueté** : 52 Ko gzip mesurés le 2026-09-04, contre 60 Ko de budget total ([D-011](../00-Projet/DECISIONS_LOG.md)) |
 | `@floating-ui/dom` | MIT | 32 719 | positionnement | la version `dom`, pas `react` — on n’embarque pas React |
 
 ⚠️ **`@fasterfixes/react` n’est pas pris en dépendance** malgré sa qualité : il tire React. On
@@ -51,8 +51,12 @@ un emprunt d’idée, à citer dans `ATTRIBUTIONS.md`.
 
 ### Outillage
 
-`typescript` · `vite` · `vitest` · `@playwright/test` · `eslint` · `turbo` · `tsx` — tous MIT ou
-Apache-2.0.
+`typescript` · `vite` · `vitest` · `happy-dom` · `@playwright/test` · `eslint` · `turbo` · `tsx` —
+tous MIT ou Apache-2.0.
+
+⚠️ `happy-dom` (MIT) sert aux tests DOM du widget, par docbloc `// @vitest-environment happy-dom`
+fichier par fichier. ⛔ L’environnement global des tests reste `node` : un test qui n’a pas besoin
+d’un DOM ne doit pas en payer le montage.
 
 ## Ce qu’on prendra après le MVP
 
