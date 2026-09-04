@@ -83,3 +83,25 @@ d’intégration, qui fait `set role feedys_app` avant de tenter un `DELETE`.
 
 **En attendant** : le garde-fou est prouvé en test, pas en usage. P-013 devra documenter les deux
 lignes de `create role … login in role feedys_app` et faire pointer `DATABASE_URL` dessus.
+
+---
+
+## T-005 — snapdom écrit un avertissement dans la console de l’hôte
+
+**Différé le** : 2026-09-04, pendant P-005
+**Déclencheur de reprise** : un intégrateur signale la ligne, **ou** une version de snapdom expose
+de quoi la taire
+**Coût si plus tard** : identique — c’est une option d’appel, une ligne
+
+À l’ouverture du panneau, `@zumer/snapdom` 2.24.15 écrit un `console.warn` dans la page de l’hôte :
+« Text in inline/table-cell elements kept its natural width… Pass `{ reconcile: true }` for
+pixel-exact layout ». Une fois par chargement de page — la bibliothèque garde un drapeau — et
+jamais une erreur.
+
+⚠️ Ce n’est pas rien : Feedys est un invité, et la console de l’hôte ne lui appartient pas. Un
+avertissement inexpliqué dans un logiciel métier finit toujours par être imputé au dernier arrivé.
+
+**En attendant** : on ne passe **pas** `reconcile: true`. Il double le temps de capture, et la
+capture est un aide-mémoire, pas une preuve ([01-Specs/widget.md]) — faire attendre quelqu’un qui a
+fini de parler coûte plus cher qu’une ligne de console. snapdom n’expose pas d’option pour taire
+celle-ci ; `debug` ne la couvre pas.

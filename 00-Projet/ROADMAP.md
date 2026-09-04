@@ -2,12 +2,13 @@
 
 ## Où on en est
 
-**Le tuyau est ouvert, le produit n’existe pas encore.** Le monorepo s’installe, se construit et
-se vérifie ; la frontière de licence est tenue par le lint et prouvée par un test ; la base existe,
-avec ses sept tables, ses privilèges et son runner de migrations. Un retour peut désormais entrer
-et être persisté — `POST /api/retours`, avec sa clé, ses bornes et son contexte, que le widget sait
-désormais assembler tout seul. Il reste à écrire ce que le collaborateur voit : ni coquille, ni
-dictée, ni entretien, ni synthèse.
+**Le collaborateur a enfin quelque chose à regarder.** Le monorepo s’installe, se construit et se
+vérifie ; la frontière de licence est tenue par le lint et prouvée par un test ; la base existe,
+avec ses sept tables, ses privilèges et son runner de migrations. Un retour entre et se persiste —
+`POST /api/retours`, avec sa clé, ses bornes et son contexte. Et la coquille du widget existe : une
+ligne de `<script>` chez l’hôte, un lanceur, un panneau, un champ texte qui va jusqu’en base, le
+tout dans un shadow DOM fermé qui survit à une page volontairement hostile. Il reste **le geste
+central** — la parole — puis l’entretien et la synthèse.
 
 | Prompt | État |
 |---|---|
@@ -15,7 +16,8 @@ dictée, ni entretien, ni synthèse.
 | P-002 · le schéma et les migrations | ✅ fait |
 | P-003 · l’ingestion d’un retour | ✅ fait |
 | P-004 · la collecte de contexte | ✅ fait |
-| P-005 → P-014 | à faire |
+| P-005 · la coquille du widget | ✅ fait |
+| P-006 → P-014 | à faire |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 

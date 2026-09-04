@@ -19,6 +19,12 @@ il n’est pas un produit qu’on vend au collaborateur, c’est un outil qu’o
 La stratégie qui en découle : **achromatique par défaut**, une seule couleur d’accent que l’hôte
 surcharge, et une seule couleur de signal — celle de l’enregistrement — qui ne se surcharge pas.
 
+⚠️ **L’élément `<feedys-widget>` lui-même est verrouillé en ligne, en `!important`** : position,
+ancrage, `z-index`, et surtout `transform`, `filter` et `contain`, qui feraient de lui un bloc
+conteneur et décrocheraient le widget de son ancrage. Une déclaration en ligne `!important` est la
+seule qui gagne contre une feuille d’auteur `!important` — c’est ce qui permet de survivre à un
+`* { position: static !important }`.
+
 ```css
 /* l’hôte peut poser ceci n’importe où dans sa page */
 feedys-widget {
@@ -34,8 +40,25 @@ prédire l’accessibilité.
 
 ## Les tokens
 
+⛔ **Les tokens et le reset ne sont PAS sur `:host`, mais sur un élément situé DANS la racine
+fantôme** — `.racine`, le conteneur que Preact remplit. Ce n’est pas un détail d’implémentation :
+`:host` désigne l’élément `<feedys-widget>`, qui appartient à l’arbre de l’**hôte**, et la cascade
+donne la priorité aux règles de l’hôte sur celles de `:host`. Un `* { text-transform: uppercase
+!important }` l’atteint donc, et les propriétés **héritées** — police, couleur, casse, interlignage
+— traversent la frontière du shadow DOM jusqu’à notre interface. ⚠️ Constaté le 2026-09-04 dans
+`pnpm widget:demo`, en écrivant P-005 : le titre du panneau sortait en majuscules magenta, en Comic
+Sans. Posé sur `.racine`, plus rien de l’hôte ne peut le contredire.
+
+⚠️ **`all: initial` ouvre le bloc**, et c’est lui qui coupe l’héritage — toutes les propriétés
+héritées d’un coup, y compris celles qu’on n’aurait pas pensé à lister. Il ne touche pas aux
+propriétés personnalisées : les surcharges de l’hôte traversent et survivent, ce qui est exactement
+ce qui rend `--feedys-accent` possible. Il ne touche pas non plus à `direction`, déclarée à part.
+
 ```css
-:host {
+.racine {
+  all: initial;
+  direction: ltr;
+
   /* — surfaces — achromatiques, très légèrement froides — */
   --w-fond:        #FFFFFF;
   --w-fond-2:      #F5F6F8;
@@ -63,7 +86,7 @@ prédire l’accessibilité.
 }
 
 @media (prefers-color-scheme: dark) {
-  :host { --w-fond: #171B20; --w-fond-2: #1F242B; --w-bord: #2C333C;
+  .racine { --w-fond: #171B20; --w-fond-2: #1F242B; --w-bord: #2C333C;
           --w-encre: #EAEDF1; --w-encre-2: #B3BCC7; --w-encre-3: #808B98; }
 }
 ```

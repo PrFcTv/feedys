@@ -22,6 +22,24 @@ Et, si l’hôte veut attacher une identité — recommandé, voir [D-005](../00
 ⛔ **Pas de paquet npm, pas d’import, pas de composant React à monter.** C’est la contrainte de
 licence de [D-001], et elle est structurelle : voir [04-Architecture/licences.md].
 
+Deux attributs, et rien d’autre :
+
+| Attribut | Rôle |
+|---|---|
+| `data-cle` | **obligatoire** — la clé publique du produit. ⛔ Un secret (`fdy_sec_…`) posé ici fait **refuser le démarrage** : il est lisible par tout le monde, il faut le révoquer, pas s’en servir |
+| `data-position` | `bas-droite` (défaut) ou `bas-gauche` |
+
+⚠️ **Le widget complète `window.feedys`, il ne l’écrase pas.** L’hôte y a posé son jeton d’identité
+avant que le script ne s’exécute ; le widget y ajoute `version`, `ouvrir()` et `fermer()`. C’est sa
+**seule** globale — et la raison pour laquelle le point d’entrée du paquet n’exporte rien : un
+`export` ferait fabriquer à Rollup une variable globale `feedys` qui écraserait le jeton, sans un
+mot. Vérifié par `packages/widget/src/budget.test.ts`.
+
+⚠️ **Si la balise est mal recopiée** — clé absente, secret en clair, `src` illisible — le widget ne
+monte pas et écrit **une** ligne dans la console. C’est le seul message qu’il y écrira jamais, et
+il s’adresse à l’intégrateur : sans lui, une balise fautive ne produit rien du tout, et personne ne
+sait pourquoi.
+
 ## Les règles d’occupation
 
 Le widget est un invité. Cinq obligations :
@@ -107,7 +125,7 @@ Voir [entretien.md] pour le comportement du bot. Côté widget :
 
 ### Envoyé
 
-Un accusé sobre, deux secondes, puis fermeture automatique.
+Un accusé sobre, deux secondes, puis fermeture automatique — et le focus revient au lanceur.
 
 > **C’est parti.** Merci — vous n’avez rien d’autre à faire.
 
