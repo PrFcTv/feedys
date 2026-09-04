@@ -75,3 +75,52 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm test:integration
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+
+    # ⚠️ Le parcours crée sa PROPRE base (`feedys_e2e`) : le rôle de connexion
+    #    doit pouvoir CREATE DATABASE. Le super-utilisateur du service le peut.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: feedys
+          POSTGRES_PASSWORD: feedys
+          POSTGRES_DB: feedys
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U feedys -d feedys"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://feedys:feedys@localhost:5432/feedys
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # ⚠️ Le navigateur seulement, avec ses dépendances système : le parcours
+      #    ne tourne que sur Chromium (Web Speech, D-003).
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm e2e
+
+      - if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

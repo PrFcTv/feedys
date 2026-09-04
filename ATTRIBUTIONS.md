@@ -15,6 +15,8 @@ et distribué avec le logiciel.
 | L’**échelle de stratégies de sélecteur** — `data-testid` → id → `name` → `placeholder` → `aria-label` → classes stables → chemin `nth-of-type`, chacune retenue seulement si elle désigne un élément et un seul ; et les deux tests « cette classe est-elle fabriquée par l’outillage ? » et « cet id vient-il de `useId` ? » | [`@fasterfixes/core`](https://github.com/manucoffin/faster-fixes) 0.0.7 | MIT · © 2026 FasterFixes | `packages/widget/src/contexte/selecteur.ts` |
 | L’**ordre des tests de la chaîne d’agent** — Firefox, puis Edge, puis Opera, puis Chrome, puis Safari, chacun disqualifiant les suivants | idem | MIT | `packages/widget/src/contexte/navigateur.ts` |
 | La **liste des paramètres d’URL sensibles** à expurger | idem | MIT | `packages/widget/src/contexte/url.ts` |
+| L’assistant **`cn`** — `clsx` puis `twMerge`, dans cet ordre — et la forme des variantes `cva` du bouton | [shadcn/ui](https://github.com/shadcn-ui/ui) | MIT · © 2023 shadcn | `apps/serveur/ui/cn.ts`, `apps/serveur/ui/bouton.tsx` |
+| Le **découpage en parties du select** — `Root` / `Trigger` / `Value` / `Positioner` / `Popup` / `Item` / `ItemIndicator` —, **variante Base UI** | idem | MIT | `apps/serveur/ui/select.tsx` |
 
 ⚠️ **Vérifié à la source le 2026-09-04** : le dépôt `faster-fixes` est AGPL-3.0 à sa racine, mais
 les paquets publiés `@fasterfixes/core` et `@fasterfixes/react` portent chacun leur propre fichier
@@ -65,7 +67,13 @@ leur motif dans [04-Architecture/dependances.md](04-Architecture/dependances.md)
 | `@prisma/client` | Apache-2.0 | Prisma Data, Inc. |
 | `shadcn` (composants copiés) | MIT | shadcn |
 | `@modelcontextprotocol/sdk` | MIT | Anthropic |
-| `nodemailer` | MIT | Andris Reinman |
+| `nodemailer` | MIT-0 | Andris Reinman |
+| `@base-ui/react` | MIT | Material-UI SAS |
+| `tailwindcss` | MIT | Tailwind Labs, Inc. |
+| `class-variance-authority` | Apache-2.0 | Joe Bell |
+| `clsx`, `tailwind-merge` | MIT | Luke Edwards, Dany Castillo |
+| `lucide-react` | ISC | Lucide contributors |
+| `@playwright/test` | Apache-2.0 | Microsoft Corporation |
 
 ⛔ **`@ricky0123/vad` a été retiré de cette liste le 2026-09-04, sans avoir jamais été installé** :
 sa chaîne minimale pèse 5,3 Mo gzip, et le moment de son chargement serait le pire possible. Le
