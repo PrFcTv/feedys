@@ -180,11 +180,41 @@ CE QU’ON NE SAIT PAS
 CONTEXTE
   Marie Dupont (gestionnaire) · 4 sept. 2026 à 09:14
   /dossiers?tri=date · Chrome 141 · 1512 × 982
-  → ouvrir la fiche : https://feedys.exemple.fr/r/clx8f2a...
+  → ouvrir la fiche : https://feedys.exemple.fr/bo/r/clx8f2a…
 ```
 
 ⛔ **Pas de HTML riche, pas de logo, pas de bouton.** Un email de Feedys est un mémo, et il doit
-rester lisible dans n’importe quel client, y compris en texte brut.
+rester lisible dans n’importe quel client, y compris en texte brut. Le message n’a **qu’une**
+partie, `text/plain` : il n’y a pas de variante HTML, et il n’y en aura pas.
+
+⚠️ **Une rubrique sans contenu n’est pas écrite.** Ni « Attendu » sur une idée, ni « CE QU’ON NE
+SAIT PAS » quand la liste est vide — une liste vide est un signal, et « rien à signaler » ferait du
+bruit dans chaque note.
+
+⚠️ **L’heure est celle du collaborateur**, rendue dans le fuseau que le navigateur a joint. « 09:14 »
+doit être l’heure qu’il était **pour la personne**, pas celle du serveur.
+
+### Ce que devient un envoi qui rate
+
+Une ligne est ouverte dans `notifications` **avant** la tentative, en `en_attente`, puis close en
+`envoye` ou en `echoue` avec le message du relais. ⛔ `envoye_le` n’est posé qu’en cas de succès :
+une ligne `echoue` datée mentirait au premier coup d’œil.
+
+⚠️ **Un SMTP coupé laisse le retour `envoye` et la notification `echoue`.** Rien n’est perdu : la
+note est écrite avant qu’on tente quoi que ce soit, et elle reste lisible au back-office et par MCP.
+L’email est un confort, pas le chemin.
+
+⛔ **Une note ne se renvoie pas.** Une seule notification par retour.
+
+### Relire la mise en forme sans rien envoyer
+
+```bash
+pnpm emails:apercu
+```
+
+Rend une note **figée et inventée** (`domaine/notification/exemple.ts`) dans `.apercu-emails/`. ⛔ Il
+n’envoie rien et **ne lit aucun secret** : on doit pouvoir relire la mise en forme d’un email sur un
+poste sans configuration de messagerie, et sans risquer d’écrire à quelqu’un.
 
 ## Le rendu MCP
 

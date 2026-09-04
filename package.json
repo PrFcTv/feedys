@@ -19,6 +19,7 @@
     "db:generate": "prisma generate",
     "produit:creer": "tsx apps/serveur/outils/creer-produit.ts",
     "entretien:rejouer": "tsx apps/serveur/outils/entretien-rejouer.ts",
+    "emails:apercu": "tsx apps/serveur/outils/emails-apercu.ts",
     "widget:demo": "pnpm --filter @feedys/widget build && tsx packages/widget/demo/serveur.ts"
   },
   "devDependencies": {
