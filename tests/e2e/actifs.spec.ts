@@ -22,7 +22,10 @@ test('sert widget.js compressé, sous le budget, tel qu’un navigateur le deman
     headers: { 'accept-encoding': 'gzip, deflate, br' },
   })
 
-  expect(reponse.status()).toBe(200)
+  expect(
+    reponse.status(),
+    'widget.js est absent — construisez-le : pnpm --filter @feedys/widget build',
+  ).toBe(200)
 
   const encodage = reponse.headers()['content-encoding']
   expect(encodage, 'widget.js part en clair : le budget serait faux chez l’hôte').toBeDefined()
