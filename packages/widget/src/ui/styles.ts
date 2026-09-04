@@ -197,6 +197,121 @@ button, textarea {
 
 .envoyer[disabled] { opacity: .45; cursor: default }
 
+/* ── LE MICRO — le geste proposé, jamais imposé ─────────────────────────────
+   ⛔ Sans Web Speech, ce bloc n’est pas rendu du tout : il ne se grise pas et
+      ne s’excuse pas. On ne mentionne jamais ce qui manque ([D-003]). */
+
+.micro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--w-2);
+  padding: var(--w-4) 0 var(--w-2);
+}
+
+.micro__bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid var(--w-bord);
+  border-radius: 999px;
+  background: var(--w-fond-2);
+  color: var(--w-encre-2);
+  cursor: pointer;
+  touch-action: none;
+  transform: translateX(calc(var(--w-glisse, 0px) * -1));
+}
+
+.micro__bouton:hover { border-color: var(--w-encre-3); color: var(--w-encre) }
+
+/* ⚠️ Le rouge d’enregistrement ne se surcharge pas : c’est la seule convention
+      sur laquelle le produit s’appuie gratuitement (DESIGN.md §Les tokens). */
+.micro__bouton[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--w-rec);
+  color: var(--w-accent-encre);
+  /* ⚠️ Le halo RESPIRE, il ne clignote pas. Le clignotement dit l’urgence ; on
+        veut dire l’attention (DESIGN.md, exigence 3). */
+  animation: w-respirer 1.6s ease-in-out infinite;
+}
+
+@keyframes w-respirer {
+  0%, 100% { box-shadow: 0 0 0 0 var(--w-rec-halo) }
+  50%      { box-shadow: 0 0 0 14px var(--w-rec-halo) }
+}
+
+.micro__legende {
+  margin: 0;
+  color: var(--w-encre-3);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ⚠️ « ou », et rien de plus. Le champ texte n’est pas un contournement du
+      micro : les deux chemins sont au même niveau de visibilité. */
+.separateur {
+  display: flex;
+  align-items: center;
+  gap: var(--w-3);
+  margin: var(--w-2) 0 var(--w-3);
+  color: var(--w-encre-3);
+  font-size: 13px;
+}
+
+.separateur::before,
+.separateur::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--w-bord);
+}
+
+/* ── EN ÉCOUTE — le seul écran à dessiner vraiment ──────────────────────────*/
+
+.ecoute { padding-top: var(--w-2) }
+
+/* ⛔ L’onde est calculée depuis l’AnalyserNode, à chaque image. Rien ici ne
+      l’anime : une onde animée en boucle se repère en une seconde. */
+.onde {
+  display: block;
+  width: 100%;
+  height: 44px;
+}
+
+.ecoute__transcript {
+  margin: var(--w-3) 0 0;
+  min-height: 3.6em;
+  max-height: 8em;
+  overflow-y: auto;
+  color: var(--w-encre);
+  font-size: 14px;
+}
+
+.ecoute__attente { color: var(--w-encre-3) }
+
+.ecoute__avis {
+  margin: var(--w-2) 0 0;
+  color: var(--w-encre-2);
+  font-size: 13px;
+}
+
+.ecoute__indices {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--w-3);
+  margin: var(--w-2) 0 0;
+  min-height: 1.2em;
+  color: var(--w-encre-3);
+  font-size: 13px;
+}
+
+/* ⚠️ Le compteur informe, il ne presse pas : pas de couleur, pas de gras. */
+.ecoute__compteur { font-variant-numeric: tabular-nums }
+
 /* ── ENVOYÉ — l’accusé ──────────────────────────────────────────────────────
    ⛔ Pas de numéro de suivi, pas de « vous serez notifié », pas de lien vers un
       statut. On ne promet rien qu’on ne tiendra pas (01-Specs/widget.md). */
@@ -226,11 +341,18 @@ button, textarea {
 
 /* ── ⛔ prefers-reduced-motion ─────────────────────────────────────────────── */
 
+/* ⛔ prefers-reduced-motion supprime tout SAUF l’onde — qui est de
+      l’information, pas de la décoration, et qui est donc conservée
+      (DESIGN.md §Le mouvement). */
 @media (prefers-reduced-motion: reduce) {
-  .lanceur, .lanceur__libelle, .panneau, .accuse {
+  .lanceur, .lanceur__libelle, .panneau, .accuse, .micro__bouton {
     transition: none !important;
     animation: none !important;
   }
+
+  /* Le halo ne respire plus : l’état d’enregistrement reste dit par la couleur
+     ET par la légende, jamais par la couleur seule. */
+  .micro__bouton[aria-pressed='true'] { box-shadow: 0 0 0 6px var(--w-rec-halo) }
 }
 `
 

@@ -112,7 +112,27 @@ Pendant l’écoute :
   permet de corriger sans réécouter ;
 - un compteur discret au-delà de trente secondes. Pas d’alerte, pas de limite.
 
-⛔ **Aucun envoi automatique depuis cet état.** On relâche, on relit, on envoie.
+⛔ **Aucun envoi automatique depuis cet état.** On relâche, on relit, on envoie. Le bouton
+**Envoyer** n’existe même pas pendant l’écoute : le transcript rejoint le champ texte, et c’est de
+là qu’on part.
+
+⚠️ **L’arrêt sur silence est calculé, pas modélisé** ([D-012](../00-Projet/DECISIONS_LOG.md)). Le
+plancher sonore est mesuré sur les premières centaines de millisecondes, puis suivi vers le bas :
+un seuil fixe échouerait en open space, c’est-à-dire là où le produit vit. ⚠️ Le biais est assumé —
+on préfère **ne pas s’arrêter** que s’arrêter trop tôt : un arrêt manqué coûte un clic, un arrêt
+prématuré coupe quelqu’un au milieu d’une phrase.
+
+Au clavier :
+
+- **`Espace` maintenu** vaut l’appui, et un appui bref vaut le clic simple — donc les mains libres.
+- **`Échap` annule la dictée**, et ne ferme pas le panneau. Deux pressions pour sortir : la
+  première jette ce qui vient d’être dit, la seconde ferme. ⚠️ « Glisser vers la gauche » n’a pas
+  de sens au clavier : l’écran affiche alors « Échap pour annuler », pas la consigne de l’autre.
+
+⚠️ **Si le micro est refusé**, l’écoute continue — Web Speech ouvre sa propre capture — mais sans
+onde ni arrêt sur silence. C’est le **seul** cas où le widget dit quelque chose à ce sujet, parce
+que l’absence d’onde ressemblerait sinon à une panne. ⛔ Il ne s’excuse toujours pas : le champ
+texte est resté à un clic.
 
 ### En entretien
 

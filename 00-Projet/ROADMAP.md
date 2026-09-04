@@ -7,8 +7,10 @@ vérifie ; la frontière de licence est tenue par le lint et prouvée par un tes
 avec ses sept tables, ses privilèges et son runner de migrations. Un retour entre et se persiste —
 `POST /api/retours`, avec sa clé, ses bornes et son contexte. Et la coquille du widget existe : une
 ligne de `<script>` chez l’hôte, un lanceur, un panneau, un champ texte qui va jusqu’en base, le
-tout dans un shadow DOM fermé qui survit à une page volontairement hostile. Il reste **le geste
-central** — la parole — puis l’entretien et la synthèse.
+tout dans un shadow DOM fermé qui survit à une page volontairement hostile. **Et le geste central
+existe** : on maintient, on parle, l’onde suit vraiment la voix, le transcript s’écrit dessous, on
+relâche, on relit, on envoie — et `source` vaut `voix`. Il reste le bot : l’entretien, puis la
+synthèse. C’est là que le produit cesse d’être un formulaire dicté.
 
 | Prompt | État |
 |---|---|
@@ -17,7 +19,8 @@ central** — la parole — puis l’entretien et la synthèse.
 | P-003 · l’ingestion d’un retour | ✅ fait |
 | P-004 · la collecte de contexte | ✅ fait |
 | P-005 · la coquille du widget | ✅ fait |
-| P-006 → P-014 | à faire |
+| P-006 · la dictée | ✅ fait |
+| P-007 → P-014 | à faire |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 

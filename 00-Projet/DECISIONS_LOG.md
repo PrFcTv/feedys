@@ -286,3 +286,54 @@ navigateur qui rendrait la capture native. Ni l’une ni l’autre n’est annon
 en IIFE d’un seul fichier, parce que l’intégration supportée est un `<script src>` classique sans
 `type="module"` ([D-001]). Vite y **replie** les imports dynamiques dans le même fichier — le
 découpage n’aurait donc pas lieu.
+
+---
+
+## D-012 — `@ricky0123/vad` n’entre pas dans Feedys : l’arrêt sur silence est calculé
+
+**2026-09-04**
+
+Le mode mains libres s’arrête après **deux secondes de silence**. Ce silence est détecté depuis
+l’**`AnalyserNode`** qu’on ouvre de toute façon pour dessiner l’onde, et **pas** par le modèle
+Silero de `@ricky0123/vad`, que [dependances.md](../04-Architecture/dependances.md) avait retenu.
+
+**Le motif est une mesure, pas une intuition.** Relevé le 2026-09-04, pour la chaîne minimale
+servie depuis l’origine Feedys, en gzip :
+
+| Fichier | gzip |
+|---|---|
+| `ort-wasm-simd-threaded.wasm` | **3,4 Mo** |
+| `silero_vad_v5.onnx` | **1,9 Mo** |
+| `@ricky0123/vad-web` `bundle.min.js` | 20 Ko |
+| `ort.wasm.min.js` + son glu `.mjs` | 25 Ko |
+| **Total** | **≈ 5,3 Mo** |
+
+Le widget entier pèse **24 Ko gzip**. Silero coûterait **220 fois** le produit, pour décider qu’on
+s’est tu.
+
+⛔ **Et le poids n’est même pas l’argument décisif — le MOMENT l’est.** Ces 5,3 Mo se
+téléchargeraient à l’instant précis où quelqu’un vient de cliquer pour parler, dans le logiciel
+métier de quelqu’un d’autre, sur une liaison d’entreprise. Il parlerait pendant le chargement, et
+on perdrait ce qu’il dit. Charger à la demande ne résout donc pas le problème : **c’est la demande
+qui est le mauvais moment.** Le charger plus tôt reviendrait à imposer 5,3 Mo à l’hôte au
+chargement de sa page, ce que [D-011] a déjà refusé pour 52 Ko.
+
+⚠️ **C’est l’alternative que [T-001](TICKETS_DIFFERES.md) avait elle-même prévue** — « un simple
+seuil d’énergie sur l’`AnalyserNode` : moins bon, mais gratuit et déjà présent pour dessiner
+l’onde ». Ce ticket est donc clos par cette entrée.
+
+**Ce qu’on fait à la place, et pourquoi ce n’est pas un seuil fixe.** Un seuil absolu tient dans un
+bureau silencieux et échoue exactement là où le produit vit : en open space, où le bruit de fond
+passerait pour de la parole et où l’arrêt n’arriverait jamais. Le plancher est donc **mesuré** sur
+les 400 premières millisecondes de l’écoute, puis suivi lentement — et seulement vers le bas.
+`packages/widget/src/dictee/silence.ts`, vérifié par un test qui rejoue un open space.
+
+⚠️ **Le biais est assumé, et il va dans un seul sens** : on préfère ne pas s’arrêter que s’arrêter
+trop tôt. Un arrêt manqué coûte **un clic** — le second clic est visible en permanence. Un arrêt
+prématuré coupe quelqu’un au milieu d’une phrase, et il ne recommencera pas.
+
+**Ce qui la renverserait** : un modèle de VAD sous ~200 Ko, ou une API `VoiceActivityDetection`
+native au navigateur. ⚠️ Ou, plus probablement, l’observation que l’arrêt automatique se trompe
+en usage réel — auquel cas la réponse la moins chère reste le second clic, pas cinq mégaoctets.
+
+⛔ **Ce qui ne la renverse PAS** : la qualité supérieure de Silero. Elle n’a jamais été en cause.

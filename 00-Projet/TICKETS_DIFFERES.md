@@ -20,20 +20,19 @@ Ce que c’est, en trois lignes. Ce qu’on fait à la place en attendant.
 
 ---
 
-## T-001 — Le poids du modèle VAD n’est pas dans le budget du widget
+## ~~T-001 — Le poids du modèle VAD n’est pas dans le budget du widget~~ · ✅ clos
 
 **Différé le** : 2026-09-04, à la rédaction de [05-Prompts/MVP.md]
-**Déclencheur de reprise** : le premier build de P-006 qui dépasse 60 Ko gzip
-**Coût si plus tard** : identique — c’est une décision de chargement, pas d’architecture
+**Clos le** : 2026-09-04, pendant P-006, par [D-012](DECISIONS_LOG.md)
 
-`@ricky0123/vad` embarque un modèle Silero en WASM, qui pèse largement plus que le budget de
-60 Ko du widget. Il ne sert **que** pour le mode mains libres.
+Le déclencheur prévu — « le premier build de P-006 qui dépasse 60 Ko gzip » — n’est jamais tombé,
+parce que la mesure a tranché avant : la chaîne Silero minimale pèse **5,3 Mo gzip**, et le
+chargement différé ne résout rien puisque **c’est la demande qui est le mauvais moment** —
+quelqu’un vient de cliquer pour parler, et il parlerait pendant le téléchargement.
 
-**En attendant** : le charger **à la demande**, au premier passage en mains libres, et jamais au
-chargement du widget. Le geste par défaut — maintenir pour parler — n’en a pas besoin.
-
-⚠️ Si le chargement différé se révèle trop lent à l’usage, l’alternative est un simple seuil
-d’énergie sur l’`AnalyserNode` : moins bon, mais gratuit et déjà présent pour dessiner l’onde.
+C’est l’alternative que ce ticket avait lui-même prévue qui a été retenue : le plancher sonore est
+mesuré sur l’`AnalyserNode` déjà ouvert pour l’onde. ⚠️ Et pas un seuil fixe — un seuil absolu
+échoue exactement là où le produit vit, en open space. Détail dans [D-012](DECISIONS_LOG.md).
 
 ---
 
