@@ -175,3 +175,23 @@ fait**, dans l’éditeur, à côté du code concerné.
 Les autres canaux sont des variations sur le même contenu. Ils s’ajouteront quand la note aura
 prouvé qu’elle est bonne — l’ajouter tôt ne ferait que multiplier les endroits à corriger à chaque
 changement de format.
+
+---
+
+## D-008 — TypeScript 6, pas 7, tant que `typescript-eslint` ne suit pas
+
+**2026-09-04**
+
+TypeScript 7 (le portage natif) est publié et c’est la version `latest` de npm. On reste
+volontairement sur **TypeScript 6.0.3**.
+
+**Le motif est unique et vérifiable** : `typescript-eslint@8.69.0` déclare
+`typescript: '>=4.8.4 <6.1.0'`. Or c’est lui qui parse le TypeScript pour ESLint, et donc **lui qui
+fait tenir la frontière de licence** — la règle `no-restricted-imports` ne voit rien dans un
+fichier qu’aucun parseur n’a lu.
+
+⚠️ Prendre TS 7 aujourd’hui, c’est troquer une amélioration de vitesse de compilation contre le
+seul garde-fou de l’invariant le plus fragile du projet ([licences.md]). Le troc est mauvais.
+
+**Ce qui la renverserait** : une version de `typescript-eslint` qui accepte `typescript@^7`. Le
+jour où c’est le cas, la migration est un changement de numéro dans quatre `package.json`.
