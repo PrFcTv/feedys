@@ -8,6 +8,8 @@
  *
  * ⚠️ Tout le reste est construit à la demande : rien ne se connecte à l’import.
  */
+import type { PortsNotification } from '../domaine/notification/envoyer'
+import { envoyerNote } from '../domaine/notification/envoyer'
 import type { PortsIngestion } from '../domaine/retours/ingestion'
 import type { PortsSynthese } from '../domaine/synthese/produire'
 import type { PortsTour } from '../domaine/entretien/tour'
@@ -18,8 +20,10 @@ import { modeleClaude } from '../domaine/entretien/modele'
 
 import { pool } from './base/connexion'
 import { creerDepotEntretien } from './base/depot-entretien'
+import { creerDepotNotifications } from './base/depot-notifications'
 import { creerDepotRetours } from './base/depot-retours'
 import { creerDepotSyntheses } from './base/depot-syntheses'
+import { creerSmtp } from './courriel/smtp'
 import { lireGabaritSynthese, lireGabaritSysteme } from './prompts'
 import { creerStockageFichiers } from './stockage/fichiers'
 
@@ -127,4 +131,63 @@ export async function synthetiser(retourId: string): Promise<void> {
   }
 
   await ports.depot.enregistrer(retourId, resultat.synthese, etiquettesDe(resultat.synthese.contenu))
+
+  // ⛔ APRÈS l’écriture, jamais avant, et son échec est avalé : l’email est un
+  //    confort, la note est déjà lisible au back-office et par MCP.
+  await notifier(retourId)
+}
+
+/**
+ * L’origine publique, pour composer le lien vers la fiche dans l’email.
+ *
+ * ⚠️ Sans elle on n’envoie pas de lien mort : on retombe sur une origine locale,
+ *    qui se voit immédiatement dans le message.
+ */
+function urlPublique(): string {
+  return process.env['FEEDYS_URL_PUBLIQUE']?.trim() || 'http://localhost:3000'
+}
+
+/**
+ * ⚠️ Rend `undefined` quand l’email n’est pas configuré. Ce n’est pas une panne :
+ *    un poste de développement sans relais SMTP doit tourner, et un retour sans
+ *    notification reste un retour complet.
+ */
+export function portsNotification(): PortsNotification | undefined {
+  const url = process.env['SMTP_URL']?.trim()
+  const expediteur = process.env['FEEDYS_EMAIL_DE']?.trim()
+  const destinataire = process.env['FEEDYS_EMAIL_A']?.trim()
+
+  if (!url || !expediteur || !destinataire) return undefined
+
+  return {
+    depot: creerDepotNotifications(pool(), urlPublique()),
+    smtp: creerSmtp({ url, expediteur }),
+    destinataire,
+    signaler,
+  }
+}
+
+/**
+ * Envoie la note. ⛔ N’interrompt jamais ce qui l’appelle.
+ *
+ * ⚠️ Un SMTP coupé laisse la notification en `echoue` et le retour en `envoye` :
+ *    c’est le comportement attendu, pas une dégradation
+ *    (04-Architecture/conventions-db.md §notifications).
+ */
+export async function notifier(retourId: string): Promise<void> {
+  const ports = portsNotification()
+
+  if (ports === undefined) {
+    signaler(
+      'envoi de la note — SMTP_URL, FEEDYS_EMAIL_DE ou FEEDYS_EMAIL_A est absente',
+      new Error('email non configuré'),
+    )
+    return
+  }
+
+  try {
+    await envoyerNote(retourId, ports)
+  } catch (erreur) {
+    signaler('envoi de la note par email', erreur)
+  }
 }

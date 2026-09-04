@@ -26,7 +26,8 @@ back-office, MCP.
 | P-006 · la dictée | ✅ fait |
 | P-007 · la boucle d’entretien | ✅ fait |
 | P-008 · la synthèse | ✅ fait |
-| P-009 → P-014 | à faire |
+| P-009 · l’email | ✅ fait |
+| P-010 → P-014 | à faire |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
