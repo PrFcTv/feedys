@@ -1,0 +1,60 @@
+# Feedys en production — un conteneur, un Postgres.
+#
+#   docker compose -f docker-compose.production.yml up -d
+#
+# ⛔ Aucune valeur réelle ici : le dépôt est PUBLIC. Tout ce qui est secret vient
+#    de `.env.production`, qui n’est pas suivi par git.
+#
+# ⚠️ Feedys ne dépend d’aucun fournisseur d’hébergement : ce fichier est une
+#    commodité, pas un mécanisme. `docker run --env-file` fait la même chose
+#    (04-Architecture/hebergement.md).
+
+services:
+  feedys:
+    image: feedys:${FEEDYS_VERSION:-dev}
+    build:
+      context: .
+      args:
+        FEEDYS_VERSION: ${FEEDYS_VERSION:-dev}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # ⚠️ Toutes les variables viennent d’un fichier hors dépôt. Les obligatoires
+    #    sont listées dans 04-Architecture/hebergement.md ; sans l’une d’elles le
+    #    conteneur refuse de démarrer, bruyamment.
+    env_file:
+      - .env.production
+    ports:
+      # ⚠️ Sur la boucle locale seulement : c’est le proxy de la machine qui
+      #    termine TLS et expose feedys.exemple.fr.
+      - '127.0.0.1:${FEEDYS_PORT:-3000}:3000'
+    volumes:
+      # ⛔ Les captures et l’audio. Un volume, pas le système de fichiers de
+      #    l’image : un conteneur se remplace, la parole des gens ne se
+      #    reconstitue pas (hebergement.md §La sauvegarde).
+      - feedys-stockage:/stockage
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    # ⛔ POSTGRES_PASSWORD vient de .env.production, jamais d’ici.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-feedys}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD est obligatoire}
+      POSTGRES_DB: ${POSTGRES_DB:-feedys}
+    # ⚠️ Aucun port publié : la base ne sort pas de la machine. Feedys l’atteint
+    #    par le réseau du compose, et un dump se prend avec `docker compose exec`.
+    volumes:
+      # ⚠️ /var/lib/postgresql, et non .../data : depuis Postgres 18 l’image range
+      #    les données dans un sous-dossier par version majeure.
+      - feedys-donnees:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-feedys} -d ${POSTGRES_DB:-feedys}']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  feedys-stockage:
+  feedys-donnees:

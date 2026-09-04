@@ -18,6 +18,8 @@ apps/serveur/CLAUDE.md
 .env
 .env.*.local
 .env.local
+# ⛔ Les variables du serveur de production. Elles ne rentrent jamais ici.
+.env.production
 
 coverage/
 test-results/

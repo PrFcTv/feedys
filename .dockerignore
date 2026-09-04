@@ -1,0 +1,44 @@
+# Ce qui n’entre pas dans le contexte de construction.
+#
+# ⚠️ Ce n’est pas qu’une question de vitesse : `.env.local` porte des secrets, et
+#    le dépôt est PUBLIC. Une image qui les emporterait les publierait.
+
+node_modules
+**/node_modules
+.pnpm-store
+
+.next
+**/.next
+dist
+**/dist
+.turbo
+**/.turbo
+prisma/genere
+
+.git
+.github
+.vscode
+
+.env
+.env.local
+.env.*.local
+.env.production
+
+coverage
+test-results
+playwright-report
+.vitest
+.apercu-emails
+.stockage
+
+# La documentation ne construit rien. ⚠️ Sauf db/migrations, qui EST le schéma.
+00-Projet
+01-Specs
+02-Metier
+03-Bugs
+04-Architecture
+05-Prompts
+*.pdf
+
+Dockerfile
+.dockerignore

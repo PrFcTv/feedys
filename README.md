@@ -41,8 +41,9 @@ des milliers d’inconnus. Détail : [00-Projet/VISION.md](00-Projet/VISION.md).
 
 ## Statut
 
-🚧 **En construction.** Le socle est posé — monorepo, licences, lint de frontière, CI, et la base
-avec ses migrations. Le produit lui-même n’est pas encore écrit. La séquence de travail est dans
+🚧 **En construction.** Le parcours complet tient debout — le widget, l’entretien, la synthèse,
+l’email, le back-office, le MCP, l’identité signée et le conteneur. Reste la recette de bout en
+bout. La séquence de travail est dans
 [05-Prompts/MVP.md](05-Prompts/MVP.md), et l’avancement dans
 [00-Projet/ROADMAP.md](00-Projet/ROADMAP.md).
 
@@ -134,6 +135,20 @@ la page.
 illisible — le retour est **accepté quand même**, simplement sans auteur. On ne perd jamais une
 parole pour un problème d’identité. Le détail :
 [01-Specs/ingestion.md](01-Specs/ingestion.md) §L’identité signée.
+
+## Déployer
+
+```bash
+cp .env.example .env.production                      # puis renseigner — aucune valeur ne va dans git
+docker build -t feedys:1.0.0 --build-arg FEEDYS_VERSION=1.0.0 .
+docker compose -f docker-compose.production.yml up -d
+curl -fsS http://localhost:3000/sante                # {"etat":"ok","migrations":"a_jour",…}
+```
+
+Au démarrage, dans l’ordre : les variables obligatoires, la base, les migrations, l’empreinte de
+celles déjà appliquées, la présence et le poids de `widget.js`, puis l’écoute. ⛔ **Un échec à
+n’importe laquelle de ces étapes empêche de servir**, et le message dit laquelle. Le détail :
+[04-Architecture/hebergement.md](04-Architecture/hebergement.md).
 
 ---
 
