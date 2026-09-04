@@ -7,6 +7,15 @@ export default defineConfig({
       'apps/*/**/*.test.{ts,tsx}',
       'packages/*/**/*.test.{ts,tsx}',
     ],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/.turbo/**'],
+    // ⛔ Les tests unitaires sont purs : sans base, hors ligne. Ceux qui ont
+    //    besoin d’un Postgres portent .integration et vivent dans
+    //    vitest.integration.config.ts.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.next/**',
+      '**/.turbo/**',
+      '**/*.integration.test.ts',
+    ],
   },
 })

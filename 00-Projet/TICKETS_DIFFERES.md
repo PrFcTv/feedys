@@ -64,3 +64,22 @@ survive. Mais c’est **notre** page hostile, écrite en imaginant ce qui pourra
 **En attendant** : la recette P-014 se joue sur `widget:demo`, et la première mise en service
 réelle vaut recette. ⚠️ C’est le trou de couverture le plus large du MVP, et il est assumé
 sciemment.
+
+---
+
+## T-004 — La séparation des rôles Postgres n’est pas outillée
+
+**Différé le** : 2026-09-04, pendant P-002
+**Déclencheur de reprise** : P-013, quand le conteneur devra démarrer ailleurs que sur un poste
+**Coût si plus tard** : identique — c’est une procédure de déploiement, pas du schéma
+
+`0001_socle.sql` crée le rôle de groupe `feedys_app` et lui accorde ses privilèges ([D-009]). Il
+ne crée **pas** le rôle de login qui s’en réclame : son nom et son mot de passe sont propres à
+chaque installation, et n’ont rien à faire dans un dépôt public.
+
+Sur le poste, `docker-compose.yml` connecte le superutilisateur `feedys`, qui est aussi le
+propriétaire : ⚠️ **les `GRANT` n’y mordent donc pas**. Ce qui les vérifie vraiment, c’est le test
+d’intégration, qui fait `set role feedys_app` avant de tenter un `DELETE`.
+
+**En attendant** : le garde-fou est prouvé en test, pas en usage. P-013 devra documenter les deux
+lignes de `create role … login in role feedys_app` et faire pointer `DATABASE_URL` dessus.

@@ -1,0 +1,243 @@
+// ⛔ Ce fichier est un MIROIR de db/migrations/*.sql, tenu à la main.
+//
+// La source de vérité du schéma est le SQL brut. `prisma migrate` n’est JAMAIS
+// utilisé : on écrit la migration, on l’applique, puis on met ce miroir à jour
+// pour qu’il dise la même chose. 04-Architecture/conventions-db.md.
+//
+// Conventions : snake_case en base, camelCase ici, @map / @@map entre les deux.
+// Le TypeScript parle le glossaire (02-Metier/glossaire.md) — un « retour »,
+// jamais un « ticket ».
+
+generator client {
+  provider = "prisma-client"
+  output   = "./genere"
+}
+
+// ⚠️ La chaîne de connexion n’est plus ici mais dans prisma.config.ts —
+//    Prisma 7. Le dépôt est public : elle ne vit que dans l’environnement.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Les six enums
+//
+// ⛔ Il n’y a ni priorité, ni sévérité, ni score, et il n’y en aura pas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum StatutRetour {
+  en_cours
+  abandonne
+  envoye
+  lu
+  traite
+  ecarte
+
+  @@map("statut_retour")
+}
+
+enum TypeRetour {
+  bug
+  idee
+  question
+  gene
+
+  @@map("type_retour")
+}
+
+enum SourceRetour {
+  voix
+  texte
+
+  @@map("source_retour")
+}
+
+enum RoleMessage {
+  collaborateur
+  bot
+
+  @@map("role_message")
+}
+
+enum ConfianceSynthese {
+  haute
+  moyenne
+  basse
+
+  @@map("confiance_synthese")
+}
+
+enum CanalNotification {
+  email
+
+  @@map("canal_notification")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Les tables
+//
+// ⛔ Aucune relation n’est en cascade : onDelete et onUpdate sont NoAction
+//    partout, comme le SQL. Rien n’est supprimé dans Feedys.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Un logiciel métier qui embarque le widget.
+model Produit {
+  id          String   @id
+  nom         String
+  domaine     String
+  clePublique String   @map("cle_publique")
+  secretHash  String   @map("secret_hash")
+  actif       Boolean  @default(true)
+  creeLe      DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe       DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  retours Retour[]
+
+  @@unique([clePublique], map: "produits_cle_publique_uniq")
+  @@map("produits")
+}
+
+/// Ce que quelqu’un a voulu dire.
+model Retour {
+  id                String       @id
+  produitId         String       @map("produit_id")
+  auteurRef         String?      @map("auteur_ref")
+  auteurNom         String?      @map("auteur_nom")
+  auteurRole        String?      @map("auteur_role")
+  identiteVerifiee  Boolean      @default(false) @map("identite_verifiee")
+  statut            StatutRetour @default(en_cours)
+  type              TypeRetour?
+  titre             String?
+  zone              String?
+  source            SourceRetour
+  envoyeLe          DateTime?    @map("envoye_le") @db.Timestamptz(6)
+  creeLe            DateTime     @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe             DateTime     @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  produit       Produit        @relation(fields: [produitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  messages      Message[]
+  contexte      Contexte?
+  synthese      Synthese?
+  notifications Notification[]
+  audit         Audit[]
+
+  @@index([produitId, statut, creeLe(sort: Desc)], map: "retours_produit_statut_cree_idx")
+  @@index([produitId, type, creeLe(sort: Desc)], map: "retours_produit_type_cree_idx")
+  @@map("retours")
+}
+
+/// Le fil de l’entretien, un tour par ligne.
+///
+/// ⛔ `texte` ne se modifie jamais et ne se supprime jamais. C’est le contrat du
+///    produit, pas une contrainte technique.
+model Message {
+  id              String      @id
+  retourId        String      @map("retour_id")
+  ordre           Int
+  role            RoleMessage
+  texte           String
+  transcriptBrut  String?     @map("transcript_brut")
+  audioChemin     String?     @map("audio_chemin")
+  motif           String?
+  creeLe          DateTime    @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe           DateTime    @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  retour Retour @relation(fields: [retourId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([retourId, ordre], map: "messages_retour_ordre_idx")
+  @@map("messages")
+}
+
+/// Ce que le widget joint tout seul. ⛔ La liste est close : 01-Specs/widget.md.
+model Contexte {
+  id            String   @id
+  retourId      String   @map("retour_id")
+  url           String
+  titrePage     String?  @map("titre_page")
+  ecran         String?
+  selecteurDom  String?  @map("selecteur_dom")
+  navigateur    String?
+  systeme       String?
+  viewportL     Int?     @map("viewport_l")
+  viewportH     Int?     @map("viewport_h")
+  captureChemin String?  @map("capture_chemin")
+  fuseau        String?
+  agentBrut     Json?    @map("agent_brut")
+  creeLe        DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe         DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  retour Retour @relation(fields: [retourId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([retourId], map: "contextes_retour_uniq")
+  @@map("contextes")
+}
+
+/// La note que le développeur lit.
+model Synthese {
+  id           String            @id
+  retourId     String            @map("retour_id")
+  contenu      Json
+  modele       String
+  confiance    ConfianceSynthese
+  jetonsEntree Int?              @map("jetons_entree")
+  jetonsSortie Int?              @map("jetons_sortie")
+  creeLe       DateTime          @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe        DateTime          @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  retour Retour @relation(fields: [retourId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([retourId], map: "syntheses_retour_uniq")
+  @@map("syntheses")
+}
+
+/// ⚠️ Un échec d’envoi ne perd pas le retour : il est déjà en base.
+///
+/// `statut` est un String sous contrainte CHECK en base, et non un enum :
+/// conventions-db.md en énumère six, et celui-ci n’en fait pas partie.
+model Notification {
+  id           String            @id
+  retourId     String            @map("retour_id")
+  canal        CanalNotification @default(email)
+  destinataire String
+  statut       String            @default("en_attente")
+  erreur       String?
+  envoyeLe     DateTime?         @map("envoye_le") @db.Timestamptz(6)
+  creeLe       DateTime          @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe        DateTime          @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  retour Retour @relation(fields: [retourId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("notifications")
+}
+
+/// ⛔ ZONE GELÉE. Append-only : aucun UPDATE, aucun DELETE, jamais.
+///
+/// Le rôle applicatif n’en a pas les moyens — ses privilèges sur cette table
+/// sont SELECT, INSERT et rien d’autre.
+model Audit {
+  id       String   @id
+  retourId String   @map("retour_id")
+  acteur   String
+  action   String
+  detail   Json?
+  creeLe   DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe    DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  retour Retour @relation(fields: [retourId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("audit")
+}
+
+/// Le registre des migrations appliquées, avec le sha256 de chaque fichier.
+///
+/// ⚠️ Il appartient au runner (apps/serveur/infra/base/migrations.ts), qui le
+///    crée avant d’appliquer quoi que ce soit — il ne vient donc d’aucune
+///    migration. Il est ici parce que ce fichier est le miroir de la BASE, et
+///    que cette table y est.
+model Migration {
+  nom        String   @id
+  sha256     String
+  appliqueLe DateTime @default(now()) @map("applique_le") @db.Timestamptz(6)
+
+  @@map("migrations")
+}
