@@ -34,7 +34,11 @@ Le widget est un invité. Cinq obligations :
 3. ⛔ **Il ne capte aucun raccourci clavier de l’hôte** tant qu’il est fermé. `Échap` ne lui
    appartient que panneau ouvert.
 4. **Budget : 60 Ko gzip pour `widget.js`.** Dépassement = arbitrage explicite, pas un
-   glissement. C’est ce budget qui a décidé Preact ([D-004]).
+   glissement. C’est ce budget qui a décidé Preact ([D-004]), et c’est lui qui a sorti snapdom du
+   bundle ([D-011](../00-Projet/DECISIONS_LOG.md)).
+   ⚠️ **Relevé au 2026-09-04, après P-004** : la collecte de contexte entière coûte **2,9 Ko gzip**.
+   ⛔ Elle en coûtait **26 Ko** avant qu’on sorte les constantes de `contrat.ts` — zod suivait par
+   un seul `import { BORNES }`. `packages/widget/src/budget.test.ts` empêche la rechute.
 5. **Il survit à `pnpm widget:demo`** — une fausse application hôte volontairement hostile : reset
    CSS global, `!important` partout, une modale à `z-index: 9999`. C’est le seul environnement de
    recette valable.
@@ -115,18 +119,46 @@ rien qu’on ne tiendra pas ([entretien.md] §règle 4).
 Sans jamais le demander, et **en le montrant** — la carte de compréhension affiche l’écran déduit,
 ce qui rend la collecte visible plutôt que subie :
 
-| Donnée | Source |
-|---|---|
-| URL, titre de page, écran | `location`, `document.title` |
-| Composant visé | sélecteur DOM de l’élément survolé à l’ouverture |
-| Navigateur, système, taille de fenêtre | `navigator`, `window` |
-| Capture d’écran | `snapdom`, au moment de l’ouverture |
-| Identité, rôle | le jeton signé fourni par l’hôte ([D-005]) |
-| Horodatage, fuseau | client, revérifié serveur |
+| Donnée | Source | Champ |
+|---|---|---|
+| URL, titre de page, écran | `location`, `document.title` | `url`, `titrePage`, `ecran` |
+| Composant visé | sélecteur DOM de l’élément survolé à l’ouverture | `selecteurDom` |
+| Navigateur, système, taille de fenêtre | `navigator`, `window` | `navigateur`, `systeme`, `viewportL/H`, `agentBrut` |
+| Capture d’écran | `@zumer/snapdom`, au moment de l’ouverture | `capture` |
+| Identité, rôle | le jeton signé fourni par l’hôte ([D-005]) | P-012 |
+| Horodatage, fuseau | client, revérifié serveur | `horodatage`, `fuseau` |
 
 ⛔ **Rien d’autre.** Pas de cookies, pas de stockage local persistant au-delà du brouillon en
 cours, pas de suivi entre les sessions, aucun pixel. Le dépôt est public : cette liste doit
 pouvoir être lue par n’importe qui sans gêne.
+
+⛔ **La liste est close des deux côtés** : le contrat de transport
+(`packages/widget/src/contexte`, `packages/widget/src/contrat.ts`) refuse tout champ inconnu, et
+le serveur répond `400`. Ajouter une donnée est donc une décision de produit, jamais un détail
+d’implémentation.
+
+⚠️ **`agentBrut` porte la chaîne d’agent entière**, plus la langue et la densité de pixels — trois
+valeurs de `navigator` et `window`, déjà couvertes par la ligne ci-dessus. Elle y est en entier
+parce que `navigateur` la résume en « Chrome 141 », et qu’un résumé perd ce dont on aura besoin le
+jour d’un bug qui ne se produit que sur une version.
+
+⚠️ **L’URL est expurgée avant d’être jointe.** Une URL de logiciel métier porte parfois un jeton
+de session ; il finirait en base, dans un email, puis dans une note lue par un agent de code. Une
+vingtaine de noms de paramètres — `token`, `secret`, `password`, `session`, `signature`… — voient
+leur valeur remplacée par `[expurgé]`, dans la requête comme dans le fragment. ⚠️ **Ceci collecte
+moins, pas plus.**
+
+⚠️ **Ce que la capture n’est pas.** Elle est redimensionnée à 1 280 px de large au plus, encodée
+en webp, et plafonnée à 300 Ko : c’est un aide-mémoire, pas une preuve. Si rien ne tient sous le
+plafond, **le retour part sans image** — comme lorsqu’un canvas est « tainted » par une image
+d’un autre domaine.
+
+⚠️ **`@zumer/snapdom` n’est pas dans le bundle** : 52 Ko gzip contre un budget de 60. Il est servi
+par Feedys sous `/snapdom.js` et chargé à l’ouverture du panneau — jamais au chargement de la page
+de l’hôte. Voir [D-011](../00-Projet/DECISIONS_LOG.md).
+
+⚠️ **Ce qu’on garde de l’élément survolé est un CHEMIN, pas du contenu** : ni son texte, ni celui
+de ses voisins, ni sa valeur. Le développeur a la capture pour voir ce qu’il y avait dedans.
 
 ## Accessibilité — non négociable
 

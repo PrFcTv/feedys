@@ -246,3 +246,43 @@ vérification relit les paramètres de chaque empreinte.
 
 **Ce qui la renverserait** : un usage qui vérifierait un secret à chaque retour plutôt qu’à chaque
 ouverture de session hôte. Ce n’est pas la forme de D-005, et rien ne l’annonce.
+
+---
+
+## D-011 — snapdom est servi par Feedys, pas empaqueté dans le widget
+
+**2026-09-04**
+
+`@zumer/snapdom` **n’entre pas dans `widget.js`**. Il est servi par le conteneur Feedys sous
+`/snapdom.js` et chargé par le widget **à la demande**, à l’ouverture du panneau.
+
+**Le motif est une mesure, pas une intuition.** Le 2026-09-04, `dist/snapdom.mjs` de la version
+2.24.15 pèse **52 Ko gzip**. Le budget total de `widget.js` est de **60 Ko gzip**
+([widget.md](../01-Specs/widget.md) §4). L’empaqueter laisserait 8 Ko pour Preact, la coquille, la
+dictée, l’onde et le fil d’entretien — c’est-à-dire pour tout le produit.
+
+⚠️ Le budget avait été posé sans cette mesure : [dependances.md](../04-Architecture/dependances.md)
+retenait snapdom sur sa vitesse et sa fraîcheur, pas sur son poids. La règle du dépôt est qu’un
+dépassement se tranche explicitement, jamais par glissement — c’est ce que fait cette entrée.
+
+**Pourquoi ça ne coûte rien.** La capture est prise **à l’ouverture du panneau**, jamais au
+chargement de la page. Charger 52 Ko à ce moment-là ne ralentit pas l’hôte : le collaborateur
+vient de cliquer, il regarde un panneau s’ouvrir, et la capture n’est de toute façon pas ce qu’il
+attend. ⚠️ Et si le chargement échoue, la capture est simplement absente — l’échec doux était déjà
+la règle.
+
+⛔ **Depuis l’origine Feedys, jamais depuis un CDN.** Le widget s’exécute dans le logiciel de
+quelqu’un d’autre : lui imposer un tiers au moment de l’exécution, et la règle CSP qui va avec,
+n’est pas à nous de le décider. C’est le même raisonnement que [D-001] sur `<script src>`.
+
+⚠️ **Ce que P-005 doit faire** : servir `/snapdom.js` à côté de `/widget.js`, et appeler
+`definirOrigineFeedys()` avec l’origine du `<script src>` qui a chargé le widget. Sans ça, la
+capture ne se déclenche jamais — silencieusement, par construction.
+
+**Ce qui la renverserait** : une version de snapdom qui descendrait sous ~15 Ko gzip, ou un
+navigateur qui rendrait la capture native. Ni l’une ni l’autre n’est annoncée.
+
+**Pourquoi pas un `import()` dynamique plutôt qu’une balise `<script>`** : le widget est construit
+en IIFE d’un seul fichier, parce que l’intégration supportée est un `<script src>` classique sans
+`type="module"` ([D-001]). Vite y **replie** les imports dynamiques dans le même fichier — le
+découpage n’aurait donc pas lieu.

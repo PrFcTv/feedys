@@ -16,48 +16,23 @@
  */
 import { z } from 'zod'
 
-/**
- * L’en-tête qui porte la clé publique du produit.
- *
- * ⚠️ Publique par nature : elle est dans le HTML de l’hôte. Ce qu’elle identifie,
- *    ce n’est pas quelqu’un, c’est un produit — 00-Projet/DECISIONS_LOG.md D-005.
- */
-export const EN_TETE_CLE = 'x-feedys-cle'
-
-/** Le préfixe d’une clé publique. Sert aussi à refuser un secret posté par erreur. */
-export const PREFIXE_CLE_PUBLIQUE = 'fdy_pub_'
-
-/** Le préfixe d’un secret produit. ⛔ Il ne traverse jamais le navigateur. */
-export const PREFIXE_SECRET = 'fdy_sec_'
-
-/** Le chemin d’ingestion. */
-export const CHEMIN_RETOURS = '/api/retours'
+import { BORNES, TYPES_AUDIO, TYPES_CAPTURE } from './transport'
 
 /**
- * Les bornes. Elles sont ici parce que le widget doit les connaître pour ne pas
- * envoyer ce qui sera refusé, et le serveur pour refuser.
+ * ⚠️ Les constantes vivent dans `transport.ts`, SANS zod, et sont réexportées
+ *    ici. Elles sont les seules valeurs que le code du widget a le droit
+ *    d’importer : passer par ce fichier-ci ferait entrer zod dans `widget.js`,
+ *    26 Ko gzip pour trois nombres. Voir l’en-tête de `transport.ts`.
  */
-export const BORNES = {
-  /** Le corps entier, capture et audio compris. Au-delà : 413. */
-  corpsOctets: 4 * 1024 * 1024,
-  /** Un retour dicté fait quelques centaines de caractères. 8 000 est déjà large. */
-  texte: 8_000,
-  url: 2_048,
-  titrePage: 300,
-  ecran: 120,
-  selecteurDom: 300,
-  navigateur: 200,
-  systeme: 200,
-  fuseau: 100,
-  /** Les dimensions de fenêtre. Au-delà, c’est du bruit, pas un écran. */
-  viewport: 100_000,
-} as const
-
-/** Les types de capture acceptés. ⛔ Liste close. */
-export const TYPES_CAPTURE = ['image/webp', 'image/png', 'image/jpeg'] as const
-
-/** Les types d’audio acceptés. ⛔ Liste close. */
-export const TYPES_AUDIO = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav'] as const
+export {
+  BORNES,
+  CHEMIN_RETOURS,
+  EN_TETE_CLE,
+  PREFIXE_CLE_PUBLIQUE,
+  PREFIXE_SECRET,
+  TYPES_AUDIO,
+  TYPES_CAPTURE,
+} from './transport'
 
 /**
  * Un fichier joint, en base64.
