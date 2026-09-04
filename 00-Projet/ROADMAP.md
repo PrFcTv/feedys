@@ -28,7 +28,8 @@ back-office, MCP.
 | P-008 · la synthèse | ✅ fait |
 | P-009 · l’email | ✅ fait |
 | P-010 · le back-office | ✅ fait |
-| P-011 → P-014 | à faire |
+| P-011 · le serveur MCP | ✅ fait |
+| P-012 → P-014 | à faire |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 

@@ -1,6 +1,6 @@
 {
   "name": "@feedys/mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -10,5 +10,20 @@
   },
   "devDependencies": {
     "typescript": "6.0.3"
-  }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.5.4"
+  },
+  "description": "Le serveur MCP de Feedys — il expose les retours à un agent de code.",
+  "bin": {
+    "feedys-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts"
 }
