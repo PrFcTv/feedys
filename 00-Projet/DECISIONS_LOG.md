@@ -220,3 +220,29 @@ qui la respecte. Le jour où quelqu’un ouvre `psql` avec les identifiants de l
 
 **Ce qui la renverserait** : rien de connu. L’ouverture d’un `DELETE` se ferait table par table,
 avec sa justification écrite dans la migration qui l’ouvre.
+
+---
+
+## D-010 — argon2 en WebAssembly, pas en extension native
+
+**2026-09-04**
+
+Le secret d’un produit est haché en **argon2id via `hash-wasm`** (MIT), et non via `argon2`
+(node-gyp) ni `@node-rs/argon2` (binaire natif préconstruit).
+
+**Le motif est le conteneur.** L’image de production est une Alpine minuscule
+([hebergement.md](../04-Architecture/hebergement.md)). Une extension native y impose soit une
+chaîne de compilation complète dans l’étape de construction, soit un binaire préconstruit qu’il
+faut faire exister pour `linux-x64-musl` en plus de `linux-x64-gnu`, `darwin-arm64` et
+`win32-x64` — quatre cibles à tenir pour **trois appels par an**. Un produit se crée à la main,
+et son secret se vérifie une fois par requête d’identité signée (P-012), pas une fois par retour.
+
+**Le coût est mesuré et accepté** : WebAssembly est environ deux fois plus lent que le natif sur
+argon2. À ce volume, la différence est de quelques dizaines de millisecondes par an.
+
+⚠️ Les paramètres (19 Mio, 2 passes, 1 fil) sont **écrits dans l’empreinte produite** —
+`$argon2id$v=19$m=…,t=…,p=…`. Les durcir plus tard ne casse donc aucun secret déjà haché : la
+vérification relit les paramètres de chaque empreinte.
+
+**Ce qui la renverserait** : un usage qui vérifierait un secret à chaque retour plutôt qu’à chaque
+ouverture de session hôte. Ce n’est pas la forme de D-005, et rien ne l’annonce.

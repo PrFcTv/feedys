@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:migrate": "tsx apps/serveur/outils/migrer.ts",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "produit:creer": "tsx apps/serveur/outils/creer-produit.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

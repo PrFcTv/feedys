@@ -107,6 +107,7 @@ Emprunts et attributions : [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
 | **Construire — la séquence de prompts** | [05-Prompts/MVP.md](05-Prompts/MVP.md) |
 | Le comportement du bot | [01-Specs/entretien.md](01-Specs/entretien.md) |
 | Le widget | [01-Specs/widget.md](01-Specs/widget.md) |
+| Comment un retour entre | [01-Specs/ingestion.md](01-Specs/ingestion.md) |
 | La note produite | [01-Specs/synthese.md](01-Specs/synthese.md) |
 | L’architecture | [04-Architecture/architecture.md](04-Architecture/architecture.md) |
 | Ce qu’on prend sur l’étagère, et pourquoi | [04-Architecture/dependances.md](04-Architecture/dependances.md) |

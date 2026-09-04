@@ -41,11 +41,13 @@ un emprunt d’idée, à citer dans `ATTRIBUTIONS.md`.
 | `next` | MIT | — | serveur, API, back-office |
 | `ai` (Vercel AI SDK) | Apache-2.0 | 26 570 | `generateObject` — la synthèse **typée**, pas du texte à reparser |
 | `@ai-sdk/anthropic` | Apache-2.0 | — | Claude |
-| `zod` | MIT | — | schémas — partagés entre validation d’API et `generateObject` |
+| `zod` | MIT | — | schémas — partagés entre validation d’API et `generateObject`. ⚠️ Déclaré par `packages/widget`, qui porte le contrat de transport ; le serveur l’atteint en important `contrat.ts`. ⛔ Il n’entre pas dans `widget.js` : le widget n’importe le contrat qu’en `import type` |
 | `@prisma/client` | Apache-2.0 | — | accès base |
 | `shadcn` (copié) | MIT | 122 975 | composants de chat de juin 2026, **variante Base UI** |
 | `nodemailer` | MIT | — | envoi de la note |
 | `@modelcontextprotocol/sdk` | MIT | — | serveur MCP |
+| `hash-wasm` | MIT | 1 100 | argon2id du secret produit, **en WebAssembly** — pas d’extension native à construire dans une image Alpine ([D-010](../00-Projet/DECISIONS_LOG.md)) |
+| `@paralleldrive/cuid2` | MIT | 1 500 | les `id` de toutes les tables. `cuid()` de Prisma n’est pas utilisable : le schéma ne pose aucun `@default` |
 
 ### Outillage
 

@@ -275,6 +275,7 @@ la sortie. Pas d’affirmation de succès sans preuve.
 | **La séquence de prompts jusqu’au MVP** | [05-Prompts/MVP.md] |
 | Le comportement du bot — la pièce maîtresse | [01-Specs/entretien.md] |
 | Le comportement du widget | [01-Specs/widget.md] |
+| Comment un retour entre — l’API, ses refus, son invariant | [01-Specs/ingestion.md] |
 | Ce que contient la note, et comment elle arrive | [01-Specs/synthese.md] |
 | Vocabulaire | [02-Metier/glossaire.md] |
 | Frontières, flux, modules | [04-Architecture/architecture.md] |
