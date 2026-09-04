@@ -213,7 +213,8 @@ node --env-file-if-exists=.env.local -e '…'   # s’en servir sans jamais affi
   quelques propriétés CSS. ⛔ Aucune couleur en dur dans un composant — tokens uniquement.
 - **Le seul écran à inventer est l’état « j’écoute »**, et son prolongement « le bot a compris
   ça ». Tout le reste est du chat, un objet déjà codifié qu’on copie de près plutôt que de
-  réinventer mal.
+  réinventer mal. ⛔ **Ne jamais conclure « rien n’existe »** sans avoir ouvert
+  [04-Architecture/references-visuelles.md] et deux de ses sources.
 - **L’apostrophe s’écrit `’` (U+2019)**, jamais `'` ni `&apos;` — texte, chaînes, expressions
   régulières. Une entité HTML dans un nœud JSX mange l’espace de tête du nœud.
 
@@ -279,6 +280,7 @@ la sortie. Pas d’affirmation de succès sans preuve.
 | Frontières, flux, modules | [04-Architecture/architecture.md] |
 | **La frontière AGPL / MIT** | [04-Architecture/licences.md] |
 | Direction artistique, tokens, l’état « j’écoute » | [04-Architecture/DESIGN.md] |
+| **Quoi décalquer, où chercher, et les défauts à refuser** | [04-Architecture/references-visuelles.md] |
 | Ce qu’on prend et pourquoi | [04-Architecture/dependances.md] |
 | Conventions et garde-fous DB | [04-Architecture/conventions-db.md] |
 | Conteneur, déploiement, exploitation | [04-Architecture/hebergement.md] |

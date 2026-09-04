@@ -98,6 +98,10 @@ qu’on copie de près.
 décision : ce geste est connu de tout le monde, il ne s’apprend pas, et le réinventer serait une
 faute pure.
 
+⚠️ **Avant de dessiner quoi que ce soit ici, lire [references-visuelles.md](references-visuelles.md)** —
+les produits à décalquer, les galeries où chercher, et la liste des défauts qui font qu’une
+interface a l’air fabriquée à la chaîne.
+
 ```
     ┌───────────────────────────────────────────┐
     │                                           │

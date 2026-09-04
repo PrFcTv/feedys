@@ -159,7 +159,9 @@ Tests unitaires sur la déduction d’écran et la construction du sélecteur DO
 ```
 Écris la coquille du widget.
 
-Lis 01-Specs/widget.md et 04-Architecture/DESIGN.md §1.
+Lis 01-Specs/widget.md, 04-Architecture/DESIGN.md §1 et
+04-Architecture/references-visuelles.md — le lanceur et le panneau se DÉCALQUENT
+sur Intercom Messenger, ils ne s’inventent pas.
 
 Attendu :
 - packages/widget : montage en shadow DOM fermé, Preact, aucune globale hors
@@ -192,8 +194,9 @@ Attendu :
 ```
 Écris la dictée.
 
-Lis 04-Architecture/DESIGN.md §L’écran qui fait le produit et 01-Specs/widget.md
-§En écoute. Décision de cadrage : 00-Projet/DECISIONS_LOG.md D-003.
+Lis 04-Architecture/DESIGN.md §L’écran qui fait le produit, 01-Specs/widget.md
+§En écoute, et 04-Architecture/references-visuelles.md §WhatsApp — le geste s’y
+observe de près avant d’être écrit. Décision de cadrage : DECISIONS_LOG.md D-003.
 
 Attendu :
 - speech-to-element (MIT) pour Web Speech. @ricky0123/vad (ISC) pour le mode

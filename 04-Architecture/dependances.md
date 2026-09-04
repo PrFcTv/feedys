@@ -52,6 +52,21 @@ un emprunt d’idée, à citer dans `ATTRIBUTIONS.md`.
 `typescript` · `vite` · `vitest` · `@playwright/test` · `eslint` · `turbo` · `tsx` — tous MIT ou
 Apache-2.0.
 
+## Ce qu’on prendra après le MVP
+
+Retenus, vérifiés, **volontairement hors MVP** ([ROADMAP.md](../00-Projet/ROADMAP.md)). Ils sont
+listés ici pour qu’on n’ait pas à refaire la recherche, et pour que rien dans l’architecture ne
+les rende impossibles.
+
+| Paquet | Licence | ★ | Ce qu’il apporte | Quand |
+|---|---|---|---|---|
+| `rrweb` | MIT | 20 111 | rejeu de session : garder les 30 dernières secondes en tampon et les joindre au retour. **Voir** le bug au lieu de le reconstituer | ROADMAP ② |
+| `wavesurfer.js` | BSD-3 | 10 396 | forme d’onde + lecture, dans le back-office. Le transcript efface le ton ; l’audio le garde | ROADMAP ③ |
+
+⚠️ **Conséquence sur le MVP, à ne pas oublier** : `contextes` doit pouvoir accueillir un chemin de
+rejeu, et `messages` porte déjà `audio_chemin` ([conventions-db.md](conventions-db.md)). Les deux
+colonnes existent dès `0001_socle.sql` — c’est gratuit maintenant, c’est une migration plus tard.
+
 ## Ce qu’on a écarté, et pourquoi
 
 Écrit ici pour qu’on ne le repropose pas dans six mois.
@@ -65,10 +80,20 @@ Apache-2.0.
 | `deep-chat` | Excellent, MIT — mais il impose son geste vocal sur le seul écran qui fait le produit. Voir [D-002]. On lui prend `speech-to-element` |
 | `html2canvas` | Mort depuis juillet 2024 |
 | `use-whisper` | Mort depuis avril 2024 |
-| `chat-ui-kit-react` | Dormant, esthétique datée |
+| `chat-ui-kit-react` | Dormant depuis mai 2025, esthétique datée |
 | `CopilotKit`, `chainlit` | Hors sujet — un framework de copilote, et du Python |
 | `fider` | Board de vote en Go. Le plus mature du domaine, le plus loin du besoin |
+| `chatwoot` | MIT sauf `enterprise/`. Le bon objet — widget, fil, boîte de réception — mais en Rails, et démesuré pour dix personnes |
+| `formbricks` | Mixte AGPL + module EE. Seul son ciblage in-app valait le détour ; on n’en a pas besoin à une bulle par produit |
+| **`react-speech-recognition`** | MIT, correct — mais **il tire React**. ⛔ Rédhibitoire dans un widget Preact. `speech-to-element` fait le même travail sans socle |
+| **`react-voice-visualizer`** | Idem : React. L’onde est calculée depuis l’`AnalyserNode`, c’est une cinquantaine de lignes ([DESIGN.md](DESIGN.md)) |
+| **`html-to-image`** | Même métier que `snapdom`, plus installé, plus lent. Un seul suffit |
 | `assistant-ui` | MIT, excellent — mais React. **Candidat pour le back-office**, jamais pour le widget |
+| `prompt-kit`, `lobe-ui` | MIT. Recouvrent les composants de chat de `shadcn`, qu’on a déjà. ⛔ Une seule famille de composants |
+
+⚠️ **Quatre de ces refus tiennent au même motif : le paquet tire React.** C’est la conséquence
+directe du budget de 60 Ko et de [D-004]. Dans `packages/widget`, la question « est-ce que ça tire
+React ? » se pose **avant** la question de la licence.
 
 ## Ce qu’on copie plutôt qu’on installe
 
@@ -77,6 +102,8 @@ Apache-2.0.
 | [Quackback](https://github.com/QuackbackIO/quackback) | **AGPL-3.0** | le serveur MCP, le modèle produit + clé d’API | ⚠️ `apps/serveur/` **uniquement** — voir [licences.md] |
 | [FasterFixes](https://github.com/manucoffin/faster-fixes) | AGPL + MIT | la **découpe de licence**, et l’idée de la collecte de contexte | structure du dépôt, `packages/widget` |
 | [shadcn](https://ui.shadcn.com) | MIT | composants de chat, variante Base UI | `apps/serveur/ui/` |
+| [`makerkit/react-embeddable-widget`](https://github.com/makerkit/react-embeddable-widget) | MIT | le **patron** d’isolation shadow DOM + Vite. À lire, pas à installer | `packages/widget/src/montage.ts` |
+| [`vercel/chatbot`](https://github.com/vercel/chatbot) | Apache-2.0 | référence d’architecture pour le streaming et l’AI SDK. À lire, jamais à forker | `apps/serveur/domaine/entretien/` |
 
 ⛔ **Rien de Quackback (AGPL) ne peut entrer dans `packages/mcp` (MIT)**, malgré le sujet commun.
 Là-bas on ne prend que **les idées** : la forme des outils, le nommage. Une API n’est pas du code.
