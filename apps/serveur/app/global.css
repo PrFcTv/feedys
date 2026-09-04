@@ -1,0 +1,102 @@
+/**
+ * Le thème du back-office.
+ *
+ * ⛔ Régime INVERSE de celui du widget : ici on est chez soi. Un seul lecteur,
+ *    connu, qui vient chercher une information précise — donc du caractère et
+ *    de la densité (04-Architecture/DESIGN.md §2).
+ *
+ * ⛔ AUCUN HEX EN DUR DANS UN COMPOSANT. Les couleurs vivent ici, et nulle part
+ *    ailleurs. Un composant qui écrit `#14181D` est un composant qu’on ne peut
+ *    plus rethémer, et qui ne suivra pas le mode sombre.
+ *
+ * ⚠️ Ici une police web est légitime — c’est le back-office, pas la page de
+ *    quelqu’un d’autre : Montserrat pour les titres, IBM Plex Sans pour le
+ *    corps, IBM Plex Mono pour les verbatims et la technique. Elles sont
+ *    servies par `next/font` (app/polices.ts), donc EMPAQUETÉES : le
+ *    back-office n’appelle aucun tiers au chargement.
+ */
+@import 'tailwindcss';
+
+@theme {
+  /* — surfaces — neutres froids — */
+  --color-fond: #fbfcfd;
+  --color-surface: #ffffff;
+  --color-surface-2: #f2f4f7;
+  --color-bord: #dfe3e9;
+  --color-bord-fort: #c3cad4;
+
+  /* — encres — */
+  --color-encre: #10151b;
+  --color-encre-2: #48525e;
+  --color-encre-3: #6f7a88;
+
+  /* — l’accent, unique — */
+  --color-accent: #2c3e64;
+  --color-accent-encre: #ffffff;
+  --color-accent-faible: #e8ecf4;
+
+  /* — les signaux — ⛔ jamais la couleur SEULE : la forme et le texte portent — */
+  --color-signal: #c8342b;
+  --color-signal-faible: #fdeceb;
+  --color-calme: #2f6f4f;
+  --color-calme-faible: #e8f2ec;
+
+  --font-titre: var(--police-titre), 'Segoe UI', system-ui, sans-serif;
+  --font-sans: var(--police-corps), 'Segoe UI', system-ui, sans-serif;
+  --font-mono: var(--police-mono), ui-monospace, 'Cascadia Mono', monospace;
+
+  --radius-bo: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-fond: #10141a;
+    --color-surface: #161b22;
+    --color-surface-2: #1e242d;
+    --color-bord: #2b323c;
+    --color-bord-fort: #3c4551;
+
+    --color-encre: #e9edf2;
+    --color-encre-2: #b0b9c5;
+    --color-encre-3: #7f8b99;
+
+    --color-accent: #94a9d4;
+    --color-accent-encre: #10141a;
+    --color-accent-faible: #232c3d;
+
+    --color-signal: #e8837b;
+    --color-signal-faible: #35201f;
+    --color-calme: #79c6a0;
+    --color-calme-faible: #1a2b23;
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    background: var(--color-fond);
+    color: var(--color-encre);
+    font-family: var(--font-sans);
+    /* ⚠️ Densité : le lecteur vient chercher une information, pas respirer. */
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-titre);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* ⚠️ La cible du focus est visible partout : le back-office se parcourt au
+     clavier, et un anneau invisible rend une page inutilisable sans souris. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}

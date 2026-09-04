@@ -280,6 +280,7 @@ la sortie. Pas d’affirmation de succès sans preuve.
 | Le comportement du widget | [01-Specs/widget.md] |
 | Comment un retour entre — l’API, ses refus, son invariant | [01-Specs/ingestion.md] |
 | Ce que contient la note, et comment elle arrive | [01-Specs/synthese.md] |
+| Ce que le développeur lit, et ce qu’il a le droit de corriger | [01-Specs/back-office.md] |
 | Vocabulaire | [02-Metier/glossaire.md] |
 | Frontières, flux, modules | [04-Architecture/architecture.md] |
 | **La frontière AGPL / MIT** | [04-Architecture/licences.md] |
