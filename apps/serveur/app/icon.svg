@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Feedys">
+  <title>Feedys</title>
+  <!--
+    ⛔ Une icône, et pas un logo : le back-office n’a qu’un lecteur, et cette
+       image ne sert qu’à ce que son onglet se reconnaisse — et à ce que le
+       navigateur cesse de réclamer /favicon.ico, ce qui est une erreur de
+       console à chaque ouverture (03-Bugs/BUGS_LOG.md 002).
+
+    ⚠️ La bulle, parce que c’est le geste : on clique, on parle. L’accent est
+       celui du back-office (app/global.css, --color-accent) — recopié ici
+       parce qu’un SVG servi comme fichier ne lit pas les tokens CSS.
+  -->
+  <rect width="32" height="32" rx="8" fill="#2c3e64" />
+  <path
+    d="M9 11.5h14M9 16h10M9 20.5h6"
+    stroke="#fbfcfd"
+    stroke-width="2.4"
+    stroke-linecap="round"
+  />
+</svg>

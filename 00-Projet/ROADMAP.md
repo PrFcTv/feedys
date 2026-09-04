@@ -31,7 +31,7 @@ back-office, MCP.
 | P-011 · le serveur MCP | ✅ fait |
 | P-012 · l’identité signée | ✅ fait |
 | P-013 · le conteneur | ✅ fait |
-| P-014 · recette du MVP | à faire |
+| P-014 · recette du MVP | ✅ fait — ⚠️ deux points sur huit non joués, faute de clé de modèle ([RECETTE_MVP](../03-Bugs/RECETTE_MVP.md)) |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 

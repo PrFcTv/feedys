@@ -59,7 +59,12 @@ export default defineConfig({
     // ⚠️ `next dev` plutôt que `build` + `start` : le parcours démarre en
     //    quelques secondes au lieu d’une minute, et les erreurs de rendu
     //    remontent en console — ce qu’on veut justement voir échouer.
-    command: `pnpm --filter @feedys/serveur exec next dev --port ${PORT}`,
+    //
+    // ⛔ Le widget est construit d’abord, et ce n’est pas une commodité :
+    //    `tests/e2e/actifs.spec.ts` mesure `/widget.js` TEL QU’IL EST SERVI
+    //    (03-Bugs/BUGS_LOG.md 001). Sans le bundle, la route rend 503 et le
+    //    parcours ne mesurerait rien du tout.
+    command: `pnpm --filter @feedys/widget build && pnpm --filter @feedys/serveur exec next dev --port ${PORT}`,
     url: ORIGINE,
     reuseExistingServer: !process.env['CI'],
     timeout: 120_000,

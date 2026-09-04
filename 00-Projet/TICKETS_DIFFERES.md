@@ -80,8 +80,12 @@ Sur le poste, `docker-compose.yml` connecte le superutilisateur `feedys`, qui es
 propriétaire : ⚠️ **les `GRANT` n’y mordent donc pas**. Ce qui les vérifie vraiment, c’est le test
 d’intégration, qui fait `set role feedys_app` avant de tenter un `DELETE`.
 
-**En attendant** : le garde-fou est prouvé en test, pas en usage. P-013 devra documenter les deux
-lignes de `create role … login in role feedys_app` et faire pointer `DATABASE_URL` dessus.
+**En attendant** : le garde-fou est prouvé en test, pas en usage.
+
+⚠️ **Mis à jour le 2026-09-05 (P-014)** : les deux lignes sont désormais écrites dans
+[hebergement.md](../04-Architecture/hebergement.md) §Le rôle de connexion. Ce qui reste différé,
+c’est de **s’en servir** — un déploiement à un conteneur migre avec un rôle propriétaire, et rien
+n’oblige encore `DATABASE_URL` à pointer sur un rôle membre. Le ticket reste ouvert pour ça.
 
 ---
 
@@ -104,3 +108,51 @@ avertissement inexpliqué dans un logiciel métier finit toujours par être impu
 capture est un aide-mémoire, pas une preuve ([01-Specs/widget.md]) — faire attendre quelqu’un qui a
 fini de parler coûte plus cher qu’une ligne de console. snapdom n’expose pas d’option pour taire
 celle-ci ; `debug` ne la couvre pas.
+
+---
+
+## T-006 — Rien ne referme un entretien que le widget n’a pas refermé
+
+**Différé le** : 2026-09-05, pendant P-014
+**Déclencheur de reprise** : la première semaine où la part de retours restés `en_cours` dépasse
+5 %, **ou** le premier retour perdu dont quelqu’un se plaint
+**Coût si plus tard** : identique — c’est une tâche périodique, elle se branche sans rien déplacer
+
+La clôture d’un entretien dépend entièrement d’une requête du navigateur : `POST /fin`, envoyée à
+la fermeture du panneau ou sur `pagehide` avec `keepalive`. Le chemin nominal marche — la recette
+l’a joué quatre fois, dans deux navigateurs. Mais un onglet tué, un poste éteint, un `keepalive`
+que le système laisse tomber, et le retour reste `en_cours` **pour toujours** : ni synthèse, ni
+email, et une ligne au back-office qui a l’air d’un entretien en cours ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 003).
+
+⚠️ **Ce n’est pas une perte de parole** — elle est en base depuis l’ingestion, lisible au
+back-office et par MCP. C’est une perte de **note**, ce qui est moins grave et quand même contraire
+à la promesse : « aucun mode de défaillance ne perd la parole », mais celle-ci n’arrive jamais chez
+le développeur sous forme lisible.
+
+**Le travail** : une tâche qui clôt en `abandonne` les entretiens sans message depuis N minutes,
+puis les synthétise par le chemin ordinaire. ⛔ Elle demande de décider N — trop court, on coupe la
+parole de quelqu’un qui réfléchit ; trop long, la note arrive le lendemain — et **où elle tourne**,
+sachant que [hebergement.md](../04-Architecture/hebergement.md) refuse une file, un worker et toute
+dépendance au planificateur d’un hébergeur.
+
+**En attendant** : mesurer. Une requête d’une ligne — la part de `en_cours` de plus d’une heure —
+dit si le problème est réel avant qu’on écrive quoi que ce soit. C’est aussi ce qui donnera la
+bonne valeur de N.
+
+---
+
+## T-007 — Sans carte, le champ d’entretien invite à corriger une fiche absente
+
+**Différé le** : 2026-09-05, pendant P-014
+**Déclencheur de reprise** : le prochain passage sur les textes du widget, **ou** un relevé montrant
+que les tours en échec ne sont pas si rares
+**Coût si plus tard** : identique — une invite conditionnelle, quelques lignes
+
+Modèle coupé, le tour rend `503`, le panneau reste ouvert sans carte : c’est le comportement voulu.
+Mais l’invite du champ reste « Répondez, ou corrigez la fiche au-dessus », et il n’y a pas de fiche
+([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 004).
+
+⚠️ La correction tient en une condition. Ce qui se décide, c’est **ce qu’on dit à la place** : le
+widget ne s’excuse pas et n’explique pas ce qui manque (01-Specs/widget.md) — il faut donc une
+phrase qui invite à continuer sans avouer une panne, et ça se choisit avec le reste des textes,
+pas au détour d’une PR de recette.

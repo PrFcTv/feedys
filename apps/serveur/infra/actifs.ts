@@ -23,7 +23,9 @@ import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 
+import type { Encodage } from '../domaine/actifs/entetes'
 import { empreinte } from '../domaine/actifs/entetes'
 
 import { racineDepot } from './racine'
@@ -33,6 +35,16 @@ export type NomActif = 'widget.js' | 'snapdom.js'
 export interface Actif {
   readonly contenu: Buffer
   readonly etag: string
+  /**
+   * Les représentations compressées, calculées UNE fois par version du fichier.
+   *
+   * ⛔ Elles ne sont pas un confort : servi en clair, `widget.js` pèse 76 Ko
+   *    chez l’hôte contre un budget de 60 Ko gzip (01-Specs/widget.md §4).
+   *
+   * ⚠️ Calculées à la lecture et mémorisées avec elle : le coût est payé au
+   *    premier appel après un déploiement, jamais par une requête d’hôte.
+   */
+  readonly compresse: Readonly<Record<Encodage, Buffer>>
 }
 
 /**
@@ -77,6 +89,14 @@ export async function lireActif(nom: NomActif): Promise<Actif | undefined> {
   const actif: Actif = {
     contenu,
     etag: empreinte(createHash('sha256').update(contenu).digest('hex').slice(0, 16)),
+    compresse: {
+      gzip: gzipSync(contenu, { level: constants.Z_BEST_COMPRESSION }),
+      // ⚠️ Qualité 11, la plus forte : on la paie une fois par déploiement, et
+      //    les hôtes la reçoivent des milliers de fois.
+      br: brotliCompressSync(contenu, {
+        params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
+      }),
+    },
   }
 
   memoire.set(nom, { cle, actif })

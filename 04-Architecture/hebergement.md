@@ -96,6 +96,27 @@ le script — avec une erreur qui ne ressemble à rien de reconnaissable, chez l
 `FEEDYS_ACTIFS` en production — un dossier unique qui les contient tous les deux. Le conteneur
 (P-013) le pose ; sans lui, il n’y a ni `packages/`, ni `node_modules/` à côté du serveur.
 
+## Le rôle de connexion — à créer une fois, à la main
+
+⛔ **`DATABASE_URL` ne doit pas pointer sur le propriétaire des tables.** Un propriétaire contourne
+tous les `GRANT` : le garde-fou « aucun `DELETE` nulle part » ne vaudrait plus rien, et rien ne le
+signalerait ([D-009](../00-Projet/DECISIONS_LOG.md)).
+
+`0001_socle.sql` crée le rôle de groupe `feedys_app` et ses privilèges. Il ne crée **pas** le rôle
+de login : son nom et son mot de passe sont propres à chaque installation et n’ont rien à faire
+dans un dépôt public. Deux lignes, une fois, dans `psql` :
+
+```sql
+create role feedys_service login password '…' in role feedys_app;
+alter database feedys owner to feedys_proprietaire;  -- si ce n’est pas déjà le cas
+```
+
+Puis `DATABASE_URL` se connecte avec `feedys_service`. ⚠️ **Les migrations, elles, ont besoin du
+propriétaire** — elles créent des tables. Sur un déploiement à un conteneur, le plus simple est de
+laisser le démarrage migrer avec un rôle propriétaire et de n’ouvrir `feedys_service` que le jour
+où la séparation devient utile ; ce qui prouve le garde-fou aujourd’hui, c’est le test
+d’intégration, qui fait `set role feedys_app` avant de tenter un `DELETE`.
+
 ## La sonde — `GET /sante`
 
 ```json
