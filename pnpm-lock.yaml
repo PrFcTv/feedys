@@ -90,6 +90,9 @@ importers:
       preact:
         specifier: 10.29.8
         version: 10.29.8
+      speech-to-element:
+        specifier: 2.0.0
+        version: 2.0.0
       zod:
         specifier: 4.5.4
         version: 4.5.4
@@ -2000,6 +2003,9 @@ packages:
   source-map@0.7.6:
     resolution: {integrity: sha512-i5uvt8C3ikiWeNZSVZNWcfZPItFQOsYTUAOkcUPGd8DqDy1uOUikjt5dG+uRlwyvR108Fb9DOd4GvXfT0N2/uQ==}
     engines: {node: '>= 12'}
+
+  speech-to-element@2.0.0:
+    resolution: {integrity: sha512-p5xdDL/CNvjfuxWBARXydlUyiVztHcm45ZkTMpaDg4SZF/VACDEzQyWX+iMmsiEKTjsmrY0RjBlzXqJHo976xA==}
 
   split2@4.2.0:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
@@ -4033,6 +4039,8 @@ snapshots:
   source-map-js@1.2.1: {}
 
   source-map@0.7.6: {}
+
+  speech-to-element@2.0.0: {}
 
   split2@4.2.0: {}
 

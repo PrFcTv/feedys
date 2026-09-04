@@ -37,10 +37,11 @@ mois plus tard, de savoir où aller voir quand on bute sur le même problème.
 
 | Idée | Source | Licence de la source |
 |---|---|---|
+| Le **découpage provisoire / définitif** d’un transcript Web Speech, et le recollage des segments successifs — Chrome coupe `SpeechRecognition` tout seul, et il faut relancer sans perdre ce qui précède | [`speech-to-element`](https://github.com/OvidijusParsiunas/speech-to-element), pris en dépendance | MIT |
 | **La découpe de licence** — racine AGPL, paquets widget et MCP en MIT | [FasterFixes](https://github.com/manucoffin/faster-fixes) | AGPL-3.0 + MIT |
 | La forme de la collecte de contexte — sélecteur DOM, navigateur, capture à l’ouverture. ⛔ Le périmètre, lui, n’est pas repris : voir §Code emprunté | [`@fasterfixes/react`](https://github.com/manucoffin/faster-fixes) | MIT |
 | La forme des outils MCP et le modèle produit + clé d’API | [Quackback](https://github.com/QuackbackIO/quackback) | AGPL-3.0 |
-| Le geste de la note vocale — maintenir, relâcher, glisser pour annuler | WhatsApp, Telegram | — |
+| Le geste de la note vocale — maintenir, relâcher, glisser pour annuler, et le clic simple qui passe en mains libres | WhatsApp, Telegram | — |
 
 ⚠️ **Le cas Quackback est particulier.** Sa licence AGPL est compatible avec `apps/serveur`, qui
 est AGPL — on peut donc y **recopier du code**, à condition de citer le dépôt d’origine dans le
@@ -57,7 +58,6 @@ leur motif dans [04-Architecture/dependances.md](04-Architecture/dependances.md)
 |---|---|---|
 | `preact` | MIT | Jason Miller et contributeurs |
 | `speech-to-element` | MIT | Ovidijus Parsiunas |
-| `@ricky0123/vad` | ISC | ricky0123 |
 | `@zumer/snapdom` | MIT | Zumerlab |
 | `@floating-ui/dom` | MIT | Floating UI contributors |
 | `ai` (AI SDK) | Apache-2.0 | Vercel, Inc. |
@@ -66,3 +66,9 @@ leur motif dans [04-Architecture/dependances.md](04-Architecture/dependances.md)
 | `shadcn` (composants copiés) | MIT | shadcn |
 | `@modelcontextprotocol/sdk` | MIT | Anthropic |
 | `nodemailer` | MIT | Andris Reinman |
+
+⛔ **`@ricky0123/vad` a été retiré de cette liste le 2026-09-04, sans avoir jamais été installé** :
+sa chaîne minimale pèse 5,3 Mo gzip, et le moment de son chargement serait le pire possible. Le
+motif complet est dans [D-012](00-Projet/DECISIONS_LOG.md). ⚠️ Rien de son code n’a été lu ni
+repris — il n’y a donc rien à attribuer, et c’est précisément pour qu’on n’aille pas le chercher
+que la ligne est écrite ici.
