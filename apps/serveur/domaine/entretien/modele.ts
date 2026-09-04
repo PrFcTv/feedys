@@ -21,8 +21,11 @@ import { z } from 'zod'
 
 import type { Comprehension } from '../../../../packages/widget/src/contrat'
 
-import type { DemandeTour } from './prompts'
-import { assemblerSysteme, messagesDuFil } from './prompts'
+import type { Synthese } from '../synthese/schema'
+import { SchemaSynthese } from '../synthese/schema'
+
+import type { DemandeSynthese, DemandeTour } from './prompts'
+import { assemblerSyntheseSysteme, assemblerSysteme, messagesDuFil } from './prompts'
 
 export type { Comprehension }
 
@@ -62,15 +65,35 @@ const SchemaTourModele = z
   })
   .strict()
 
+/**
+ * Ce que rend une synthèse, avec ce qu’elle a coûté.
+ *
+ * ⚠️ `modele` est rendu ici plutôt que lu sur l’interface : c’est ce qui a
+ *    RÉELLEMENT produit cette note. Sans lui, une régression de qualité est
+ *    inexplicable (04-Architecture/conventions-db.md §syntheses).
+ *
+ * ⚠️ Les jetons sont nullables : un fournisseur qui ne rapporte pas sa
+ *    consommation ne doit pas faire échouer la synthèse.
+ */
+export interface ResultatSyntheseModele {
+  readonly synthese: Synthese
+  readonly modele: string
+  readonly jetonsEntree: number | null
+  readonly jetonsSortie: number | null
+}
+
 export interface Modele {
   /** L’identifiant exact du modèle. Sans lui, une régression est inexplicable. */
   readonly identifiant: string
   tour(demande: DemandeTour): Promise<TourEntretien>
+  synthese(demande: DemandeSynthese): Promise<ResultatSyntheseModele>
 }
 
 export interface OptionsClaude {
-  /** Le gabarit de `prompts/systeme.md`, lu par `infra/prompts.ts`. */
+  /** Le gabarit de `entretien/prompts/systeme.md`, lu par `infra/prompts.ts`. */
   readonly gabarit: string
+  /** Le gabarit de `synthese/prompts/synthese.md`. */
+  readonly gabaritSynthese: string
   /**
    * ⛔ OBLIGATOIRE, ET JAMAIS UN DÉFAUT IMPLICITE. L’identifiant du modèle est
    *    journalisé dans chaque synthèse : sans lui, une régression de qualité est
@@ -86,6 +109,7 @@ export interface OptionsClaude {
    *    défaillance).
    */
   readonly delaiMs?: number
+  readonly delaiSyntheseMs?: number
 }
 
 /**
@@ -93,6 +117,12 @@ export interface OptionsClaude {
  *    regarde un panneau s’ouvrir.
  */
 const DELAI_PAR_DEFAUT = 20_000
+
+/**
+ * ⚠️ Plus long que le tour, et c’est assumé : la synthèse est produite APRÈS que
+ *    le panneau s’est refermé. Personne ne l’attend devant un écran.
+ */
+const DELAI_SYNTHESE_PAR_DEFAUT = 60_000
 
 export function modeleClaude(options: OptionsClaude): Modele {
   const identifiant = options.identifiant.trim()
@@ -128,6 +158,37 @@ export function modeleClaude(options: OptionsClaude): Modele {
         motif: object.motif,
       }
     },
+
+    /**
+     * ⛔ `generateObject` avec LE schéma de la spec — celui-là même qui sert à
+     *    relire ce qu’on a stocké. Une seule définition, donc rien à
+     *    réconcilier ; et le JSON Schema qu’il produit dit au modèle ce qui est
+     *    interdit, `additionalProperties: false` compris.
+     *
+     * ⚠️ Deux nouvelles tentatives, et pas une : la synthèse est le livrable du
+     *    produit, et elle ne se rejoue pas toute seule. Perdre une note pour un
+     *    titre de 82 caractères serait absurde.
+     */
+    async synthese(demande: DemandeSynthese): Promise<ResultatSyntheseModele> {
+      const { object, usage, response } = await generateObject({
+        model: anthropic(identifiant),
+        schema: SchemaSynthese,
+        schemaName: 'synthese',
+        system: assemblerSyntheseSysteme(options.gabaritSynthese, demande),
+        messages: messagesDuFil(demande.fil),
+        abortSignal: AbortSignal.timeout(options.delaiSyntheseMs ?? DELAI_SYNTHESE_PAR_DEFAUT),
+        maxRetries: 2,
+      })
+
+      return {
+        synthese: object,
+        // ⚠️ Celui que le fournisseur dit avoir utilisé, pas celui qu’on a
+        //    demandé : un alias peut pointer ailleurs qu’on ne croit.
+        modele: response.modelId || identifiant,
+        jetonsEntree: usage.inputTokens ?? null,
+        jetonsSortie: usage.outputTokens ?? null,
+      }
+    },
   }
 }
 
@@ -146,14 +207,21 @@ function vide(valeur: string | null | undefined): boolean {
 export interface OptionsBouchon {
   /** Ce que le bouchon rend, tour par tour. Le dernier vaut pour les suivants. */
   readonly tours?: readonly TourEntretien[]
+  /** Ce que le bouchon rend comme synthèse. */
+  readonly synthese?: Synthese
   /** ⚠️ Le modèle muet : la carte n’apparaît pas, le retour part quand même. */
   readonly echoue?: boolean
+  /** ⚠️ Muet sur la SEULE synthèse — le tour, lui, a marché. */
+  readonly echoueSynthese?: boolean
   readonly identifiant?: string
+  readonly jetonsEntree?: number | null
+  readonly jetonsSortie?: number | null
 }
 
 export interface ModeleBouchon extends Modele {
   /** Ce que le bouchon a reçu — c’est là-dessus que porte le test d’injection. */
   readonly recues: DemandeTour[]
+  readonly recuesSynthese: DemandeSynthese[]
 }
 
 const TOUR_PAR_DEFAUT: TourEntretien = {
@@ -168,13 +236,35 @@ const TOUR_PAR_DEFAUT: TourEntretien = {
   motif: 'La récurrence change ce qu’un développeur ferait : régression ou comportement d’origine.',
 }
 
+/**
+ * ⚠️ Écrite à la main, et cohérente avec `TOUR_PAR_DEFAUT` : les citations sont
+ *    des sous-chaînes exactes de la parole des jeux d’essai. ⛔ Jamais un vrai
+ *    retour copié d’une base (CLAUDE.md §Secrets).
+ */
+const SYNTHESE_PAR_DEFAUT: Synthese = {
+  type: 'bug',
+  titre: 'Le tri par date de la liste des dossiers se réinitialise',
+  resume:
+    'Le tri par date ne survit pas à la navigation : la personne doit le reposer à chaque retour sur la liste des dossiers. Elle décrit un comportement présent depuis toujours.',
+  attendu: 'le tri reste en place au retour',
+  constate: 'le tri revient à l’ordre par défaut',
+  recurrence: 'systematique',
+  zone: 'Liste des dossiers',
+  impact: 'ralentit',
+  citations: ['il se remet à zéro'],
+  confiance: 'moyenne',
+  questions_ouvertes: ['Est-ce que ça touche aussi les autres listes ?'],
+}
+
 export function modeleBouchon(options: OptionsBouchon = {}): ModeleBouchon {
   const recues: DemandeTour[] = []
+  const recuesSynthese: DemandeSynthese[] = []
   const tours = options.tours ?? [TOUR_PAR_DEFAUT]
 
   return {
     identifiant: options.identifiant ?? 'bouchon',
     recues,
+    recuesSynthese,
 
     tour(demande: DemandeTour): Promise<TourEntretien> {
       recues.push(demande)
@@ -187,6 +277,21 @@ export function modeleBouchon(options: OptionsBouchon = {}): ModeleBouchon {
       if (rendu === undefined) return Promise.reject(new Error('Bouchon sans tour à rendre.'))
 
       return Promise.resolve(rendu)
+    },
+
+    synthese(demande: DemandeSynthese): Promise<ResultatSyntheseModele> {
+      recuesSynthese.push(demande)
+
+      if (options.echoue === true || options.echoueSynthese === true) {
+        return Promise.reject(new Error('Le modèle ne répond pas.'))
+      }
+
+      return Promise.resolve({
+        synthese: options.synthese ?? SYNTHESE_PAR_DEFAUT,
+        modele: options.identifiant ?? 'bouchon',
+        jetonsEntree: options.jetonsEntree === undefined ? 1_200 : options.jetonsEntree,
+        jetonsSortie: options.jetonsSortie === undefined ? 340 : options.jetonsSortie,
+      })
     },
   }
 }

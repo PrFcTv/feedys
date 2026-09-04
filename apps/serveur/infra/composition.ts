@@ -9,14 +9,18 @@
  * ⚠️ Tout le reste est construit à la demande : rien ne se connecte à l’import.
  */
 import type { PortsIngestion } from '../domaine/retours/ingestion'
+import type { PortsSynthese } from '../domaine/synthese/produire'
 import type { PortsTour } from '../domaine/entretien/tour'
+import { MAX_RELANCES } from '../domaine/entretien/tour'
 import { creerDebitEntretien, creerDebitIngestion } from '../domaine/retours/debit'
+import { etiquettesDe, produireSynthese } from '../domaine/synthese/produire'
 import { modeleClaude } from '../domaine/entretien/modele'
 
 import { pool } from './base/connexion'
 import { creerDepotEntretien } from './base/depot-entretien'
 import { creerDepotRetours } from './base/depot-retours'
-import { lireGabaritSysteme } from './prompts'
+import { creerDepotSyntheses } from './base/depot-syntheses'
+import { lireGabaritSynthese, lireGabaritSysteme } from './prompts'
 import { creerStockageFichiers } from './stockage/fichiers'
 
 const debit = creerDebitIngestion()
@@ -78,9 +82,49 @@ export function portsTour(): PortsTour {
     debitParCle: debitEntretien.cle,
     debitParIp: debitEntretien.ip,
     maintenant: () => Date.now(),
-    modele: modeleClaude({ gabarit: lireGabaritSysteme(), identifiant: identifiantModele() }),
+    modele: modeleDuServeur(),
     signaler,
-    // ⛔ `aval` reste vide jusqu’à P-008. La place est réservée pour que la
-    //    synthèse s’y branche APRÈS la clôture, jamais avant.
+    // ⛔ APRÈS la clôture, jamais avant, et son échec est avalé par
+    //    `terminerEntretien` : une synthèse qui rate ne perd pas le retour, il
+    //    est déjà en base et déjà clos.
+    aval: (retourId) => synthetiser(retourId),
   }
+}
+
+function modeleDuServeur() {
+  return modeleClaude({
+    gabarit: lireGabaritSysteme(),
+    gabaritSynthese: lireGabaritSynthese(),
+    identifiant: identifiantModele(),
+  })
+}
+
+export function portsSynthese(): PortsSynthese {
+  return {
+    depot: creerDepotSyntheses(pool()),
+    modele: modeleDuServeur(),
+    signaler,
+  }
+}
+
+/**
+ * Produit la synthèse d’un retour clos, et l’écrit.
+ *
+ * ⚠️ L’écriture est ici plutôt que dans le domaine parce que c’est un effet de
+ *    bord : `produireSynthese` rend ce qu’il faut écrire, il n’écrit pas.
+ */
+export async function synthetiser(retourId: string): Promise<void> {
+  const ports = portsSynthese()
+  const resultat = await produireSynthese(retourId, ports, MAX_RELANCES)
+
+  if (!resultat.ok) {
+    // ⚠️ `deja_faite` et `rien_a_synthetiser` sont des issues normales, pas des
+    //    pannes : une double fin d’entretien est une course ordinaire.
+    if (resultat.motif === 'modele_indisponible' || resultat.motif === 'retour_inconnu') {
+      signaler(`synthèse du retour — ${resultat.motif}`, new Error(resultat.motif))
+    }
+    return
+  }
+
+  await ports.depot.enregistrer(retourId, resultat.synthese, etiquettesDe(resultat.synthese.contenu))
 }

@@ -373,3 +373,41 @@ qu’un client pourrait forger ([D-006]).
 **Ce qui la renverserait** : un back-office qui voudrait montrer « ce que le bot avait compris à
 chaque tour » plutôt que ce qui a été dit. On ajouterait alors une colonne à `messages`, avec sa
 migration et sa justification — pas un `jsonb` fourre-tout.
+
+---
+
+## D-014 — Le verbatim est garanti par le serveur, pas demandé au modèle
+
+**2026-09-04**
+
+Les `citations` d’une synthèse sont **remplacées** par la tranche exacte du message d’origine, et
+celles qu’on ne retrouve pas sont **jetées**. `domaine/synthese/verbatim.ts`.
+
+**Pourquoi ne pas simplement le demander au prompt.** On le demande aussi — c’est écrit noir sur
+blanc dans `synthese.md`. Mais une consigne de prompt n’est pas une garantie : elle tient la
+plupart du temps, elle lâche sans prévenir, et **elle lâche silencieusement**. Une citation
+reformulée ressemble exactement à une citation exacte. Personne ne la remarquerait, et le champ qui
+fait la valeur de la note deviendrait un résumé de plus.
+
+C’est le même raisonnement que la limite de deux relances ([D-006], [D-013]) : ce qui doit être
+vrai est tenu par le code, pas par la docilité du modèle.
+
+**Le détail qui fait que ça marche.** La recherche est tolérante aux blancs et à la casse ; **ce
+qu’on garde est découpé dans le texte d’origine**. Un modèle recopie fidèlement mais re-ponctue les
+blancs et met une majuscule au premier mot ; refuser sur ce motif jetterait la quasi-totalité des
+citations d’un transcript dicté, et on perdrait exactement ce qu’on voulait protéger. La tolérance
+porte sur la RECHERCHE, jamais sur le résultat.
+
+**La même logique, sur `confiance`.** Le serveur la plafonne à `basse` dans deux cas et deux
+seulement — **l’abandon** et **aucune citation retenue** — parce que ni l’un ni l’autre ne se lit
+dans le fil. Le reste (transcript pauvre, reformulation non confirmée) est laissé au prompt : ça se
+lit dans le fil, et le modèle le lit mieux qu’une règle.
+
+⚠️ **On ne plafonne PAS sur « deux relances atteintes »**, malgré la lettre de [01-Specs/synthese.md].
+Le fait est **dit** au modèle, qui reste libre d’écrire « moyenne » : un entretien peut aller au
+bout de ses deux questions et être riche. Une règle mécanique y ferait mentir la confiance dans
+l’autre sens, ce qui est le même défaut.
+
+**Ce qui la renverserait** : un relevé montrant que les citations jetées sont majoritairement des
+citations correctes que la recherche rate. On élargirait alors la normalisation — jamais le
+résultat.

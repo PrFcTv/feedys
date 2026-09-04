@@ -21,33 +21,63 @@ import path from 'node:path'
 
 import { racineDepot } from './racine'
 
-const NOM = 'systeme.md'
-const RELATIF = path.join('apps', 'serveur', 'domaine', 'entretien', 'prompts', NOM)
+/**
+ * ⚠️ Les deux prompts vivent chacun à côté de son appel — l’entretien dans
+ *    `domaine/entretien/`, la synthèse dans `domaine/synthese/`. En conteneur,
+ *    `FEEDYS_PROMPTS` désigne UN dossier qui contient les deux fichiers : la
+ *    hiérarchie du dépôt n’y existe pas.
+ */
+const FICHIERS = {
+  entretien: {
+    nom: 'systeme.md',
+    relatif: path.join('apps', 'serveur', 'domaine', 'entretien', 'prompts', 'systeme.md'),
+  },
+  synthese: {
+    nom: 'synthese.md',
+    relatif: path.join('apps', 'serveur', 'domaine', 'synthese', 'prompts', 'synthese.md'),
+  },
+} as const
 
-/** ⚠️ Lu une fois. Un prompt qui change demande un redémarrage, comme le code. */
-let gabarit: string | undefined
+export type NomPrompt = keyof typeof FICHIERS
 
-export function lireGabaritSysteme(): string {
-  gabarit ??= readFileSync(/*turbopackIgnore: true*/ cheminSysteme(), 'utf8')
+/** ⚠️ Lus une fois. Un prompt qui change demande un redémarrage, comme le code. */
+const gabarits = new Map<NomPrompt, string>()
+
+function lire(nom: NomPrompt): string {
+  const connu = gabarits.get(nom)
+  if (connu !== undefined) return connu
+
+  const gabarit = readFileSync(/*turbopackIgnore: true*/ cheminPrompt(nom), 'utf8')
+  gabarits.set(nom, gabarit)
   return gabarit
 }
 
-export function cheminSysteme(): string {
+export function lireGabaritSysteme(): string {
+  return lire('entretien')
+}
+
+export function lireGabaritSynthese(): string {
+  return lire('synthese')
+}
+
+export function cheminPrompt(nom: NomPrompt): string {
+  const { nom: fichier, relatif } = FICHIERS[nom]
+
   const dossier = process.env['FEEDYS_PROMPTS']?.trim()
-  if (dossier) return path.join(/*turbopackIgnore: true*/ dossier, NOM)
+  if (dossier) return path.join(/*turbopackIgnore: true*/ dossier, fichier)
 
   const racine = racineDepot()
   if (racine === undefined) {
     throw new Error(
-      'Le prompt système est introuvable : ni FEEDYS_PROMPTS, ni racine de dépôt. ' +
-        'En conteneur, FEEDYS_PROMPTS doit désigner le dossier qui contient systeme.md.',
+      `Le prompt « ${fichier} » est introuvable : ni FEEDYS_PROMPTS, ni racine de dépôt. ` +
+        'En conteneur, FEEDYS_PROMPTS doit désigner le dossier qui les contient.',
     )
   }
 
-  return path.join(/*turbopackIgnore: true*/ racine, RELATIF)
+  return path.join(/*turbopackIgnore: true*/ racine, relatif)
 }
 
-/** Oublie le gabarit lu. ⚠️ Pour les tests uniquement. */
+/** Oublie les gabarits lus. ⚠️ Pour les tests uniquement. */
 export function oublierGabarit(): void {
-  gabarit = undefined
+  gabarits.clear()
 }

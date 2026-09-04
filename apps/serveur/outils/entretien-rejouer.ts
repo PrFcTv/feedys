@@ -23,10 +23,13 @@ import { Client } from 'pg'
 import type { TourEntretien } from '../domaine/entretien/modele'
 import { modeleClaude } from '../domaine/entretien/modele'
 import type { ContexteEntretien, TourFil } from '../domaine/entretien/prompts'
-import { assemblerSysteme } from '../domaine/entretien/prompts'
+import { assemblerSyntheseSysteme, assemblerSysteme } from '../domaine/entretien/prompts'
 import { MAX_RELANCES, relancesPosees } from '../domaine/entretien/tour'
+import { finDe, parolesDe } from '../domaine/synthese/produire'
+import type { Synthese } from '../domaine/synthese/schema'
+import { verifierCitations } from '../domaine/synthese/verbatim'
 import { identifiantModele } from '../infra/composition'
-import { lireGabaritSysteme } from '../infra/prompts'
+import { lireGabaritSynthese, lireGabaritSysteme } from '../infra/prompts'
 
 import { lireArgumentsRejouer } from './arguments'
 
@@ -99,6 +102,46 @@ function rendre(tour: TourEntretien): string {
   return lignes.join('\n')
 }
 
+/**
+ * La note, telle qu’elle serait écrite.
+ *
+ * ⚠️ Les citations sont passées par la vérification verbatim, comme en
+ *    production : c’est LÀ qu’on voit un prompt qui dérive vers la
+ *    reformulation, et c’est la seule façon de le voir avant les utilisateurs.
+ */
+function rendreSynthese(synthese: Synthese, paroles: readonly string[]): string {
+  const { gardees, jetees } = verifierCitations(synthese.citations, paroles)
+
+  const lignes = [
+    `    ${synthese.type.toUpperCase()} · ${synthese.impact} · confiance ${synthese.confiance}`,
+    `    ${synthese.zone}`,
+    '',
+    `    ${synthese.titre}`,
+    `    ${synthese.resume}`,
+  ]
+
+  if (synthese.attendu) lignes.push(`      Attendu    ${synthese.attendu}`)
+  if (synthese.constate) lignes.push(`      Constaté   ${synthese.constate}`)
+  if (synthese.recurrence) lignes.push(`      Récurrence ${synthese.recurrence}`)
+  if (synthese.besoin) lignes.push(`      Besoin     ${synthese.besoin}`)
+  if (synthese.frequence) lignes.push(`      Fréquence  ${synthese.frequence}`)
+
+  lignes.push('', '    CE QU’ELLE A DIT')
+  for (const citation of gardees) lignes.push(`      « ${citation} »`)
+  if (gardees.length === 0) lignes.push('      (aucune citation n’a survécu à la vérification)')
+
+  // ⛔ Le signal qui compte pour la mise au point : le modèle a reformulé.
+  for (const citation of jetees) lignes.push(`      ⛔ JETÉE (non verbatim) — « ${citation} »`)
+
+  lignes.push('', '    CE QU’ON NE SAIT PAS')
+  for (const question of synthese.questions_ouvertes) lignes.push(`      · ${question}`)
+  if (synthese.questions_ouvertes.length === 0) {
+    lignes.push('      (rien — l’entretien a suffi, d’après le modèle)')
+  }
+
+  return lignes.join('\n')
+}
+
 async function principal(): Promise<void> {
   const options = lireArgumentsRejouer(process.argv.slice(2))
 
@@ -116,6 +159,7 @@ async function principal(): Promise<void> {
   let contexte: ContexteEntretien
   let fil: LigneFil[]
   let entete: string
+  let statut: string
 
   try {
     const { rows } = await client.query(RETOUR, [options.retour])
@@ -138,7 +182,8 @@ async function principal(): Promise<void> {
       recuLe: recuLe instanceof Date ? recuLe.toISOString() : ouNul(recuLe),
     }
 
-    entete = `${String(ligne['id'])} · ${String(ligne['statut'])} · ${String(ligne['source'])}`
+    statut = String(ligne['statut'])
+    entete = `${String(ligne['id'])} · ${statut} · ${String(ligne['source'])}`
 
     const messages = await client.query(FIL, [options.retour])
     fil = messages.rows.map((tour) => ({
@@ -154,11 +199,47 @@ async function principal(): Promise<void> {
   //    retour, sans toucher à l’environnement.
   const modele = modeleClaude({
     gabarit: lireGabaritSysteme(),
+    gabaritSynthese: lireGabaritSynthese(),
     identifiant: options.modele ?? identifiantModele(),
   })
 
   console.log(`\nRetour ${entete}`)
   console.log(`Modèle ${modele.identifiant}\n`)
+
+  // ⚠️ `--synthese` rejoue LE LIVRABLE. C’est un autre prompt, une autre mise au
+  //    point, et le fil entier plutôt que ses points de décision.
+  if (options.synthese) {
+    const fin = finDe(statut, relancesPosees(fil), MAX_RELANCES)
+    const demande = { contexte, fil, fin }
+
+    console.log('─'.repeat(72))
+    console.log(`Fin de l’entretien · ${fin}`)
+
+    if (options.prompt) {
+      console.log('\n  PROMPT SYSTÈME ASSEMBLÉ')
+      console.log(
+        assemblerSyntheseSysteme(lireGabaritSynthese(), demande)
+          .split('\n')
+          .map((ligne) => `    │ ${ligne}`)
+          .join('\n'),
+      )
+    }
+
+    console.log('\n  LA NOTE QUE LE DÉVELOPPEUR LIRAIT\n')
+    try {
+      const rendu = await modele.synthese(demande)
+      console.log(rendreSynthese(rendu.synthese, parolesDe(fil)))
+      console.log(
+        `\n    modèle ${rendu.modele} · ${rendu.jetonsEntree ?? '?'} jetons en entrée, ` +
+          `${rendu.jetonsSortie ?? '?'} en sortie`,
+      )
+    } catch (erreur) {
+      console.log(`    ⛔ ${erreur instanceof Error ? erreur.message : String(erreur)}`)
+    }
+
+    console.log('')
+    return
+  }
 
   for (const point of pointsDeDecision(fil)) {
     const prefixe = fil.slice(0, point)

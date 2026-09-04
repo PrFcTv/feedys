@@ -59,6 +59,7 @@ export interface MessageModele {
 
 const MARQUE_CONTEXTE = '{{contexte}}'
 const MARQUE_RELANCES = '{{relances}}'
+const MARQUE_FIN = '{{fin}}'
 
 /**
  * Assemble le prompt système.
@@ -154,4 +155,57 @@ export function messagesDuFil(fil: readonly TourFil[]): MessageModele[] {
   }
 
   return messages
+}
+
+/**
+ * ─── LA SYNTHÈSE ────────────────────────────────────────────────────────────
+ *
+ * ⚠️ Elle vit ICI, avec l’entretien, pour une raison unique : l’appel au modèle
+ *    est derrière une seule interface, et le prompt doit rester au même endroit
+ *    que son appel (04-Architecture/architecture.md §4). Le SCHÉMA de la
+ *    synthèse, lui, est dans `domaine/synthese/schema.ts`, avec le reste de ce
+ *    qui la concerne.
+ */
+
+/** Comment l’entretien s’est terminé. ⚠️ Le modèle ne peut pas le déduire du fil. */
+export type FinEntretien = 'envoi' | 'limite' | 'abandon'
+
+export interface DemandeSynthese {
+  readonly contexte: ContexteEntretien
+  readonly fil: readonly TourFil[]
+  readonly fin: FinEntretien
+}
+
+/**
+ * ⛔ Même invariant qu’au tour : le gabarit et le contexte, jamais la parole.
+ *    Elle passe par `messagesDuFil`, en messages `user`.
+ */
+export function assemblerSyntheseSysteme(gabarit: string, demande: DemandeSynthese): string {
+  return gabarit
+    .replace(MARQUE_CONTEXTE, rendreContexte(demande.contexte))
+    .replace(MARQUE_FIN, consigneFin(demande.fin))
+}
+
+/**
+ * ⚠️ Un fait, pas une consigne de note. On dit au modèle CE QUI S’EST PASSÉ ; ce
+ *    qu’il en tire est son travail. Les deux cas que le serveur tranche
+ *    lui-même — abandon, aucune citation retenue — sont plafonnés après coup
+ *    dans `domaine/synthese/produire.ts`.
+ */
+export function consigneFin(fin: FinEntretien): string {
+  if (fin === 'abandon') {
+    return (
+      'La personne a refermé le panneau en cours d’entretien. Ce que tu as est ' +
+      'partiel, et elle n’a rien confirmé. Dis-le dans questions_ouvertes.'
+    )
+  }
+
+  if (fin === 'limite') {
+    return (
+      'L’entretien s’est arrêté sur la limite de relances, pas parce qu’il était ' +
+      'complet. Il reste probablement quelque chose à savoir : dis quoi.'
+    )
+  }
+
+  return 'La personne a envoyé son retour elle-même, quand elle a jugé que c’était dit.'
 }
