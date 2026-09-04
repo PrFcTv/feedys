@@ -75,7 +75,10 @@ function portsTour(aval?: (retourId: string) => Promise<void>): PortsTour {
           'select id, domaine, actif from produits where cle_publique = $1',
           [cle],
         )
-        return rows[0] ?? null
+        const ligne = rows[0]
+        // ⚠️ L’entretien ne vérifie aucune identité : elle est attachée à
+        //    l’ingestion, une fois pour toutes (P-012).
+        return ligne === undefined ? null : { ...ligne, secret: null }
       },
     },
     modele: modeleBouchon({ synthese: SYNTHESE }),

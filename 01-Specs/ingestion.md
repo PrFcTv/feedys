@@ -18,6 +18,7 @@ prend un port `aval`, il l’appelle **après** `depot.enregistrer`, et son éch
 ```http
 POST /api/retours
 x-feedys-cle: fdy_pub_…
+x-feedys-identite: <charge>.<signature>      ⚠️ facultatif
 content-type: application/json
 origin: https://victoria.exemple.fr
 ```
@@ -89,7 +90,7 @@ message serait une parole perdue avec l’air d’avoir été reçue.
 
 | Table | Ce qui y va |
 |---|---|
-| `retours` | `produit_id`, `source`, `statut = 'en_cours'`, `identite_verifiee = false` (P-012) |
+| `retours` | `produit_id`, `source`, `statut = 'en_cours'`, et l’auteur — `auteur_ref`, `auteur_nom`, `auteur_role`, `identite_verifiee` |
 | `messages` | `ordre = 0`, `role = 'collaborateur'`, `texte`, `transcript_brut`, `audio_chemin` |
 | `contextes` | la liste close, plus `capture_chemin` |
 
@@ -106,6 +107,38 @@ jamais le titre de la page, jamais l’écran, jamais le nom de quelqu’un.
   même. Un retour sans image vaut infiniment mieux qu’un retour perdu.
 - **L’audio est la parole** quand il n’y a pas de transcript → échec **bruyant** (`503`). Le
   widget peut réessayer ; une perte silencieuse serait pire.
+
+## L’identité signée
+
+Le logiciel hôte sait déjà qui est là. Il **signe** une petite identité avec le secret du produit
+et la pose sur `window.feedys` ; le widget la recopie dans `x-feedys-identite`, et Feedys la
+vérifie ([D-005](../00-Projet/DECISIONS_LOG.md), [D-015](../00-Projet/DECISIONS_LOG.md)).
+
+```
+jeton      = <charge base64url> "." <HMAC-SHA256(secret, charge base64url) base64url>
+charge     = { "ref": "u-4218", "nom": "Camille Dupont", "role": "gestionnaire", "exp": 1789000000 }
+```
+
+`ref` et `exp` sont exigés ; `nom` et `role` sont facultatifs — un hôte qui ne connaît pas le rôle
+de quelqu’un ne doit pas être obligé d’en inventer un. `exp` est en **secondes**.
+
+⛔ **AUCUN verdict d’identité ne refuse un retour.** Absent, expiré, forgé, illisible, produit sans
+secret utilisable : le retour est **accepté**, `identite_verifiee` vaut `false`, et les trois
+`auteur_*` restent vides. On ne perd jamais une parole pour un problème d’identité.
+
+⛔ **Un verdict négatif n’écrit rien du tout**, pas même le `ref` que le jeton prétendait porter.
+Une identité non vérifiée n’est pas une identité dégradée, c’est une absence d’identité.
+
+⛔ **Le motif du refus ne sort jamais dans la réponse.** Dire à qui poste que sa signature est
+fausse plutôt qu’expirée l’aide à forger. Il est journalisé, et c’est tout — le widget, lui, reçoit
+un `201` comme d’habitude et n’a rien à en faire.
+
+⚠️ **La signature est vérifiée AVANT que la charge ne soit analysée.** L’ordre inverse reviendrait
+à faire confiance à ce que n’importe qui a écrit dans un en-tête.
+
+⚠️ **Ce n’est pas un JWT, délibérément** : un seul algorithme, écrit dans le code des deux côtés,
+et rien à lire dans le jeton pour savoir comment le vérifier. Comment signer côté hôte : README
+§Attacher une identité.
 
 ## La sécurité, en pratique
 
@@ -137,6 +170,5 @@ navigateur, jamais dans une page.
 
 ## Ce que P-003 ne fait pas
 
-- **L’identité signée** — `identite_verifiee` reste `false` et `auteur_*` reste vide (P-012).
 - **L’entretien** — le port `aval` est déclaré et jamais fourni (P-007).
 - **La transcription serveur** — l’audio est rangé, pas encore lu.

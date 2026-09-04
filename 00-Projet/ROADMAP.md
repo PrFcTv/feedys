@@ -29,7 +29,8 @@ back-office, MCP.
 | P-009 · l’email | ✅ fait |
 | P-010 · le back-office | ✅ fait |
 | P-011 · le serveur MCP | ✅ fait |
-| P-012 → P-014 | à faire |
+| P-012 · l’identité signée | ✅ fait |
+| P-013 → P-014 | à faire |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 

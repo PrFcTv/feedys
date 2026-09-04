@@ -116,10 +116,10 @@ describe('le socle, appliqué sur une base vierge', () => {
     await base?.fermer()
   }, 60_000)
 
-  it('applique 0001_socle.sql, et lui seul', async () => {
+  it('applique les migrations du dépôt, dans l’ordre des noms', async () => {
     const resultat = await appliquerMigrations(base.client, DOSSIER_MIGRATIONS)
 
-    expect(resultat.appliquees).toEqual(['0001_socle.sql'])
+    expect(resultat.appliquees).toEqual(['0001_socle.sql', '0002_identite.sql'])
     expect(resultat.deja).toEqual([])
   })
 
@@ -192,10 +192,10 @@ describe('le socle, appliqué sur une base vierge', () => {
     const resultat = await appliquerMigrations(base.client, DOSSIER_MIGRATIONS)
 
     expect(resultat.appliquees).toEqual([])
-    expect(resultat.deja).toEqual(['0001_socle.sql'])
+    expect(resultat.deja).toEqual(['0001_socle.sql', '0002_identite.sql'])
 
     const { rows } = await base.client.query<{ nom: string }>('select nom from migrations')
-    expect(rows).toHaveLength(1)
+    expect(rows).toHaveLength(2)
 
     const { rows: tables } = await base.client.query<{ n: string }>(
       `select count(*)::text as n from information_schema.tables
@@ -333,7 +333,7 @@ describe('la divergence entre la base et le dépôt', () => {
     const { rows } = await base.client.query<{ n: string }>(
       `select count(*)::text as n from migrations`,
     )
-    expect(rows[0]?.n).toBe('1')
+    expect(rows[0]?.n).toBe('2')
   })
 })
 

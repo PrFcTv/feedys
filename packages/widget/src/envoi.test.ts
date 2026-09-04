@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { CorpsRetour } from './contrat'
 import { envoyer } from './envoi'
-import { EN_TETE_CLE } from './transport'
+import { EN_TETE_CLE, EN_TETE_IDENTITE } from './transport'
 
 const CORPS: CorpsRetour = {
   texte: 'le tri par date se remet à zéro quand je reviens en arrière',
@@ -38,6 +38,35 @@ describe('envoyer', () => {
     expect(options.credentials).toBe('omit')
     expect((options.headers as Record<string, string>)[EN_TETE_CLE]).toBe('fdy_pub_a1b2c3')
     expect(JSON.parse(String(options.body))).toEqual(CORPS)
+  })
+
+  it('joint le jeton d’identité quand l’hôte en a posé un', async () => {
+    const appel = vi.fn().mockResolvedValue(reponse(201, { retour: 'ret_abc' }))
+
+    await envoyer({
+      origine: 'https://feedys.exemple.fr',
+      cle: 'fdy_pub_a1b2c3',
+      identite: 'charge.signature',
+      corps: CORPS,
+      fetch: appel,
+    })
+
+    const [, options] = appel.mock.calls[0] as [string, RequestInit]
+    expect((options.headers as Record<string, string>)[EN_TETE_IDENTITE]).toBe('charge.signature')
+  })
+
+  it('n’envoie pas l’en-tête d’identité quand il n’y a pas de jeton', async () => {
+    const appel = vi.fn().mockResolvedValue(reponse(201, { retour: 'ret_abc' }))
+
+    await envoyer({
+      origine: 'https://feedys.exemple.fr',
+      cle: 'fdy_pub_a1b2c3',
+      corps: CORPS,
+      fetch: appel,
+    })
+
+    const [, options] = appel.mock.calls[0] as [string, RequestInit]
+    expect(options.headers as Record<string, string>).not.toHaveProperty(EN_TETE_IDENTITE)
   })
 
   it('reprend le message du serveur — il est en français et ne dit rien de son intérieur', async () => {
