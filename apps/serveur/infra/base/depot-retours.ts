@@ -10,6 +10,7 @@ import type {
   RetourAEnregistrer,
 } from '../../domaine/retours/ingestion'
 import { identifiant } from '../identifiants'
+import { cleDeChiffrement, dechiffrer } from '../secret'
 
 import type { ConnexionBase } from './migrations'
 
@@ -28,15 +29,16 @@ export interface Bassin {
  *    qui décide qu’il vaut refus — le dépôt ne fait pas de politique.
  */
 const PAR_CLE = `
-  select id, domaine, actif
+  select id, domaine, actif, secret_chiffre
     from produits
    where cle_publique = $1
    limit 1
 `
 
+/** ⚠️ `identite_verifiee` est écrite explicitement, jamais laissée au défaut. */
 const ECRIRE_RETOUR = `
-  insert into retours (id, produit_id, source)
-  values ($1, $2, $3)
+  insert into retours (id, produit_id, source, auteur_ref, auteur_nom, auteur_role, identite_verifiee)
+  values ($1, $2, $3, $4, $5, $6, $7)
 `
 
 /** ⚠️ ordre = 0 : c’est le premier tour du fil. Pas de tri sur cree_le. */
@@ -63,10 +65,16 @@ export function creerDepotRetours(bassin: Bassin): PortDepotRetours {
         const ligne = rows[0]
         if (ligne === undefined) return null
 
+        const chiffre = ligne['secret_chiffre']
+
         return {
           id: String(ligne['id']),
           domaine: String(ligne['domaine']),
           actif: ligne['actif'] === true,
+          // ⛔ Déchiffré ici, et nulle part ailleurs. `null` sans clé, sans
+          //    enveloppe, ou sur une enveloppe illisible — l’identité ne sera
+          //    pas vérifiée, et le retour arrivera quand même (P-012).
+          secret: dechiffrer(typeof chiffre === 'string' ? chiffre : null, cleDeChiffrement()),
         }
       } finally {
         connexion.release()
@@ -85,7 +93,15 @@ export function creerDepotRetours(bassin: Bassin): PortDepotRetours {
       try {
         await connexion.query('begin')
 
-        await connexion.query(ECRIRE_RETOUR, [idRetour, retour.produitId, retour.source])
+        await connexion.query(ECRIRE_RETOUR, [
+          idRetour,
+          retour.produitId,
+          retour.source,
+          retour.auteur.ref,
+          retour.auteur.nom,
+          retour.auteur.role,
+          retour.auteur.verifiee,
+        ])
 
         await connexion.query(ECRIRE_MESSAGE, [
           identifiant(),

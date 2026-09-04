@@ -10,7 +10,7 @@
  *    par n’importe qui sans gêne (01-Specs/widget.md).
  */
 import type { CorpsRetour } from './contrat'
-import { CHEMIN_RETOURS, EN_TETE_CLE } from './transport'
+import { CHEMIN_RETOURS, EN_TETE_CLE, EN_TETE_IDENTITE } from './transport'
 
 export type Resultat =
   | { readonly ok: true; readonly retour: string }
@@ -26,6 +26,13 @@ export interface Requete {
   /** L’origine Feedys, déduite du `<script src>`. */
   readonly origine: string
   readonly cle: string
+  /**
+   * Le jeton signé que l’hôte a posé sur `window.feedys` — recopié tel quel.
+   *
+   * ⚠️ Facultatif, et son absence ne change rien : le retour part pareil, et
+   *    arrive simplement sans auteur (P-012, D-005).
+   */
+  readonly identite?: string | undefined
   readonly corps: CorpsRetour
   /** Injectable pour les tests. */
   readonly fetch?: typeof globalThis.fetch
@@ -46,6 +53,7 @@ export async function envoyer(requete: Requete): Promise<Resultat> {
       headers: {
         'content-type': 'application/json',
         [EN_TETE_CLE]: requete.cle,
+        ...(requete.identite === undefined ? {} : { [EN_TETE_IDENTITE]: requete.identite }),
       },
       body: JSON.stringify(requete.corps),
     })

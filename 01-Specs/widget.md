@@ -181,8 +181,15 @@ ce qui rend la collecte visible plutôt que subie :
 | Composant visé | sélecteur DOM de l’élément survolé à l’ouverture | `selecteurDom` |
 | Navigateur, système, taille de fenêtre | `navigator`, `window` | `navigateur`, `systeme`, `viewportL/H`, `agentBrut` |
 | Capture d’écran | `@zumer/snapdom`, au moment de l’ouverture | `capture` |
-| Identité, rôle | le jeton signé fourni par l’hôte ([D-005]) | P-012 |
+| Identité, rôle | le jeton signé fourni par l’hôte ([D-005]) sur `window.feedys.identite` | en-tête `x-feedys-identite` |
 | Horodatage, fuseau | client, revérifié serveur | `horodatage`, `fuseau` |
+
+⚠️ **Le jeton d’identité est relu à chaque envoi**, jamais mémorisé au chargement : une
+application métier qui rafraîchit la session de quelqu’un remplace son jeton en cours de route.
+⛔ Le widget ne signe, ne vérifie et ne comprend RIEN de ce jeton — il recopie une chaîne dans un
+en-tête. Signer côté navigateur demanderait le secret du produit dans la page, ce qui reviendrait
+à ne rien signer du tout. Et son absence ne change rien au parcours : le retour part pareil, et
+arrive simplement sans auteur ([ingestion.md](ingestion.md) §L’identité signée).
 
 ⛔ **Rien d’autre.** Pas de cookies, pas de stockage local persistant au-delà du brouillon en
 cours, pas de suivi entre les sessions, aucun pixel. Le dépôt est public : cette liste doit

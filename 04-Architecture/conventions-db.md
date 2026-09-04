@@ -55,7 +55,8 @@ Un logiciel métier qui embarque le widget. Voir [D-005](../00-Projet/DECISIONS_
 | `nom` | `text` | « VictorIA » |
 | `domaine` | `text` | origine autorisée — sert au contrôle CORS |
 | `cle_publique` | `text` UNIQUE | `fdy_pub_…` — **publique par nature**, elle est dans le HTML |
-| `secret_hash` | `text` | argon2 du secret. ⛔ Le secret en clair n’est **jamais** stocké |
+| `secret_hash` | `text` | argon2 du secret — une **preuve**. ⛔ Le secret en clair n’est **jamais** stocké |
+| `secret_chiffre` | `text` NULL | le secret chiffré (AES-256-GCM, `FEEDYS_CLE_CHIFFREMENT`) — une **clé**, celle qui vérifie l’identité signée par l’hôte. Un HMAC se vérifie avec sa clé, pas avec son empreinte ([D-015](../00-Projet/DECISIONS_LOG.md)). NULL = ce produit ne vérifie aucune identité |
 | `actif` | `boolean` | un produit inactif fait répondre 404 au widget |
 
 ### `retours`

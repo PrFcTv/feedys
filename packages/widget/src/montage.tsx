@@ -20,6 +20,7 @@ import { render } from 'preact'
 import type { Configuration } from './configuration'
 import { collecter, definirOrigineFeedys, suivreSurvol } from './contexte'
 import { envoyer } from './envoi'
+import { identiteHote } from './identite'
 import { demanderTour, terminer } from './entretien'
 import { FEUILLE } from './ui/styles'
 import type { Commandes, Ports } from './ui/Widget'
@@ -117,7 +118,15 @@ export function monter(configuration: Configuration, options: OptionsMontage = {
 
   const ports: Ports = {
     collecter: () => collecter({ cible: survol.dernier() }),
-    envoyer: (corps) => envoyer({ origine: configuration.origine, cle: configuration.cle, corps }),
+    envoyer: (corps) =>
+      envoyer({
+        origine: configuration.origine,
+        cle: configuration.cle,
+        // ⚠️ Relu à chaque envoi : l’hôte peut avoir rafraîchi son jeton depuis
+        //    le chargement de la page (identite.ts).
+        identite: identiteHote(),
+        corps,
+      }),
     demanderTour: (retour, corps) =>
       demanderTour({ origine: configuration.origine, cle: configuration.cle, retour, corps }),
     terminer: (retour, corps, garderEnVie) =>

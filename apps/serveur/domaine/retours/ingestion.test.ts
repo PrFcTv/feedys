@@ -14,12 +14,18 @@ import type {
   ProduitConnu,
   RetourAEnregistrer,
 } from './ingestion'
+import { signerIdentite } from '../identite/jeton'
+
 import { ingerer } from './ingestion'
+
+/** ⛔ Inventé. Le dépôt est public : aucun secret réel, jamais. */
+const SECRET = 'fdy_sec_secret-de-test-invente-de-toutes-pieces'
 
 const PRODUIT: ProduitConnu = {
   id: 'prod_essai',
   domaine: 'victoria.exemple.fr',
   actif: true,
+  secret: SECRET,
 }
 
 const CLE = 'fdy_pub_essai'
@@ -76,6 +82,7 @@ function entree(supplement: Partial<Parameters<typeof ingerer>[0]> = {}) {
   const corpsBrut = supplement.corpsBrut ?? corps()
   return {
     cle: CLE,
+    identite: null,
     origine: 'https://victoria.exemple.fr',
     ip: '203.0.113.7',
     octets: Buffer.byteLength(corpsBrut, 'utf8'),
@@ -223,6 +230,7 @@ describe('ce qui est écrit', () => {
     expect(ecrits[0]).toEqual({
       produitId: 'prod_essai',
       source: 'texte',
+      auteur: { ref: null, nom: null, role: null, verifiee: false },
       message: {
         texte: 'le tri se remet à zéro',
         transcriptBrut: 'euh le tri se remet à zéro',
@@ -325,5 +333,78 @@ describe('le stockage', () => {
 
     expect(resultat).toMatchObject({ ok: false, motif: 'stockage_indisponible' })
     expect(journal).not.toContain('enregistrer')
+  })
+})
+
+describe('⛔ l’identité ne refuse jamais rien (P-012)', () => {
+  const MAINTENANT = 1_757_000_000_000
+  const DANS_UNE_HEURE = Math.floor(MAINTENANT / 1_000) + 3_600
+
+  const CHARGE = { ref: 'u-4218', nom: 'Camille Dupont', role: 'gestionnaire', exp: DANS_UNE_HEURE }
+
+  it('attache l’auteur d’un jeton valide', async () => {
+    const { ports, ecrits } = banc()
+
+    const resultat = await ingerer(
+      entree({ identite: signerIdentite(CHARGE, SECRET) }),
+      ports,
+    )
+
+    expect(resultat).toMatchObject({ ok: true })
+    expect(ecrits[0]?.auteur).toEqual({
+      ref: 'u-4218',
+      nom: 'Camille Dupont',
+      role: 'gestionnaire',
+      verifiee: true,
+    })
+  })
+
+  it('accepte le retour SANS jeton, en auteur inconnu', async () => {
+    const { ports, ecrits } = banc()
+
+    const resultat = await ingerer(entree(), ports)
+
+    expect(resultat).toMatchObject({ ok: true })
+    expect(ecrits[0]?.auteur).toEqual({ ref: null, nom: null, role: null, verifiee: false })
+  })
+
+  it.each([
+    ['forgé', signerIdentite(CHARGE, 'fdy_sec_un-autre-secret-invente')],
+    ['expiré', signerIdentite({ ...CHARGE, exp: Math.floor(MAINTENANT / 1_000) - 1 }, SECRET)],
+    ['illisible', 'ceci-nest-pas-un-jeton'],
+  ])('⛔ ACCEPTE le retour avec un jeton %s — un 201, pas un refus', async (_cas, jeton) => {
+    const { ports, ecrits } = banc()
+
+    const resultat = await ingerer(entree({ identite: jeton }), ports)
+
+    expect(resultat).toMatchObject({ ok: true })
+    expect(ecrits[0]?.auteur).toEqual({ ref: null, nom: null, role: null, verifiee: false })
+  })
+
+  it('accepte le retour quand le produit n’a pas de secret utilisable', async () => {
+    const { ports, ecrits } = banc({ produit: { ...PRODUIT, secret: null } })
+
+    const resultat = await ingerer(entree({ identite: signerIdentite(CHARGE, SECRET) }), ports)
+
+    expect(resultat).toMatchObject({ ok: true })
+    expect(ecrits[0]?.auteur.verifiee).toBe(false)
+  })
+
+  it('signale une identité écartée, sans rien dire du corps du retour', async () => {
+    const signales: string[] = []
+    const { ports } = banc({ signaler: (quoi) => void signales.push(quoi) })
+
+    await ingerer(entree({ identite: signerIdentite(CHARGE, 'fdy_sec_autre') }), ports)
+
+    expect(signales).toEqual(['identité non retenue — signature_invalide'])
+  })
+
+  it('ne signale RIEN quand il n’y a pas de jeton — c’est le cas ordinaire', async () => {
+    const signales: string[] = []
+    const { ports } = banc({ signaler: (quoi) => void signales.push(quoi) })
+
+    await ingerer(entree(), ports)
+
+    expect(signales).toEqual([])
   })
 })

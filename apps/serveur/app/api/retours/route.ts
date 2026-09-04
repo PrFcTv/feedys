@@ -4,7 +4,7 @@
  * ⛔ Du routage, et rien d’autre : lire la requête, appeler le domaine, rendre.
  *    La décision est dans `domaine/retours/ingestion.ts` (architecture.md §2).
  */
-import { EN_TETE_CLE } from '../../../../../packages/widget/src/contrat'
+import { EN_TETE_CLE, EN_TETE_IDENTITE } from '../../../../../packages/widget/src/contrat'
 import type { MotifRefus } from '../../../domaine/retours/ingestion'
 import { corpsTropGros, ingerer } from '../../../domaine/retours/ingestion'
 import { portsIngestion } from '../../../infra/composition'
@@ -48,6 +48,9 @@ export async function POST(requete: Request): Promise<Response> {
   const resultat = await ingerer(
     {
       cle: requete.headers.get(EN_TETE_CLE),
+      // ⛔ Un jeton absent ou faux ne refuse rien : il laisse le retour arriver
+      //    en `identite_verifiee = false` (P-012).
+      identite: requete.headers.get(EN_TETE_IDENTITE),
       origine,
       ip: ipDe(requete),
       octets: Buffer.byteLength(corpsBrut, 'utf8'),

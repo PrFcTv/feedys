@@ -82,14 +82,17 @@ enum CanalNotification {
 
 /// Un logiciel métier qui embarque le widget.
 model Produit {
-  id          String   @id
-  nom         String
-  domaine     String
-  clePublique String   @map("cle_publique")
-  secretHash  String   @map("secret_hash")
-  actif       Boolean  @default(true)
-  creeLe      DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
-  majLe       DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+  id            String   @id
+  nom           String
+  domaine       String
+  clePublique   String   @map("cle_publique")
+  secretHash    String   @map("secret_hash")
+  /// Le secret chiffré (AES-256-GCM) — la clé qui vérifie l’identité signée par
+  /// l’hôte. ⛔ Jamais en clair. NULL = ce produit ne vérifie aucune identité.
+  secretChiffre String?  @map("secret_chiffre")
+  actif         Boolean  @default(true)
+  creeLe        DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe         DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 
   retours Retour[]
 
@@ -99,20 +102,20 @@ model Produit {
 
 /// Ce que quelqu’un a voulu dire.
 model Retour {
-  id                String       @id
-  produitId         String       @map("produit_id")
-  auteurRef         String?      @map("auteur_ref")
-  auteurNom         String?      @map("auteur_nom")
-  auteurRole        String?      @map("auteur_role")
-  identiteVerifiee  Boolean      @default(false) @map("identite_verifiee")
-  statut            StatutRetour @default(en_cours)
-  type              TypeRetour?
-  titre             String?
-  zone              String?
-  source            SourceRetour
-  envoyeLe          DateTime?    @map("envoye_le") @db.Timestamptz(6)
-  creeLe            DateTime     @default(now()) @map("cree_le") @db.Timestamptz(6)
-  majLe             DateTime     @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+  id               String       @id
+  produitId        String       @map("produit_id")
+  auteurRef        String?      @map("auteur_ref")
+  auteurNom        String?      @map("auteur_nom")
+  auteurRole       String?      @map("auteur_role")
+  identiteVerifiee Boolean      @default(false) @map("identite_verifiee")
+  statut           StatutRetour @default(en_cours)
+  type             TypeRetour?
+  titre            String?
+  zone             String?
+  source           SourceRetour
+  envoyeLe         DateTime?    @map("envoye_le") @db.Timestamptz(6)
+  creeLe           DateTime     @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe            DateTime     @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 
   produit       Produit        @relation(fields: [produitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   messages      Message[]
@@ -131,16 +134,16 @@ model Retour {
 /// ⛔ `texte` ne se modifie jamais et ne se supprime jamais. C’est le contrat du
 ///    produit, pas une contrainte technique.
 model Message {
-  id              String      @id
-  retourId        String      @map("retour_id")
-  ordre           Int
-  role            RoleMessage
-  texte           String
-  transcriptBrut  String?     @map("transcript_brut")
-  audioChemin     String?     @map("audio_chemin")
-  motif           String?
-  creeLe          DateTime    @default(now()) @map("cree_le") @db.Timestamptz(6)
-  majLe           DateTime    @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+  id             String      @id
+  retourId       String      @map("retour_id")
+  ordre          Int
+  role           RoleMessage
+  texte          String
+  transcriptBrut String?     @map("transcript_brut")
+  audioChemin    String?     @map("audio_chemin")
+  motif          String?
+  creeLe         DateTime    @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe          DateTime    @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 
   retour Retour @relation(fields: [retourId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 

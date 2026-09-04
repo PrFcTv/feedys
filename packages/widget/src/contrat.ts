@@ -28,6 +28,7 @@ export {
   BORNES,
   CHEMIN_RETOURS,
   EN_TETE_CLE,
+  EN_TETE_IDENTITE,
   PREFIXE_CLE_PUBLIQUE,
   PREFIXE_SECRET,
   TYPES_AUDIO,
@@ -78,6 +79,35 @@ export const SchemaContexte = z
     /** Le contexte navigateur brut — le seul champ légitimement non structuré. */
     agentBrut: z.record(z.string(), z.unknown()).optional(),
     capture: fichier(TYPES_CAPTURE).optional(),
+  })
+  .strict()
+
+/**
+ * La charge d’un jeton d’identité — ce que le serveur de l’hôte signe.
+ *
+ * ⛔ Une FORME, et rien d’autre. La vérification de la signature, elle, est de
+ *    la logique et vit du côté AGPL (`apps/serveur/domaine/identite`). Ce qui
+ *    descend ici est ce que les deux côtés doivent lire de la même façon.
+ *
+ * ⚠️ Seuls `ref` et `exp` sont exigés : un hôte qui ne connaît pas le rôle de
+ *    quelqu’un ne doit pas être obligé d’en inventer un. `ref` seul suffit à
+ *    revenir vers la personne — c’est le minimum d’identité que D-005 décrit,
+ *    et pas un octet de plus.
+ */
+export const SchemaIdentite = z
+  .object({
+    /** L’identifiant du collaborateur CHEZ L’HÔTE. ⛔ Feedys n’en fabrique pas. */
+    ref: z.string().min(1).max(BORNES.auteurRef),
+    nom: z.string().max(BORNES.auteurNom).optional(),
+    role: z.string().max(BORNES.auteurRole).optional(),
+    /**
+     * L’expiration, en secondes depuis l’époque.
+     *
+     * ⛔ Exigée. Un jeton sans expiration est un mot de passe permanent posé
+     *    dans le HTML de l’hôte : celui qui le recopie signe à la place de la
+     *    personne, pour toujours.
+     */
+    exp: z.number().int().positive(),
   })
   .strict()
 
@@ -253,6 +283,7 @@ export const SchemaFinRendue = z
   })
   .strict()
 
+export type Identite = z.infer<typeof SchemaIdentite>
 export type Contexte = z.infer<typeof SchemaContexte>
 export type CorpsRetour = z.infer<typeof SchemaCorpsRetour>
 export type RetourCree = z.infer<typeof SchemaRetourCree>
@@ -281,6 +312,16 @@ export type Analyse<T> = { readonly ok: true; readonly valeur: T } | { readonly 
  */
 export function analyserCorpsRetour(valeur: unknown): Analyse<CorpsRetour> {
   return analyser(SchemaCorpsRetour, valeur)
+}
+
+/**
+ * Analyse la charge d’un jeton d’identité.
+ *
+ * ⛔ À n’appeler QU’APRÈS avoir vérifié la signature. Analyser d’abord
+ *    reviendrait à faire confiance à ce qui n’est pas encore prouvé.
+ */
+export function analyserIdentite(valeur: unknown): Analyse<Identite> {
+  return analyser(SchemaIdentite, valeur)
 }
 
 /** Analyse le corps d’un tour d’entretien. */

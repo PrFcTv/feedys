@@ -411,3 +411,49 @@ l’autre sens, ce qui est le même défaut.
 **Ce qui la renverserait** : un relevé montrant que les citations jetées sont majoritairement des
 citations correctes que la recherche rate. On élargirait alors la normalisation — jamais le
 résultat.
+
+---
+
+## D-015 — Le secret d’un produit est aussi stocké chiffré, parce qu’un HMAC se vérifie avec sa clé
+
+**2026-09-04**
+
+Le serveur de l’hôte signe l’identité du collaborateur avec le secret du produit ([D-005]) ; Feedys
+recalcule ce HMAC pour la vérifier. **Vérifier un HMAC demande la clé qui a signé, pas son
+empreinte.** Un argon2 ne s’inverse pas : `secret_hash` ne pouvait donc pas servir à ça, et il n’y
+avait pas de troisième voie — un MAC symétrique n’a pas de « clé publique de vérification ».
+
+D’où une seconde colonne, `produits.secret_chiffre` : le secret **chiffré en AES-256-GCM** sous
+`FEEDYS_CLE_CHIFFREMENT`, une clé de 32 octets qui vit dans l’environnement du conteneur et
+**jamais en base**.
+
+**Ce que ça protège, précisément.** [hebergement.md](../04-Architecture/hebergement.md) garde
+trente jours de dumps Postgres, et un dump voyage — vers une sauvegarde, un poste, un disque. Avec
+le secret en clair dans la table, quiconque tient un vieux dump peut signer l’identité de n’importe
+qui, indéfiniment. Avec la colonne chiffrée, un dump seul ne suffit pas : il faut aussi
+l’environnement du conteneur.
+
+⚠️ **Les deux colonnes ne font pas double emploi.** `secret_hash` est une **preuve** — « c’est bien
+ce secret-là », et elle ne s’inverse pas. `secret_chiffre` est une **clé** — de quoi recalculer une
+signature. Confondre les deux est exactement l’erreur que cette entrée existe pour éviter.
+
+⚠️ **Ce que ça corrige de [D-010].** D-010 décrivait un secret « vérifié une fois par requête
+d’identité signée ». C’était une lecture optimiste : rien ne vérifie le secret à l’ingestion, on
+recalcule une signature. Le motif de D-010 — pas d’extension native dans une image Alpine — reste
+entier, et argon2id reste le bon outil pour la preuve.
+
+⛔ **Sans la clé, `pnpm produit:creer` refuse de créer le produit.** Un produit sans
+`secret_chiffre` accepterait tous ses retours en `identite_verifiee = false` sans que rien ne le
+dise — la panne silencieuse que ce dépôt refuse partout ailleurs. Un produit **déjà** créé sans
+elle, lui, continue de fonctionner : ses retours arrivent, simplement sans auteur.
+
+⛔ **Et le jeton n’est pas un JWT.** Un JWT porte son algorithme dans sa propre en-tête, et toute la
+famille de failles « `alg: none` » vient de là : le vérificateur lit dans le jeton comment le
+vérifier. Le format de Feedys est `<charge base64url>.<HMAC-SHA256 base64url>` — un seul algorithme,
+écrit dans le code des deux côtés, rien à lire. Le coût pour l’hôte est de huit lignes de
+`node:crypto` et aucune dépendance (README §Attacher une identité).
+
+**Ce qui la renverserait** : un besoin de vérifier une identité **sans pouvoir la forger** — par
+exemple si Feedys devenait un service partagé entre plusieurs organisations. Il faudrait alors des
+signatures asymétriques (Ed25519), l’hôte gardant sa clé privée et Feedys ne stockant que la
+publique. Ce n’est pas la forme de D-005, qui décrit une instance, un développeur, ses produits.

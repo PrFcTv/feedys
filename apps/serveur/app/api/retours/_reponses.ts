@@ -7,7 +7,7 @@
  * ⚠️ Un fichier `_préfixé` dans `app/` n’est pas une route : c’est la convention
  *    Next pour un module privé.
  */
-import { EN_TETE_CLE } from '../../../../../packages/widget/src/contrat'
+import { EN_TETE_CLE, EN_TETE_IDENTITE } from '../../../../../packages/widget/src/contrat'
 
 /**
  * ⚠️ Le préflight ne porte PAS la clé — `Access-Control-Request-Headers` ne
@@ -20,7 +20,7 @@ export function enTetesCors(origine: string | null): Record<string, string> {
   return {
     'access-control-allow-origin': origine ?? '*',
     'access-control-allow-methods': 'POST, OPTIONS',
-    'access-control-allow-headers': `content-type, ${EN_TETE_CLE}`,
+    'access-control-allow-headers': `content-type, ${EN_TETE_CLE}, ${EN_TETE_IDENTITE}`,
     'access-control-max-age': '86400',
     vary: 'Origin',
   }

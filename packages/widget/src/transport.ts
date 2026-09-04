@@ -23,6 +23,16 @@
  */
 export const EN_TETE_CLE = 'x-feedys-cle'
 
+/**
+ * L’en-tête qui porte le jeton d’identité signé par le serveur de l’hôte.
+ *
+ * ⚠️ Un en-tête et non un champ du corps : le corps EST la parole de quelqu’un,
+ *    l’identité est une enveloppe. Et ⛔ le jeton n’est pas un cookie — le
+ *    widget poste en `credentials: 'omit'`, l’hôte le lui passe par
+ *    `window.feedys.identite` (D-005, 01-Specs/widget.md).
+ */
+export const EN_TETE_IDENTITE = 'x-feedys-identite'
+
 /** Le préfixe d’une clé publique. Sert aussi à refuser un secret posté par erreur. */
 export const PREFIXE_CLE_PUBLIQUE = 'fdy_pub_'
 
@@ -61,6 +71,19 @@ export const BORNES = {
    *    il sert à la mise au point du prompt (01-Specs/entretien.md).
    */
   motif: 500,
+  /**
+   * Le jeton d’identité, tel qu’il arrive dans l’en-tête.
+   *
+   * ⚠️ Une borne basse et volontaire : la charge tient en quatre champs courts.
+   *    Au-delà, on ne calcule même pas d’empreinte — un en-tête d’un mégaoctet
+   *    ne serait pas une identité, ce serait quelqu’un qui s’amuse.
+   */
+  jeton: 4_096,
+  /** L’identifiant du collaborateur chez l’hôte. */
+  auteurRef: 200,
+  auteurNom: 200,
+  /** « gestionnaire », « comptable »… Utile pour lire le retour, pas pour trier. */
+  auteurRole: 120,
 } as const
 
 /** Les types de capture acceptés. ⛔ Liste close. */

@@ -70,16 +70,70 @@ Une ligne dans le logiciel hôte :
 <script src="https://feedys.exemple.fr/widget.js" data-cle="fdy_pub_…" defer></script>
 ```
 
-Et, pour attacher une identité — le logiciel hôte sait déjà qui est là, autant le dire :
-
-```html
-<script>window.feedys = { identite: "<jeton signé par votre serveur>" }</script>
-```
-
 ⛔ **Il n’y a pas de paquet npm à installer, et c’est délibéré.** L’intégration passe par
 `<script src>` pour que le widget reste un programme distinct de votre application — ce qui évite
 que la licence de Feedys ne déborde sur la vôtre. Voir
 [04-Architecture/licences.md](04-Architecture/licences.md).
+
+## Attacher une identité
+
+Le logiciel hôte sait déjà qui est là — autant le dire, plutôt que de poser une question de plus.
+**Votre serveur** signe une petite identité avec le secret du produit, et la page la pose sur
+`window.feedys` avant de charger le widget :
+
+```html
+<script>window.feedys = { identite: "<jeton signé par votre serveur>" }</script>
+<script src="https://feedys.exemple.fr/widget.js" data-cle="fdy_pub_…" defer></script>
+```
+
+Signer, dans un composant serveur Next.js — `node:crypto`, rien d’autre à installer :
+
+```tsx
+import { createHmac } from 'node:crypto'
+
+// ⛔ Le secret vit dans l’environnement de VOTRE serveur. Jamais dans la page.
+function jetonFeedys(utilisateur: { id: string; nom: string; role: string }): string {
+  const charge = Buffer.from(
+    JSON.stringify({
+      ref: utilisateur.id,
+      nom: utilisateur.nom,
+      role: utilisateur.role,
+      exp: Math.floor(Date.now() / 1000) + 3600, // en SECONDES
+    }),
+  ).toString('base64url')
+
+  const signature = createHmac('sha256', process.env.FEEDYS_SECRET!)
+    .update(charge)
+    .digest('base64url')
+
+  return `${charge}.${signature}`
+}
+```
+
+```tsx
+export default async function Layout({ children }) {
+  const jeton = jetonFeedys(await utilisateurCourant())
+
+  return (
+    <>
+      {children}
+      <script
+        dangerouslySetInnerHTML={{ __html: `window.feedys={identite:${JSON.stringify(jeton)}}` }}
+      />
+      <script src="https://feedys.exemple.fr/widget.js" data-cle="fdy_pub_…" defer />
+    </>
+  )
+}
+```
+
+⛔ **Le secret ne traverse jamais le navigateur.** Il est imprimé une seule fois par
+`pnpm produit:creer` et vit sur votre serveur ; c’est le **jeton**, et lui seul, qui descend dans
+la page.
+
+⚠️ **Rien de tout ceci n’est obligatoire.** Sans jeton — ou avec un jeton expiré, forgé ou
+illisible — le retour est **accepté quand même**, simplement sans auteur. On ne perd jamais une
+parole pour un problème d’identité. Le détail :
+[01-Specs/ingestion.md](01-Specs/ingestion.md) §L’identité signée.
 
 ---
 

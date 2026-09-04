@@ -17,6 +17,9 @@ import {
   analyserCorpsRetour,
 } from '../../../../packages/widget/src/contrat'
 
+import type { AuteurAEnregistrer } from '../identite/jeton'
+import { auteurDe, verifierIdentite } from '../identite/jeton'
+
 import type { PortDebit } from './debit'
 import { origineAutorisee } from './origine'
 
@@ -25,12 +28,24 @@ export interface ProduitConnu {
   readonly id: string
   readonly domaine: string
   readonly actif: boolean
+  /**
+   * Le secret du produit, déchiffré par le dépôt.
+   *
+   * ⛔ Il ne sort JAMAIS d’ici : il ne part dans aucune réponse, aucun journal,
+   *    aucune ligne de base. Il ne sert qu’à recalculer le HMAC du jeton
+   *    d’identité (D-005, D-015). `null` quand le produit n’en a pas de forme
+   *    utilisable — l’identité ne sera alors jamais vérifiée, et les retours
+   *    arriveront quand même.
+   */
+  readonly secret: string | null
 }
 
 /** Le retour, prêt à écrire. Les trois lignes partent ensemble ou pas du tout. */
 export interface RetourAEnregistrer {
   readonly produitId: string
   readonly source: 'voix' | 'texte'
+  /** ⚠️ Toujours défini. Sans jeton valide, c’est `AUTEUR_INCONNU` (P-012). */
+  readonly auteur: AuteurAEnregistrer
   readonly message: {
     readonly texte: string
     readonly transcriptBrut: string | null
@@ -81,6 +96,15 @@ export interface PortsIngestion {
 
 export interface EntreeIngestion {
   readonly cle: string | null
+  /**
+   * Le jeton d’identité signé par le serveur de l’hôte — l’en-tête
+   * `x-feedys-identite`, tel qu’il est arrivé.
+   *
+   * ⛔ Absent, invalide, expiré ou forgé : le retour est ACCEPTÉ quand même,
+   *    marqué `identite_verifiee = false`. On ne perd jamais une parole pour un
+   *    problème d’identité (P-012).
+   */
+  readonly identite: string | null
   readonly origine: string | null
   readonly ip: string
   readonly octets: number
@@ -155,6 +179,13 @@ export async function ingerer(
     return refus('origine_refusee', 'Cette origine n’est pas celle du produit.')
   }
 
+  // ⛔ Aucun `refus` ne suit. Le verdict d’identité décore le retour, il ne
+  //    l’arbitre pas : c’est la règle entière de P-012.
+  const verdict = verifierIdentite(entree.identite, produit.secret, maintenant)
+  if (!verdict.ok && verdict.motif !== 'absente') {
+    ports.signaler?.(`identité non retenue — ${verdict.motif}`, new Error(verdict.motif))
+  }
+
   // ⛔ L’audio EST la parole quand il n’y a pas de transcript. Un stockage muet
   //    la perdrait sans que personne ne le sache : on refuse bruyamment, et le
   //    widget peut réessayer.
@@ -183,7 +214,7 @@ export async function ingerer(
   }
 
   const retour = await ports.depot.enregistrer(
-    composer(corps, produit.id, audioChemin, captureChemin),
+    composer(corps, produit.id, auteurDe(verdict), audioChemin, captureChemin),
   )
 
   // ⛔ APRÈS. Toujours après, et sans pouvoir défaire ce qui précède.
@@ -218,6 +249,7 @@ function analyserCorps(brut: string): ReturnType<typeof analyserCorpsRetour> {
 function composer(
   corps: CorpsRetour,
   produitId: string,
+  auteur: AuteurAEnregistrer,
   audioChemin: string | null,
   captureChemin: string | null,
 ): RetourAEnregistrer {
@@ -226,6 +258,7 @@ function composer(
   return {
     produitId,
     source: corps.audio ? 'voix' : (corps.source ?? 'texte'),
+    auteur,
     message: {
       // ⚠️ Vide et non nul quand seul l’audio est arrivé : la transcription
       //    serveur viendra remplir la ligne, elle ne la créera pas.

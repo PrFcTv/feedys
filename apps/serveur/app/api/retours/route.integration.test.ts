@@ -21,8 +21,10 @@ import { fileURLToPath } from 'node:url'
 import { Client } from 'pg'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { EN_TETE_CLE } from '../../../../../packages/widget/src/contrat'
+import { EN_TETE_CLE, EN_TETE_IDENTITE } from '../../../../../packages/widget/src/contrat'
+import { signerIdentite } from '../../../domaine/identite/jeton'
 import { appliquerMigrations } from '../../../infra/base/migrations'
+import { chiffrer, nouvelleCleDeChiffrement } from '../../../infra/secret'
 
 // ⚠️ Type seul : l’import de valeur est dynamique, APRÈS que DATABASE_URL pointe
 //    sur la base jetable.
@@ -38,6 +40,10 @@ const DOMAINE = 'victoria.exemple.fr'
 const ORIGINE = `https://${DOMAINE}`
 const CLE = 'fdy_pub_essai_ingestion'
 const CLE_INACTIF = 'fdy_pub_essai_inactif'
+
+/** ⛔ Inventés, tous les deux. Le dépôt est public : aucune valeur réelle. */
+const SECRET = 'fdy_sec_secret-de-test-invente-de-toutes-pieces'
+const CLE_CHIFFREMENT = nouvelleCleDeChiffrement()
 
 let nomBase: string
 let client: Client
@@ -102,10 +108,14 @@ beforeAll(async () => {
   await client.connect()
   await appliquerMigrations(client, DOSSIER_MIGRATIONS)
 
+  // ⚠️ La clé de chiffrement est posée AVANT l’import de la route : le dépôt la
+  //    relit à chaque requête, et sans elle aucune identité ne se vérifierait.
+  process.env['FEEDYS_CLE_CHIFFREMENT'] = CLE_CHIFFREMENT
+
   await client.query(
-    `insert into produits (id, nom, domaine, cle_publique, secret_hash, actif)
-     values ($1, $2, $3, $4, 'argon2-bidon', true),
-            ($5, $6, $7, $8, 'argon2-bidon', false)`,
+    `insert into produits (id, nom, domaine, cle_publique, secret_hash, secret_chiffre, actif)
+     values ($1, $2, $3, $4, 'argon2-bidon', $9, true),
+            ($5, $6, $7, $8, 'argon2-bidon', null, false)`,
     [
       'prod_actif',
       'VictorIA',
@@ -115,6 +125,7 @@ beforeAll(async () => {
       'VictorIA (retiré)',
       DOMAINE,
       CLE_INACTIF,
+      chiffrer(SECRET, Buffer.from(CLE_CHIFFREMENT, 'base64url')),
     ],
   )
 
@@ -307,6 +318,7 @@ describe('CORS', () => {
     expect(reponse.status).toBe(204)
     expect(reponse.headers.get('access-control-allow-origin')).toBe(ORIGINE)
     expect(reponse.headers.get('access-control-allow-headers')).toContain(EN_TETE_CLE)
+    expect(reponse.headers.get('access-control-allow-headers')).toContain(EN_TETE_IDENTITE)
     expect(reponse.headers.get('vary')).toBe('Origin')
   })
 
@@ -314,5 +326,67 @@ describe('CORS', () => {
     const reponse = await route.POST(requete(CORPS, {}, 'fdy_pub_personne'))
 
     expect(reponse.headers.get('access-control-allow-origin')).toBe(ORIGINE)
+  })
+})
+
+describe('⛔ l’identité signée ne refuse jamais un retour (P-012)', () => {
+  const dans = (secondes: number) => Math.floor(Date.now() / 1_000) + secondes
+
+  const CHARGE = { ref: 'u-4218', nom: 'Camille Dupont', role: 'gestionnaire' }
+
+  async function auteurDuRetour(jeton: string | null): Promise<Record<string, unknown>> {
+    const entetes: Record<string, string> = jeton === null ? {} : { [EN_TETE_IDENTITE]: jeton }
+    const reponse = await route.POST(requete(CORPS, entetes))
+
+    // ⛔ 201, quel que soit le jeton. C’est l’acceptation de P-012.
+    expect(reponse.status).toBe(201)
+
+    const { retour } = (await reponse.json()) as { retour: string }
+    const { rows } = await client.query(
+      'select auteur_ref, auteur_nom, auteur_role, identite_verifiee from retours where id = $1',
+      [retour],
+    )
+
+    return rows[0] as Record<string, unknown>
+  }
+
+  it('attache l’auteur d’un jeton valide', async () => {
+    expect(await auteurDuRetour(signerIdentite({ ...CHARGE, exp: dans(3_600) }, SECRET))).toEqual({
+      auteur_ref: 'u-4218',
+      auteur_nom: 'Camille Dupont',
+      auteur_role: 'gestionnaire',
+      identite_verifiee: true,
+    })
+  })
+
+  const INCONNU = {
+    auteur_ref: null,
+    auteur_nom: null,
+    auteur_role: null,
+    identite_verifiee: false,
+  }
+
+  it('⛔ ACCEPTE un jeton FORGÉ, en identite_verifiee = false', async () => {
+    const forge = signerIdentite({ ...CHARGE, exp: dans(3_600) }, 'fdy_sec_un-autre-secret')
+
+    expect(await auteurDuRetour(forge)).toEqual(INCONNU)
+  })
+
+  it('⛔ ACCEPTE un jeton expiré, en identite_verifiee = false', async () => {
+    const expire = signerIdentite({ ...CHARGE, exp: dans(-1) }, SECRET)
+
+    expect(await auteurDuRetour(expire)).toEqual(INCONNU)
+  })
+
+  it('accepte un retour sans jeton du tout — le cas ordinaire', async () => {
+    expect(await auteurDuRetour(null)).toEqual(INCONNU)
+  })
+
+  it('⛔ le secret ne sort dans aucune réponse', async () => {
+    const reponse = await route.POST(requete(CORPS))
+    const texte = await reponse.text()
+
+    expect(texte).not.toContain(SECRET)
+    expect(texte).not.toContain(CLE_CHIFFREMENT)
   })
 })
