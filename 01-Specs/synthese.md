@@ -231,7 +231,19 @@ agent de code :
 réellement un problème, la parole d’origine contient souvent ce que le résumé a perdu.
 
 ⛔ **Aucun outil MCP ne modifie ni ne supprime le contenu d’un retour.** Le statut est la seule
-chose qu’on peut changer. Ce que quelqu’un a dit ne se réécrit pas.
+chose qu’on peut changer, et seulement vers `lu`, `traite` ou `ecarte` — `en_cours`, `abandonne` et
+`envoye` décrivent le déroulé de l’entretien, les réécrire falsifierait l’histoire du retour. Ce que
+quelqu’un a dit ne se réécrit pas. ⛔ **Il n’y a donc pas de quatrième outil, et il n’y en aura pas.**
+
+⚠️ **Le serveur MCP tourne sur le poste du développeur**, en `stdio`, et parle au serveur Feedys en
+HTTP avec un jeton (`FEEDYS_MCP_JETON`). Ce n’est pas un détail de déploiement : c’est ce qui garde
+`packages/mcp` en **MIT** sans le lier au serveur AGPL — deux processus qui dialoguent ne forment
+pas un seul programme ([licences.md](../04-Architecture/licences.md)).
+
+⚠️ **Le serveur ferme quand il n’a pas de secret** : sans `FEEDYS_MCP_JETON`, l’API MCP répond 503
+et ne sert rien. Un serveur qui laisserait passer faute de secret serait pire qu’un serveur fermé.
+
+L’installation dans Claude Code est dans [packages/mcp/README.md](../packages/mcp/README.md).
 
 ## Le rendu dans le back-office
 

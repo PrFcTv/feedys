@@ -51,7 +51,7 @@ un emprunt d’idée, à citer dans `ATTRIBUTIONS.md`.
 | `lucide-react` | ISC | — | les icônes du back-office. ⛔ Aucune dans le widget : le budget est de 60 Ko |
 | `@playwright/test` | Apache-2.0 | — | les parcours de bout en bout. ⚠️ Chromium seulement — la dictée n’existe que là (D-003) |
 | `nodemailer` | **MIT-0** | — | envoi de la note. ⚠️ **Installé le 2026-09-04 en 10.0.0**, dans `apps/serveur` uniquement. ⚠️ Le registre annonce **MIT-0** et non MIT — vérifié fichier en main : c’est du MIT amputé de la clause d’attribution, donc plus permissif, pas moins. ⚠️ **Zéro dépendance transitive** et ses types sont embarqués : rien à ajouter, pas de `@types/`. Le relais tient dans `SMTP_URL` — `?pool=true` y demande le bassin de connexions |
-| `@modelcontextprotocol/sdk` | MIT | — | serveur MCP |
+| `@modelcontextprotocol/sdk` | MIT | — | serveur MCP. ⚠️ **Installé le 2026-09-04 en 1.30.0**, dans `packages/mcp` uniquement. ⚠️ Il tire `express`, `hono` et `jose` — inutiles au transport `stdio`, mais c’est un paquet du poste du développeur, pas du bundle de qui que ce soit |
 | `hash-wasm` | MIT | 1 100 | argon2id du secret produit, **en WebAssembly** — pas d’extension native à construire dans une image Alpine ([D-010](../00-Projet/DECISIONS_LOG.md)) |
 | `@paralleldrive/cuid2` | MIT | 1 500 | les `id` de toutes les tables. `cuid()` de Prisma n’est pas utilisable : le schéma ne pose aucun `@default` |
 
