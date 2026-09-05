@@ -41,7 +41,7 @@ export interface Journal {
 }
 
 /** ⚠️ `console`, mais nommé : le démarrage est la seule chose qui parle en clair. */
-const CONSOLE: Journal = {
+export const CONSOLE: Journal = {
   info: (m) => void console.log(`Feedys · ${m}`),
   alerte: (m) => void console.warn(`Feedys ⚠️  ${m}`),
   erreur: (m) => void console.error(`Feedys ⛔ ${m}`),

@@ -89,7 +89,7 @@ arrive pendant celle-ci.
 
 ## 003 — Un entretien interrompu en silence laisse le retour en `en_cours` pour toujours
 
-**Statut** : 🟠 Contourné (2026-09-05) — voir [TICKETS_DIFFERES.md](../00-Projet/TICKETS_DIFFERES.md) T-006
+**Statut** : ✅ Résolu (2026-09-05, PR #16)
 **Constaté le** : 2026-09-05, pendant P-014, points 3 et 4
 **Où** : côté serveur — rien ne referme un entretien que le widget n’a pas refermé
 
@@ -108,9 +108,18 @@ d’une requête du navigateur. Un onglet tué, un poste qui s’éteint, un `ke
 laisse tomber — et le retour reste `en_cours` sans que rien ne le rattrape. Le serveur n’a aucun
 filet.
 
-**Correctif** — ⛔ aucun dans cette PR : P-014 dit de vérifier et de consigner, pas d’écrire de
-fonctionnalité. Le filet — clore les entretiens muets depuis trop longtemps, puis les synthétiser
-— est un travail à part entière, décrit en T-006.
+**Correctif** — le filet, écrit en P-016. Un balayage périodique referme en `abandonne` les
+entretiens sans signe de vie depuis **trente minutes**, puis les passe au **chemin ordinaire** — le
+même port `aval` que `POST /fin`, pas une seconde implémentation de la synthèse. Il tourne dans le
+processus qui sert déjà les requêtes ([D-018](../00-Projet/DECISIONS_LOG.md)), parce que
+hebergement.md refuse une file, un worker et toute dépendance au planificateur d’un hébergeur.
+
+⚠️ **La cause du cas observé reste inconnue, et le filet ne prétend pas la connaître.** Il ne
+répare pas le chemin nominal : il rattrape ce qui lui échappe, quelle qu’en soit la raison.
+
+⚠️ **Ce qui dira si le filet sert vraiment** : chaque clôture par balayage écrit une ligne
+`audit` — `acteur = 'systeme'`, `action = 'cloture_balayage'`. Aucune clôture ordinaire n’écrit
+dans `audit` : la présence de la ligne suffit donc à identifier ce que le filet a rattrapé.
 
 ⚠️ **Rien n’est perdu entre-temps** : la parole est en base depuis l’ingestion, lisible au
 back-office et par MCP. C’est la note et l’email qui manquent, pas le retour.

@@ -38,6 +38,24 @@ s’arrêter tôt avec un trou déclaré que tard avec une personne agacée.
 **`OUVERT → ENVOYE` est un chemin légal.** Si quelqu’un ouvre, parle et clique immédiatement sur
 « Envoyer », on envoie. Le bot n’a pas le droit de retenir.
 
+### ⚠️ Un entretien peut se clore **sans le widget**
+
+Tous les chemins ci-dessus partent d’une requête du navigateur — `POST /fin`, à la fermeture du
+panneau ou sur `pagehide`. ⛔ **Ce n’est pas suffisant.** Un onglet tué, un poste éteint, un
+`keepalive` que le système laisse tomber, et le retour resterait `en_cours` pour toujours : ni
+synthèse, ni email ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 003).
+
+Le serveur a donc **un filet**. Un entretien sans le moindre signe de vie depuis **trente minutes**
+passe en `abandonne`, puis suit le **chemin ordinaire** : même synthèse, même email
+([D-018](../00-Projet/DECISIONS_LOG.md)).
+
+⚠️ **Le délai est large à dessein.** Quand tout marche, la clôture arrive en huit secondes après
+le dernier message : trente minutes est deux ordres de grandeur au-dessus, et ne peut donc pas
+couper quelqu’un qui cherche ses mots.
+
+⛔ **Le widget n’en sait rien et n’a rien à en savoir.** Personne n’est prévenu qu’un entretien a
+été refermé : il n’y a plus personne devant l’écran, c’est la définition même du cas.
+
 ## ⛔ Les cinq règles dures
 
 Elles ne se discutent pas, et un manquement est un bug, pas une préférence.
