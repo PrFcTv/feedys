@@ -35,6 +35,12 @@ back-office, MCP.
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
+**La suite est écrite** : [05-Prompts/APRES-MVP.md] — neuf prompts, P-015 à P-023. Le lot 7
+finit un MVP qui n’est pas tout à fait fini (la recette non jouée, les deux défauts contournés
+de [BUGS_LOG](../03-Bugs/BUGS_LOG.md)), le lot 8 le met en service, le lot 9 est l’ordre de
+valeur ci-dessous. ⛔ Rien du lot 9 ne se commence avant qu’un vrai collaborateur ait parlé
+dans un vrai logiciel.
+
 ## Le MVP — ce qu’il doit faire, et rien de plus
 
 > Un collaborateur de VictorIA clique sur la bulle, dit « le tri de la colonne date remet tout à
