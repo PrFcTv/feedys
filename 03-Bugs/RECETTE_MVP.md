@@ -21,7 +21,7 @@ sortis les deux défauts corrigés dans cette PR.
 
 | # | Point | Verdict |
 |---|---|---|
-| 1 | Parcours nominal, Chrome, **à la voix** | ⛔ **échoué** puis corrigé — [BUGS_LOG](BUGS_LOG.md) 007. ⚠️ **À REJOUER** : le correctif n’a pas encore été vu à la voix |
+| 1 | Parcours nominal, Chrome, **à la voix** | ✅ **après deux correctifs** — [BUGS_LOG](BUGS_LOG.md) 007 et 008 |
 | 2 | Le même **en écrivant**, dans Firefox | ✅ |
 | 3 | Fermer le panneau en plein entretien → `abandonne` | ✅ |
 | 4 | Couper le modèle → le retour arrive brut | ✅ |
@@ -132,13 +132,36 @@ dans le fil — mais le `motif` **n’est jamais affiché au collaborateur**
   transcript envoyé ;
 - la fiche sort par MCP, `401` sans jeton.
 
-**La voix**, jouée par un humain dans Chrome, sur `pnpm widget:demo`. ⛔ **Elle a échoué**, et
-c’est elle qui a sorti le défaut le plus grave du MVP : la dictée s’arrêtait en pleine phrase et
-renvoyait à l’écran d’accueil en effaçant la parole ([BUGS_LOG](BUGS_LOG.md) 007). Corrigé dans
-cette PR, avec les tests qui manquaient.
+**La voix**, jouée par un humain dans Chrome, sur `pnpm widget:demo`. ⛔ **Elle a échoué deux
+fois avant de passer**, et c’est elle qui a sorti les deux défauts que rien d’autre n’aurait
+trouvés :
 
-⚠️ **À rejouer à la voix après le correctif** — c’est la seule vérification que rien n’automatise,
-et elle reste due avant la première mise en service.
+1. la dictée s’arrêtait en pleine phrase et renvoyait à l’accueil en effaçant la parole
+   ([BUGS_LOG](BUGS_LOG.md) 007) ;
+2. puis, une fois cela corrigé, elle se coupait encore dès qu’on marquait un temps de réflexion
+   ([BUGS_LOG](BUGS_LOG.md) 008).
+
+**Le troisième essai est allé au bout.** Le retour `source = 'voix'`, `statut = 'envoye'`, avec sa
+note. Le fil, tel qu’il est en base :
+
+> **collaborateur** — « alors j’ai trouvé un bug quand je suis sur la page d’accueil en fait quand
+> je clique sur le bouton j’ai l’impression que ben il se passe rien et du coup je peux pas
+> continuer à remplir ma lettre »
+>
+> **bot** — « Pouvez-vous préciser quel bouton exactement ne réagit pas au clic ? »
+>
+> **collaborateur** — « alors c’est le bouton quand je clique sur suivant dans le document pour
+> voir la page suivante »
+
+⚠️ Ce qu’il faut regarder dans ce fil : le bot **ne redemande rien de ce que le contexte donne
+déjà** — ni l’écran, ni l’URL, ni le navigateur, tous présents en base. Une seule question, deux
+phrases, aucun diagnostic, aucune promesse. Et la synthèse cite **mot pour mot**, hésitations
+comprises — « en fait », « ben » — parce que le verbatim est garanti par le code et non demandé au
+modèle ([D-014](../00-Projet/DECISIONS_LOG.md)).
+
+⛔ **Ce que ce point a coûté, et ce qu’il a rapporté** : trois essais humains, deux défauts que
+541 tests unitaires ne voyaient pas. C’est l’argument pour ne jamais déclarer ce point « sans
+doute bon ».
 
 ## Ce qui n’avait pas pu être joué en P-014
 

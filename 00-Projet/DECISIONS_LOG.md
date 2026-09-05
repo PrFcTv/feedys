@@ -491,3 +491,54 @@ résolu, et un refus tue le processus en quelques centaines de millisecondes.
 **Ce qui la renverserait** : un besoin de migrer **sans** démarrer le serveur — un job de
 déploiement séparé, par exemple. `pnpm db:migrate` couvre déjà ce cas sur un poste ; en conteneur,
 il faudrait alors le second empaquetage qu’on a évité ici.
+
+---
+
+## D-017 — L’arrêt sur silence attend cinq secondes, pas deux
+
+**Prise le** : 2026-09-05, pendant P-015, après la première dictée réelle
+**Statut** : appliquée
+
+### Le contexte
+
+[D-012](DECISIONS_LOG.md) a tranché *comment* détecter le silence — un plancher mesuré sur
+l’`AnalyserNode`, jamais un seuil fixe. Il n’a pas tranché *combien de temps* attendre : deux
+secondes ont été posées par défaut, sans mesure, avant que quiconque ait dicté un vrai retour.
+
+### Ce qu’on a constaté
+
+La première dictée à la voix, jouée par un humain dans Chrome : **« ça se coupe si on marque un
+temps de pause »**. Pas au milieu d’un mot — au milieu d’une réflexion.
+
+⚠️ Et c’est le cas ordinaire, pas le cas limite. Quelqu’un qui décrit un problème qu’il vient de
+rencontrer reconstitue en parlant : « alors, quand je clique sur… euh… le bouton suivant ». Deux
+secondes de silence sont un temps de réflexion, pas une fin de phrase.
+
+### La décision
+
+`APRES_MS` passe de **2 000 à 5 000 ms**.
+
+### Pourquoi cinq, et pas trois ni dix
+
+Le module `dictee/silence.ts` déclarait déjà l’asymétrie, en toutes lettres :
+
+> Un arrêt manqué coûte un clic — le second clic est visible en permanence. Un arrêt prématuré
+> coupe quelqu’un au milieu d’une phrase, et il ne recommencera pas.
+
+⛔ **La valeur ne respectait pas le principe écrit juste au-dessus d’elle.** Cinq secondes le
+respectent : c’est assez long pour couvrir une hésitation ordinaire, assez court pour que celui
+qui a fini n’ait pas l’impression que rien ne se passe. Au-delà de dix, l’écran « j’écoute »
+donnerait le sentiment d’être resté allumé pour rien.
+
+⚠️ **Le coût du côté long est nul ou presque** : qui a fini de parler n’attend pas — « Envoyer
+maintenant » et le second clic sont visibles en permanence, et c’est précisément pour ça qu’ils le
+sont.
+
+### Ce qu’on n’a pas fait
+
+⛔ **Rendre le délai configurable par l’hôte.** Un réglage de plus à comprendre pour chaque
+intégration, alors que personne n’a de raison de le changer. Si un jour un hôte le demande, ce
+sera une décision, pas une option ajoutée en passant.
+
+⛔ **Détecter la fin de phrase par le modèle.** Il faudrait un aller-retour réseau à chaque pause,
+sur le seul écran où la latence se voit.

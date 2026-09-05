@@ -102,7 +102,7 @@ monde connaît sans l’avoir appris :
 - **maintenir** pour parler, **relâcher** pour terminer ;
 - **glisser vers la gauche** pour annuler — avec le seuil et le retour visuel qui vont avec ;
 - un **clic simple** bascule en mode mains libres, pour les retours longs ; on arrête par un
-  second clic ou par deux secondes de silence.
+  second clic ou par **cinq secondes** de silence.
 
 Pendant l’écoute :
 
@@ -121,6 +121,12 @@ plancher sonore est mesuré sur les premières centaines de millisecondes, puis 
 un seuil fixe échouerait en open space, c’est-à-dire là où le produit vit. ⚠️ Le biais est assumé —
 on préfère **ne pas s’arrêter** que s’arrêter trop tôt : un arrêt manqué coûte un clic, un arrêt
 prématuré coupe quelqu’un au milieu d’une phrase.
+
+⛔ **Cinq secondes, et pas deux.** La valeur d’origine ne respectait pas ce biais : quelqu’un qui
+décrit un bug s’interrompt pour chercher ses mots — « alors, le bouton… euh… » — et deux secondes
+de réflexion sont ordinaires. La première dictée réelle l’a montré
+([D-017](../00-Projet/DECISIONS_LOG.md), [BUGS_LOG](../03-Bugs/BUGS_LOG.md) 008). ⚠️ Qui a fini
+n’attend pas cinq secondes : le second clic et « Envoyer maintenant » sont visibles en permanence.
 
 Au clavier :
 

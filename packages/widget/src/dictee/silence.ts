@@ -1,5 +1,5 @@
 /**
- * L’arrêt sur silence du mode mains libres — deux secondes.
+ * L’arrêt sur silence du mode mains libres — cinq secondes.
  *
  * ⛔ CE N’EST PAS `@ricky0123/vad`, ET C’EST UNE DÉCISION MESURÉE : voir [D-012]
  *    dans 00-Projet/DECISIONS_LOG.md. La chaîne Silero minimale pèse 5,3 Mo
@@ -18,6 +18,13 @@
  *    Un arrêt manqué coûte un clic — le second clic est visible en permanence.
  *    Un arrêt prématuré coupe quelqu’un au milieu d’une phrase, et il ne
  *    recommencera pas.
+ *
+ * ⛔ ET C’EST EXACTEMENT CE QUI EST ARRIVÉ À DEUX SECONDES. La première dictée
+ *    réelle l’a montré : quelqu’un qui décrit un bug s’interrompt pour chercher
+ *    ses mots — « alors, le bouton… euh… » — et deux secondes de réflexion sont
+ *    ordinaires, pas une fin de phrase. Le délai a été porté à cinq secondes
+ *    ([D-017] dans 00-Projet/DECISIONS_LOG.md). Le biais était déjà écrit ici ;
+ *    la valeur ne le respectait pas.
  *
  * ⛔ Fonction pure, sans minuterie : elle reçoit le niveau et l’horodatage, et
  *    rend un verdict. C’est ce qui la rend testable sans attendre deux secondes.
@@ -42,8 +49,15 @@ export interface Guet {
   aEntenduDuSon(): boolean
 }
 
-/** Deux secondes de silence. C’est la spécification, pas un réglage. */
-const APRES_MS = 2_000
+/**
+ * Cinq secondes de silence. C’est la spécification, pas un réglage.
+ *
+ * ⚠️ Mesuré contre le coût de se tromper, pas contre le confort : cinq secondes
+ *    d’attente pour qui a fini valent mieux qu’une phrase coupée pour qui
+ *    réfléchit. Et qui a fini n’attend pas — « Envoyer maintenant » et le second
+ *    clic sont visibles en permanence.
+ */
+const APRES_MS = 5_000
 
 /**
  * ⚠️ 400 ms de calibrage : assez pour mesurer une pièce, assez court pour que

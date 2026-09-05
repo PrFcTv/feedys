@@ -277,3 +277,37 @@ Ensuite, **le faux moteur de `ui/dictee.test.tsx` ne respectait pas le contrat d
 `dicter()` rend toujours le transcript arrêté **depuis le début**. Le faux rendait donc le défaut
 ② strictement indétectable : il n’y avait jamais de définitif ET de provisoire en même temps. Un
 bouchon qui ment sur le contrat est un test qui protège le mauvais code.
+
+---
+
+## 008 — Deux secondes de réflexion coupent la parole en mains libres
+
+**Statut** : ✅ Résolu (2026-09-05, PR #15)
+**Constaté le** : 2026-09-05, pendant P-015, point 1 — **par un humain, à la voix**
+**Où** : `packages/widget/src/dictee/silence.ts`
+
+**Symptôme** — après le correctif de [007](#007--la-dictée-meurt-en-plein-milieu-et-renvoie-à-lécran-daccueil),
+la dictée tient. Mais : « ça se coupe un peu si on marque un temps de pause ». L’écoute mains
+libres se termine pendant que la personne cherche ses mots.
+
+⚠️ **Ce n’est pas le même défaut que 007, et c’est important.** 007 perdait la parole ; 008 la
+rend — l’écoute se termine proprement et le transcript arrive dans le champ. Mais elle se termine
+**trop tôt**, et quelqu’un qu’on coupe deux fois cesse de dicter.
+
+**Cause** — `APRES_MS = 2_000`, posé par défaut avant que quiconque ait dicté un vrai retour.
+⛔ Et le module déclarait, six lignes plus haut, l’exact contraire de ce que sa valeur faisait :
+
+> Un arrêt manqué coûte un clic […] Un arrêt prématuré coupe quelqu’un au milieu d’une phrase, et
+> il ne recommencera pas.
+
+Quelqu’un qui décrit un problème le reconstitue en parlant — « alors, quand je clique sur… euh…
+le bouton suivant ». Deux secondes de silence sont un temps de réflexion ordinaire.
+
+**Correctif** — `APRES_MS` passe à `5_000`, avec [D-017](../00-Projet/DECISIONS_LOG.md) qui dit
+pourquoi cinq. ⚠️ Le côté long ne coûte rien : qui a fini n’attend pas, le second clic et
+« Envoyer maintenant » sont visibles en permanence.
+
+**Ce qui l’a laissé passer** — les tests vérifiaient que le guet s’arrête **au bon moment par
+rapport à sa propre constante**, jamais que la constante était juste. Un test rejoue désormais une
+pause de réflexion de quatre secondes et exige qu’elle ne coupe pas — c’est un test de valeur
+produit, pas de mécanique.
