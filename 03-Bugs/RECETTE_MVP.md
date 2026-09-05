@@ -163,24 +163,21 @@ modèle ([D-014](../00-Projet/DECISIONS_LOG.md)).
 541 tests unitaires ne voyaient pas. C’est l’argument pour ne jamais déclarer ce point « sans
 doute bon ».
 
-## Ce qui n’avait pas pu être joué en P-014
+## Ce qui restera toujours une manipulation humaine
 
-⛔ **Les points 1 et 6 demandent un modèle**, et ce poste n’a pas de clé. Ils ne sont pas
-« probablement bons » : ils sont **non joués**, et ce document ne prétendra pas le contraire.
+Les points 1 et 6 ont été non joués pendant une journée, faute de clé de modèle — c’est réglé
+(§P-015). ⚠️ Mais une chose de cette section-là reste vraie et le restera :
 
-Ce qui manque, précisément :
+⛔ **La dictée à la voix ne s’automatise pas, et ne s’automatisera pas.** Web Speech a besoin d’un
+micro et du service de reconnaissance de Google ; un navigateur piloté n’en a ni l’un ni l’autre.
+Ce point sera toujours une manipulation humaine, dans un vrai Chrome, avec une vraie voix.
 
-- **1** — la boucle complète : le bot lit la parole, pose sa question, la personne répond, la
-  synthèse s’écrit, l’email part. Les deux bouts sont vérifiés (l’ingestion, la fiche) ; le milieu
-  ne l’est pas de bout en bout par un humain. ⚠️ `entretien:rejouer` et les tests d’intégration le
-  couvrent avec un modèle bouchon — ce n’est pas la même chose que de le voir.
-- **1 (la voix)** — ⚠️ **ne s’automatise pas, et ne s’automatisera pas.** Web Speech a besoin d’un
-  micro et du service de reconnaissance de Google ; un navigateur piloté n’en a ni l’un ni l’autre.
-  Ce point restera une manipulation humaine, dans un vrai Chrome, avec une vraie voix.
-- **6** — l’injection de prompt. Sans modèle, il n’y a rien à essayer de détourner. ⚠️ Le test
-  d’intégration de l’entretien couvre la forme de la parade ; il ne dit pas si **ce** prompt tient
-  devant **cette** tentative.
+⚠️ **Et ce n’est pas une faiblesse du harnais, c’est le harnais qui a des limites.** Les deux
+défauts les plus graves du MVP — [007](BUGS_LOG.md) et [008](BUGS_LOG.md) — sont sortis de là, et
+de nulle part ailleurs. 543 tests unitaires, 77 tests d’intégration et 8 parcours Playwright ne les
+voyaient pas : le premier parce qu’un bouchon mentait sur le contrat du vrai moteur, le second
+parce que les tests vérifiaient une constante contre elle-même.
 
-**Ce qu’il faut faire, et quand** : rejouer 1 et 6 avec une clé, avant la première mise en service
-chez un hôte. C’est une demi-heure, et c’est la dernière chose qui sépare le MVP de son premier
-utilisateur.
+⛔ **Donc : rejouer le point 1 à la voix après toute modification de `packages/widget/src/dictee/`
+ou de `ui/useDictee.ts`.** C’est cinq minutes, et c’est la seule chose qui regarde le produit
+plutôt que le code.

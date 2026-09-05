@@ -16,6 +16,12 @@ existe** : à la fin de l’entretien, une synthèse typée est produite et stoc
 verbatim garanties par le code plutôt que demandées au modèle. Il reste à la faire sortir — email,
 back-office, MCP.
 
+**Et quelqu’un a parlé.** Le 2026-09-05, un humain a ouvert la bulle dans un vrai Chrome, dicté un
+bug à la voix, répondu à la question du bot, et refermé. La note est arrivée, citations verbatim
+comprises. Il a fallu trois essais : les deux premiers ont sorti deux défauts que 543 tests
+unitaires ne voyaient pas ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 007 et 008). **Le parcours de
+référence du MVP marche de bout en bout.**
+
 | Prompt | État |
 |---|---|
 | P-001 · le squelette du monorepo | ✅ fait |
@@ -31,11 +37,13 @@ back-office, MCP.
 | P-011 · le serveur MCP | ✅ fait |
 | P-012 · l’identité signée | ✅ fait |
 | P-013 · le conteneur | ✅ fait |
-| P-014 · recette du MVP | ✅ fait — ⚠️ deux points sur huit non joués, faute de clé de modèle ([RECETTE_MVP](../03-Bugs/RECETTE_MVP.md)) |
+| P-014 · recette du MVP | ✅ fait — ⚠️ deux points sur huit non joués, faute de clé de modèle |
+| P-015 · la recette qui manquait | ✅ fait — **les huit points au vert** ([RECETTE_MVP](../03-Bugs/RECETTE_MVP.md)), quatre défauts corrigés ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 005 à 008) |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
-**La suite est écrite** : [05-Prompts/APRES-MVP.md] — neuf prompts, P-015 à P-023. Le lot 7
+**La suite est écrite** : [05-Prompts/APRES-MVP.md] — neuf prompts, P-015 à P-023, dont le
+premier est joué. Le lot 7
 finit un MVP qui n’est pas tout à fait fini (la recette non jouée, les deux défauts contournés
 de [BUGS_LOG](../03-Bugs/BUGS_LOG.md)), le lot 8 le met en service, le lot 9 est l’ordre de
 valeur ci-dessous. ⛔ Rien du lot 9 ne se commence avant qu’un vrai collaborateur ait parlé
