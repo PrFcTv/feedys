@@ -46,6 +46,11 @@ export const VARIABLES_RECOMMANDEES: ReadonlyArray<{
   { nom: 'FEEDYS_EMAIL_A', consequence: 'la note ne part par email pour personne' },
   { nom: 'FEEDYS_MCP_JETON', consequence: 'l’API MCP répond 503 et ne sert rien' },
   { nom: 'FEEDYS_VERSION', consequence: 'le pied de back-office affiche « dev »' },
+  {
+    nom: 'DATABASE_URL_MIGRATIONS',
+    consequence:
+      'les migrations tournent avec le rôle de service — hebergement.md §Le rôle de connexion',
+  },
 ]
 
 /**
@@ -129,5 +134,76 @@ export function messageWidget(verdict: VerdictWidget): string | undefined {
     `Feedys ne peut pas démarrer — widget.js pèse ${enKo(verdict.octets)} gzip, ` +
     `au-dessus du budget de ${enKo(BUDGET_WIDGET_OCTETS)} (01-Specs/widget.md §4).\n` +
     'Un dépassement se décide, il ne se glisse pas dans un déploiement.'
+  )
+}
+
+/**
+ * Ce que le rôle de connexion peut, et ce que ça implique pour les GRANT.
+ *
+ * ⚠️ POURQUOI ÇA SE VÉRIFIE AU DÉMARRAGE. [D-009] refuse les `DELETE` par les
+ *    privilèges Postgres plutôt que par une règle de code — « c’est Postgres qui
+ *    doit dire non ». Mais un propriétaire de table contourne tous les GRANT, et
+ *    ⛔ **rien ne le signalerait** : pas une erreur, pas un test rouge. Le
+ *    garde-fou serait là, inerte, et on le croirait actif.
+ *
+ * ⛔ CE VERDICT N’EMPÊCHE JAMAIS DE DÉMARRER. Un poste de développement est
+ *    légitimement en rôle unique, et la CI aussi. Il dit, il ne refuse pas.
+ */
+export interface EtatRole {
+  /** `current_user` — sans danger dans un journal, contrairement à l’URL. */
+  readonly role: string
+  readonly superutilisateur: boolean
+  readonly membreDuGroupe: boolean
+  /** Les tables du schéma dont ce rôle est propriétaire, ou membre du propriétaire. */
+  readonly tablesPossedees: number
+  readonly tables: number
+}
+
+export type VerdictRole =
+  | { readonly separe: true; readonly role: string; readonly tables: number }
+  | {
+      readonly separe: false
+      readonly role: string
+      readonly motif: 'superutilisateur' | 'proprietaire' | 'hors_groupe'
+    }
+
+/**
+ * ⚠️ L’ordre des tests n’est pas indifférent : un superutilisateur EST aussi
+ *    propriétaire de tout, et le dire « propriétaire » ferait chercher au mauvais
+ *    endroit. Le motif doit nommer ce qu’il faut corriger.
+ */
+export function verdictRole(etat: EtatRole): VerdictRole {
+  if (etat.superutilisateur) return { separe: false, role: etat.role, motif: 'superutilisateur' }
+  if (etat.tablesPossedees > 0) return { separe: false, role: etat.role, motif: 'proprietaire' }
+  if (!etat.membreDuGroupe) return { separe: false, role: etat.role, motif: 'hors_groupe' }
+
+  return { separe: true, role: etat.role, tables: etat.tables }
+}
+
+/**
+ * La ligne de journal du contrôle de rôle.
+ *
+ * ⛔ Elle ne contient jamais `DATABASE_URL` ni un fragment d’URL — elle porte un
+ *    mot de passe. Le nom du rôle, lui, est sans danger et c’est justement ce
+ *    qu’on a besoin de lire.
+ */
+export function messageRole(verdict: VerdictRole): string {
+  if (verdict.separe) {
+    return (
+      `rôle de connexion · ${verdict.role} — membre de feedys_app, propriétaire d’aucune ` +
+      `des ${verdict.tables} tables. Les GRANT s’appliquent.`
+    )
+  }
+
+  const cause = {
+    superutilisateur: 'il est superutilisateur',
+    proprietaire: 'il est propriétaire de ses tables',
+    hors_groupe: 'il n’est pas membre de feedys_app',
+  }[verdict.motif]
+
+  return (
+    `rôle de connexion · ${verdict.role} — ${cause}. ` +
+    '⛔ Les GRANT ne mordent pas : « aucun DELETE nulle part » n’est PAS tenu par la base.\n' +
+    '  La procédure est dans 04-Architecture/hebergement.md §Le rôle de connexion.'
   )
 }

@@ -9,6 +9,7 @@
  * DATABASE_URL renseignée (.env.local sur le poste, service `postgres` en CI).
  */
 import { spawnSync } from 'node:child_process'
+import { readdirSync } from 'node:fs'
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -23,6 +24,16 @@ import { urlBaseDessai } from '../../../../tests/base-dessai'
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const RACINE = path.resolve(ICI, '../../../..')
 const DOSSIER_MIGRATIONS = path.join(RACINE, 'db', 'migrations')
+
+/**
+ * ⚠️ Lues sur le disque, pas recopiées à la main : la liste était en dur, et
+ *    chaque migration nouvelle faisait rougir trois tests pour la mauvaise
+ *    raison — ils testaient le nombre de fichiers, pas le comportement du
+ *    runner.
+ */
+const MIGRATIONS_DU_DEPOT = readdirSync(DOSSIER_MIGRATIONS)
+  .filter((nom) => nom.endsWith('.sql'))
+  .sort()
 
 const ADMIN =
   urlBaseDessai()
@@ -120,7 +131,7 @@ describe('le socle, appliqué sur une base vierge', () => {
   it('applique les migrations du dépôt, dans l’ordre des noms', async () => {
     const resultat = await appliquerMigrations(base.client, DOSSIER_MIGRATIONS)
 
-    expect(resultat.appliquees).toEqual(['0001_socle.sql', '0002_identite.sql'])
+    expect(resultat.appliquees).toEqual(MIGRATIONS_DU_DEPOT)
     expect(resultat.deja).toEqual([])
   })
 
@@ -193,10 +204,10 @@ describe('le socle, appliqué sur une base vierge', () => {
     const resultat = await appliquerMigrations(base.client, DOSSIER_MIGRATIONS)
 
     expect(resultat.appliquees).toEqual([])
-    expect(resultat.deja).toEqual(['0001_socle.sql', '0002_identite.sql'])
+    expect(resultat.deja).toEqual(MIGRATIONS_DU_DEPOT)
 
     const { rows } = await base.client.query<{ nom: string }>('select nom from migrations')
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(MIGRATIONS_DU_DEPOT.length)
 
     const { rows: tables } = await base.client.query<{ n: string }>(
       `select count(*)::text as n from information_schema.tables
@@ -334,7 +345,7 @@ describe('la divergence entre la base et le dépôt', () => {
     const { rows } = await base.client.query<{ n: string }>(
       `select count(*)::text as n from migrations`,
     )
-    expect(rows[0]?.n).toBe('2')
+    expect(rows[0]?.n).toBe(String(MIGRATIONS_DU_DEPOT.length))
   })
 })
 

@@ -35,7 +35,8 @@ remarque pas côté serveur : il se remarque chez les quatre hôtes, en même te
 
 | Variable | Rôle |
 |---|---|
-| `DATABASE_URL` | Postgres |
+| `DATABASE_URL` | Postgres — le rôle qui **sert**. ⛔ Pas le propriétaire des tables : voir §Le rôle de connexion |
+| `DATABASE_URL_MIGRATIONS` | Postgres — le rôle qui **migre**, donc le propriétaire. ⚠️ Facultative : sans elle, on migre avec `DATABASE_URL`, ce qui est le cas d’un poste et de la CI |
 | `FEEDYS_URL_PUBLIQUE` | l’origine servie — sert à composer les liens dans les emails |
 | `ANTHROPIC_API_KEY` | le modèle |
 | `FEEDYS_MODELE` | l’identifiant du modèle. **Explicite, jamais un défaut implicite** — il est journalisé dans chaque synthèse |
@@ -57,7 +58,7 @@ endroit, testé.
 
 ⚠️ **Les autres dégradent quelque chose de nommé, et le démarrage le dit** : sans SMTP la note ne
 part pour personne, sans `FEEDYS_MCP_JETON` l’API MCP répond 503, sans `FEEDYS_VERSION` le pied de
-back-office affiche « dev ». Aucune n’empêche de servir — **un retour qui arrive sans email est un
+back-office affiche « dev », sans `DATABASE_URL_MIGRATIONS` on migre avec le rôle de service. Aucune n’empêche de servir — **un retour qui arrive sans email est un
 retour reçu**, lisible au back-office et par MCP. Refuser de démarrer pour ça perdrait de la parole
 au nom d’un confort.
 
@@ -102,20 +103,64 @@ le script — avec une erreur qui ne ressemble à rien de reconnaissable, chez l
 tous les `GRANT` : le garde-fou « aucun `DELETE` nulle part » ne vaudrait plus rien, et rien ne le
 signalerait ([D-009](../00-Projet/DECISIONS_LOG.md)).
 
+**Deux rôles, deux moments** ([D-019](../00-Projet/DECISIONS_LOG.md)). Migrer crée des tables : ça
+demande le propriétaire. Servir n’en demande pas, et ne doit pas l’avoir.
+
+| Variable | Rôle | Quand |
+|---|---|---|
+| `DATABASE_URL_MIGRATIONS` | le propriétaire | au démarrage, le temps des migrations |
+| `DATABASE_URL` | un membre de `feedys_app` | tout le reste du temps |
+
 `0001_socle.sql` crée le rôle de groupe `feedys_app` et ses privilèges. Il ne crée **pas** le rôle
 de login : son nom et son mot de passe sont propres à chaque installation et n’ont rien à faire
-dans un dépôt public. Deux lignes, une fois, dans `psql` :
+dans un dépôt public.
+
+### La procédure, une fois, dans `psql`
+
+⚠️ En production la base ne publie aucun port :
+`docker compose -f docker-compose.production.yml exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"`.
 
 ```sql
-create role feedys_service login password '…' in role feedys_app;
-alter database feedys owner to feedys_proprietaire;  -- si ce n’est pas déjà le cas
+-- Le rôle qui SERT. ⚠️ `inherit` explicite : sans lui, il faudrait un `set role`
+-- à chaque connexion, et les GRANT de feedys_app ne s’appliqueraient pas.
+create role feedys_service login password '…' inherit in role feedys_app;
 ```
 
-Puis `DATABASE_URL` se connecte avec `feedys_service`. ⚠️ **Les migrations, elles, ont besoin du
-propriétaire** — elles créent des tables. Sur un déploiement à un conteneur, le plus simple est de
-laisser le démarrage migrer avec un rôle propriétaire et de n’ouvrir `feedys_service` que le jour
-où la séparation devient utile ; ce qui prouve le garde-fou aujourd’hui, c’est le test
-d’intégration, qui fait `set role feedys_app` avant de tenter un `DELETE`.
+Puis, dans l’environnement du conteneur (`.env.production`, hors dépôt) :
+
+```
+DATABASE_URL=postgresql://feedys_service:…@postgres:5432/feedys
+DATABASE_URL_MIGRATIONS=postgresql://feedys_proprietaire:…@postgres:5432/feedys
+```
+
+⛔ **Les deux sont obligatoires dès qu’on sépare**, et ce n’est pas un conseil : un rôle de service
+ne peut pas migrer **du tout**, même sur une base déjà à jour. Le runner commence par un
+`create table if not exists`, et Postgres vérifie le privilège `CREATE` sur le schéma **avant** de
+regarder si la table existe. Le démarrage rendrait alors « permission denied for schema public »
+— il ajoute désormais la ligne qui dit quoi faire.
+
+### Ce que le démarrage en dit
+
+⚠️ Le démarrage annonce le rôle de service dans ses journaux, et **il ne refuse jamais de démarrer
+pour ça** — un poste et la CI sont légitimement en rôle unique :
+
+```
+Feedys · rôle de connexion · feedys_service — membre de feedys_app, propriétaire d’aucune des 8 tables. Les GRANT s’appliquent.
+Feedys ⚠️  rôle de connexion · feedys — il est superutilisateur. ⛔ Les GRANT ne mordent pas…
+```
+
+C’est la seule façon de savoir si le garde-fou est actif : sans cette ligne, un `DATABASE_URL` mal
+configuré ne produit **ni erreur, ni test rouge**.
+
+### Ce qui le prouve
+
+`apps/serveur/infra/base/roles.integration.test.ts` crée un vrai rôle de login membre de
+`feedys_app`, **s’y connecte**, et vérifie qu’un `DELETE` échoue sur les sept tables, qu’un `UPDATE`
+sur `audit` échoue, qu’un `INSERT` passe, et que la sonde peut lire le registre des migrations.
+
+⚠️ Le test voisin de `migrations.integration.test.ts` fait un `set role` depuis la session du
+propriétaire : c’est probant sur les GRANT du groupe, et ça ne dit rien de l’authentification, de
+l’héritage, ni du fait qu’un rôle **membre du propriétaire** contournerait tout.
 
 ## La sonde — `GET /sante`
 

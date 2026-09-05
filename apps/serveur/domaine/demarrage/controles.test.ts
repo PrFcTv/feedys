@@ -7,6 +7,8 @@ import {
   messageVariablesManquantes,
   messageWidget,
   variablesManquantes,
+  messageRole,
+  verdictRole,
   verdictWidget,
 } from './controles'
 
@@ -26,6 +28,7 @@ const COMPLET: Record<string, string> = {
   FEEDYS_EMAIL_A: 'dev@exemple.fr',
   FEEDYS_MCP_JETON: 'jeton-de-test',
   FEEDYS_VERSION: '1.0.0',
+  DATABASE_URL_MIGRATIONS: 'postgresql://feedys_proprietaire:mot-de-passe-invente@base:5432/feedys',
 }
 
 describe('variablesManquantes', () => {
@@ -110,5 +113,69 @@ describe('enKo', () => {
     [61_440, '60.0 Ko'],
   ])('rend %i octets comme « %s »', (octets, attendu) => {
     expect(enKo(octets)).toBe(attendu)
+  })
+})
+
+describe('verdictRole — le garde-fou de D-009 mord-il vraiment ?', () => {
+  const SEPARE = {
+    role: 'feedys_service',
+    superutilisateur: false,
+    membreDuGroupe: true,
+    tablesPossedees: 0,
+    tables: 8,
+  }
+
+  it('dit séparé quand le rôle ne possède rien et hérite du groupe', () => {
+    expect(verdictRole(SEPARE)).toEqual({ separe: true, role: 'feedys_service', tables: 8 })
+  })
+
+  it('⛔ un superutilisateur n’est PAS séparé — il contourne tout', () => {
+    const verdict = verdictRole({ ...SEPARE, superutilisateur: true })
+
+    expect(verdict.separe).toBe(false)
+    expect(verdict).toMatchObject({ motif: 'superutilisateur' })
+  })
+
+  it('⛔ un propriétaire de table n’est PAS séparé', () => {
+    const verdict = verdictRole({ ...SEPARE, tablesPossedees: 8 })
+
+    expect(verdict).toMatchObject({ separe: false, motif: 'proprietaire' })
+  })
+
+  it('⚠️ une SEULE table possédée suffit à dire non', () => {
+    expect(verdictRole({ ...SEPARE, tablesPossedees: 1 })).toMatchObject({ separe: false })
+  })
+
+  it('⚠️ un superutilisateur est annoncé comme tel, pas comme propriétaire', () => {
+    // Il est les deux ; le motif doit nommer ce qu’il faut corriger.
+    const verdict = verdictRole({ ...SEPARE, superutilisateur: true, tablesPossedees: 8 })
+
+    expect(verdict).toMatchObject({ motif: 'superutilisateur' })
+  })
+
+  it('signale un rôle qui ne possède rien mais n’hérite pas du groupe', () => {
+    expect(verdictRole({ ...SEPARE, membreDuGroupe: false })).toMatchObject({
+      separe: false,
+      motif: 'hors_groupe',
+    })
+  })
+})
+
+describe('messageRole', () => {
+  it('nomme le rôle — c’est justement ce qu’on a besoin de lire', () => {
+    const message = messageRole({ separe: true, role: 'feedys_service', tables: 8 })
+
+    expect(message).toContain('feedys_service')
+    expect(message).toContain('8 tables')
+  })
+
+  it('⛔ ne contient JAMAIS d’URL — elle porte un mot de passe', () => {
+    for (const motif of ['superutilisateur', 'proprietaire', 'hors_groupe'] as const) {
+      const message = messageRole({ separe: false, role: 'feedys', motif })
+
+      expect(message).not.toContain('postgresql://')
+      expect(message).not.toContain('DATABASE_URL')
+      expect(message).toContain('hebergement.md')
+    }
   })
 })
