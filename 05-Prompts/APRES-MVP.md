@@ -14,7 +14,7 @@ ce qu’on imagine.
 
 | Prompt | Ce que ça referme | État |
 |---|---|---|
-| P-015 · la recette qui manque | [RECETTE_MVP] points 1 et 6 | ⏳ à faire |
+| P-015 · la recette qui manque | [RECETTE_MVP] points 1 et 6, [BUGS_LOG] 005 à 008 | ✅ fait |
 | P-016 · le filet de clôture | [BUGS_LOG] 003, T-006 | ⏳ à faire |
 | P-017 · ce que le widget dit quand ça casse | [BUGS_LOG] 004, T-007 | ⏳ à faire |
 | P-018 · le rôle de connexion | T-004 | ⏳ à faire |
@@ -34,7 +34,13 @@ ce qu’on imagine.
 
 # Lot 7 — Finir le MVP pour de vrai
 
-## P-015 · La recette qui manque
+## P-015 · La recette qui manque — ✅ fait
+
+⚠️ **Joué le 2026-09-05.** Les huit points de [RECETTE_MVP] sont au vert. Le prompt a rapporté
+bien plus que prévu : quatre défauts, dont deux que seule la voix pouvait trouver —
+[BUGS_LOG] 005 (`.env.local` invisible pour `pnpm dev`), 006 (les tests visaient le Postgres d’un
+autre projet), 007 (la dictée mourait en plein milieu) et 008 (deux secondes de réflexion
+coupaient la parole). Le prompt est conservé tel quel : il resservira à chaque recette.
 
 **Objectif** — jouer les deux points que P-014 n’a pas pu jouer, faute de clé de modèle. C’est la
 dernière chose qui sépare le MVP de son premier utilisateur, et c’est une demi-heure.

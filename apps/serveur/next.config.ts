@@ -16,6 +16,28 @@ import { fileURLToPath } from 'node:url'
 
 const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
+/**
+ * ⛔ LE `.env.local` DU DÉPÔT EST À LA RACINE, ET IL N’Y EN A QU’UN.
+ *
+ * Next résout `.env.local` depuis le dossier de l’application — ici
+ * `apps/serveur/` — alors que le README, `outils/migrer.ts`,
+ * `outils/creer-produit.ts`, `outils/entretien-rejouer.ts`, `prisma.config.ts`
+ * et `packages/widget/demo/serveur.ts` le lisent tous À LA RACINE. Sans cette
+ * ligne, `pnpm dev` démarrait sans une seule variable et servait un `/sante`
+ * dégradé, pendant que `pnpm db:migrate` marchait très bien : deux endroits
+ * pour un même fichier, et personne pour le dire
+ * (03-Bugs/BUGS_LOG.md 005).
+ *
+ * ⚠️ Sans effet en conteneur : il n’y a pas de `.env.local` dans l’image, et
+ *    les variables y viennent de l’environnement (hebergement.md).
+ */
+try {
+  process.loadEnvFile(path.join(RACINE, '.env.local'))
+} catch {
+  // Pas de fichier : les variables viennent de l’environnement. C’est le cas
+  // du conteneur, et celui de la CI.
+}
+
 const config: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: RACINE,

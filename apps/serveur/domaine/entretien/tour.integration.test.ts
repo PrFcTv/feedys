@@ -27,12 +27,13 @@ import type { TourEntretien } from './modele'
 import { modeleBouchon } from './modele'
 import type { PortsTour } from './tour'
 import { MAX_RELANCES, jouerTour, terminerEntretien } from './tour'
+import { urlBaseDessai } from '../../../../tests/base-dessai'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const RACINE = path.resolve(ICI, '../../../..')
 const DOSSIER_MIGRATIONS = path.join(RACINE, 'db', 'migrations')
 
-const ADMIN = process.env['DATABASE_URL'] ?? 'postgresql://feedys:feedys@localhost:5432/feedys'
+const ADMIN = urlBaseDessai()
 
 const DOMAINE = 'victoria.exemple.fr'
 const CLE = 'fdy_pub_essai_entretien'

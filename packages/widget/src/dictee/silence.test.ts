@@ -1,7 +1,7 @@
 /**
  * ⚠️ Le guet est pur : il reçoit un niveau et un horodatage, il rend un verdict.
- *    C’est ce qui permet de vérifier « deux secondes de silence » sans attendre
- *    deux secondes, et de rejouer un open space bruyant à volonté.
+ *    C’est ce qui permet de vérifier « cinq secondes de silence » sans attendre
+ *    cinq secondes, et de rejouer un open space bruyant à volonté.
  */
 import { describe, expect, it } from 'vitest'
 
@@ -25,13 +25,13 @@ function tenir(niveau: number, secondes: number): number[] {
 }
 
 describe('guetterSilence', () => {
-  it('s’arrête deux secondes après la fin de la parole', () => {
-    const arret = jouer([...tenir(0.001, 0.5), ...tenir(0.2, 1), ...tenir(0.001, 3)])
+  it('s’arrête cinq secondes après la fin de la parole', () => {
+    const arret = jouer([...tenir(0.001, 0.5), ...tenir(0.2, 1), ...tenir(0.001, 6)])
 
     expect(arret).toBeDefined()
-    // Parole finie à 1,5 s ; l’arrêt tombe à 3,5 s, à une image près.
-    expect(arret).toBeGreaterThanOrEqual(3_450)
-    expect(arret).toBeLessThanOrEqual(3_600)
+    // Parole finie à 1,5 s ; l’arrêt tombe à 6,5 s, à une image près.
+    expect(arret).toBeGreaterThanOrEqual(6_450)
+    expect(arret).toBeLessThanOrEqual(6_600)
   })
 
   it('⛔ ne s’arrête pas avant que quelqu’un ait parlé — on cherche ses mots', () => {
@@ -47,26 +47,28 @@ describe('guetterSilence', () => {
     // Un fond à 0,04 — bruyant — puis de la parole à 0,25, puis le fond seul.
     // ⚠️ Un seuil FIXE échouerait ici : soit il ne s’arrêterait jamais, soit il
     //    prendrait le fond pour de la parole.
-    const arret = jouer([...tenir(0.04, 0.6), ...tenir(0.25, 1), ...tenir(0.04, 3)])
+    const arret = jouer([...tenir(0.04, 0.6), ...tenir(0.25, 1), ...tenir(0.04, 6)])
 
     expect(arret).toBeDefined()
-    expect(arret).toBeGreaterThanOrEqual(3_500)
+    expect(arret).toBeGreaterThanOrEqual(6_500)
   })
 
   it('⛔ ne prend pas le silence d’un bureau calme pour de la parole', () => {
     // Fond très bas, parole nette : l’arrêt doit venir, et pas plus tard.
-    const arret = jouer([...tenir(0.0005, 0.5), ...tenir(0.15, 0.8), ...tenir(0.0005, 2.5)])
+    const arret = jouer([...tenir(0.0005, 0.5), ...tenir(0.15, 0.8), ...tenir(0.0005, 6)])
 
     expect(arret).toBeDefined()
   })
 
-  it('⚠️ une pause courte entre deux phrases ne coupe pas', () => {
+  it('⚠️ une pause de réflexion entre deux phrases ne coupe pas', () => {
+    // ⚠️ Quatre secondes : « alors… le bouton… euh… ». C’est ce silence-là qui
+    //    coupait la parole à deux secondes (03-Bugs/BUGS_LOG.md 008).
     const arret = jouer([
       ...tenir(0.002, 0.5),
       ...tenir(0.2, 1),
-      ...tenir(0.002, 1.2), // on respire
+      ...tenir(0.002, 4), // on cherche ses mots
       ...tenir(0.2, 1),
-      ...tenir(0.002, 1.2), // on respire encore
+      ...tenir(0.002, 4), // on les cherche encore
       ...tenir(0.2, 1),
     ])
 
@@ -109,5 +111,38 @@ describe('guetterSilence', () => {
 
     expect(arret).toBeDefined()
     expect(arret).toBeLessThan(1_200)
+  })
+})
+
+/**
+ * ⚠️ Le délai par défaut est un ARBITRAGE, pas un réglage esthétique. Il a été
+ *    porté de deux à cinq secondes après la première dictée réelle
+ *    ([D-017](../../../../00-Projet/DECISIONS_LOG.md)) : deux secondes coupaient
+ *    quelqu’un qui cherchait ses mots, ce qui est le mode de défaillance que ce
+ *    module dit lui-même vouloir éviter.
+ */
+describe('le délai par défaut', () => {
+  const AVANT_CINQ_SECONDES = 4_500
+  const APRES_CINQ_SECONDES = 5_100
+
+  function parlerPuisSeTaire(jusqua: number): boolean {
+    const guet = guetterSilence()
+    // Calibrage dans le silence, puis un mot, puis plus rien.
+    for (let t = 0; t <= 400; t += 50) guet.observer(0, t)
+    guet.observer(0.4, 500)
+
+    let arret = false
+    for (let t = 550; t <= 500 + jusqua; t += 50) {
+      if (guet.observer(0, t)) arret = true
+    }
+    return arret
+  }
+
+  it('⛔ ne coupe pas quelqu’un qui réfléchit quatre secondes', () => {
+    expect(parlerPuisSeTaire(AVANT_CINQ_SECONDES)).toBe(false)
+  })
+
+  it('finit par s’arrêter — passé cinq secondes', () => {
+    expect(parlerPuisSeTaire(APRES_CINQ_SECONDES)).toBe(true)
   })
 })

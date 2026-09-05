@@ -102,7 +102,7 @@ monde connaît sans l’avoir appris :
 - **maintenir** pour parler, **relâcher** pour terminer ;
 - **glisser vers la gauche** pour annuler — avec le seuil et le retour visuel qui vont avec ;
 - un **clic simple** bascule en mode mains libres, pour les retours longs ; on arrête par un
-  second clic ou par deux secondes de silence.
+  second clic ou par **cinq secondes** de silence.
 
 Pendant l’écoute :
 
@@ -122,6 +122,12 @@ un seuil fixe échouerait en open space, c’est-à-dire là où le produit vit.
 on préfère **ne pas s’arrêter** que s’arrêter trop tôt : un arrêt manqué coûte un clic, un arrêt
 prématuré coupe quelqu’un au milieu d’une phrase.
 
+⛔ **Cinq secondes, et pas deux.** La valeur d’origine ne respectait pas ce biais : quelqu’un qui
+décrit un bug s’interrompt pour chercher ses mots — « alors, le bouton… euh… » — et deux secondes
+de réflexion sont ordinaires. La première dictée réelle l’a montré
+([D-017](../00-Projet/DECISIONS_LOG.md), [BUGS_LOG](../03-Bugs/BUGS_LOG.md) 008). ⚠️ Qui a fini
+n’attend pas cinq secondes : le second clic et « Envoyer maintenant » sont visibles en permanence.
+
 Au clavier :
 
 - **`Espace` maintenu** vaut l’appui, et un appui bref vaut le clic simple — donc les mains libres.
@@ -133,6 +139,34 @@ Au clavier :
 onde ni arrêt sur silence. C’est le **seul** cas où le widget dit quelque chose à ce sujet, parce
 que l’absence d’onde ressemblerait sinon à une panne. ⛔ Il ne s’excuse toujours pas : le champ
 texte est resté à un clic.
+
+#### ⛔ Chrome coupe la reconnaissance tout seul — c’est nous qui la relançons
+
+`SpeechRecognition` rend la main de lui-même après un silence, `continuous` ou pas. ⚠️ Et
+`speech-to-element` **ne le rattrape pas** : son `onend` remet un drapeau à zéro, rien de plus.
+Le dépôt a longtemps affirmé le contraire, et c’est ce qui a coûté
+[BUGS_LOG](../03-Bugs/BUGS_LOG.md) 007.
+
+Le comportement attendu, désormais tenu par des tests :
+
+- **le moteur qui rend la main est relancé**, en conservant le transcript déjà acquis. La personne
+  ne s’aperçoit de rien : elle parle, ça continue de s’écrire ;
+- ⛔ **avec un plafond** — trois relances stériles d’affilée, remis à zéro dès qu’un mot arrive.
+  Sans lui, un micro débranché ferait tourner une boucle de relances dans la page de l’hôte ;
+- passé le plafond, le widget **sort de l’écoute et rend ce qui a été capté**. ⛔ Il ne laisse
+  jamais l’écran « j’écoute » ouvert sur un moteur muet : l’onde bougerait, le micro serait allumé,
+  et plus rien ne serait transcrit. Un écran qui ment est pire qu’un écran qui s’arrête.
+
+#### ⛔ Le transcript provisoire fait partie de la parole
+
+Web Speech n’**arrête** un segment qu’aux pauses. Tant qu’il n’a rien arrêté, la phrase en cours
+vit **uniquement** dans le provisoire — celui qui s’écrit sous l’onde.
+
+⛔ **Terminer une écoute rend donc le définitif ET le provisoire**, recollés. Ne lire que le
+définitif, c’est effacer la phrase de quelqu’un au moment précis où il vient de la dire, et le
+renvoyer à l’accueil les mains vides. C’est exactement ce que le produit promet de ne jamais faire.
+
+⚠️ **Une annulation, elle, jette tout** — provisoire compris. C’est tout l’intérêt du geste.
 
 ### En entretien
 

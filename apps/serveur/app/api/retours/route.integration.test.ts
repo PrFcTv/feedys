@@ -29,12 +29,13 @@ import { chiffrer, nouvelleCleDeChiffrement } from '../../../infra/secret'
 // ⚠️ Type seul : l’import de valeur est dynamique, APRÈS que DATABASE_URL pointe
 //    sur la base jetable.
 import type * as ModuleRoute from './route'
+import { urlBaseDessai } from '../../../../../tests/base-dessai'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const RACINE = path.resolve(ICI, '../../../../..')
 const DOSSIER_MIGRATIONS = path.join(RACINE, 'db', 'migrations')
 
-const ADMIN = process.env['DATABASE_URL'] ?? 'postgresql://feedys:feedys@localhost:5432/feedys'
+const ADMIN = urlBaseDessai()
 
 const DOMAINE = 'victoria.exemple.fr'
 const ORIGINE = `https://${DOMAINE}`

@@ -29,12 +29,13 @@ import { identifiant } from '../../infra/identifiants'
 import { etiquettesDe, produireSynthese } from './produire'
 import type { Synthese } from './schema'
 import { analyserSynthese } from './schema'
+import { urlBaseDessai } from '../../../../tests/base-dessai'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const RACINE = path.resolve(ICI, '../../../..')
 const DOSSIER_MIGRATIONS = path.join(RACINE, 'db', 'migrations')
 
-const ADMIN = process.env['DATABASE_URL'] ?? 'postgresql://feedys:feedys@localhost:5432/feedys'
+const ADMIN = urlBaseDessai()
 
 const DOMAINE = 'victoria.exemple.fr'
 const CLE = 'fdy_pub_essai_synthese'

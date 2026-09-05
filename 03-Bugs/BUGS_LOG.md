@@ -137,3 +137,177 @@ dégradé ; ça se décide, ça ne se glisse pas dans une PR de recette.
 
 **Ce qui l’a laissé passer** — aucun test ne regarde le widget dans l’état « entretien sans
 carte ». Le cas n’existe que quand le modèle tombe.
+
+---
+
+## 005 — `.env.local` à la racine est invisible pour `pnpm dev`
+
+**Statut** : ✅ Résolu (2026-09-05, PR #15)
+**Constaté le** : 2026-09-05, pendant P-015
+**Où** : `apps/serveur/next.config.ts`
+
+**Symptôme** — la séquence « Démarrer » du README, suivie à la lettre, ne produit pas un
+serveur qui fonctionne. `cp .env.example .env.local`, `pnpm dev`, et :
+
+```
+Feedys ⚠️  [variables] Feedys ne peut pas démarrer — 9 variable(s) obligatoire(s)
+absente(s) : DATABASE_URL, FEEDYS_URL_PUBLIQUE, ANTHROPIC_API_KEY, FEEDYS_MODELE, …
+GET /sante 503  {"etat":"degrade","base":"injoignable","migrations":"inconnu"}
+```
+
+⚠️ Et pendant ce temps `pnpm db:migrate` marche parfaitement. C’est ce qui rend le défaut
+déroutant : la moitié des outils voit le fichier, l’autre non.
+
+**Cause** — **deux endroits pour un même fichier.** `outils/migrer.ts`, `outils/creer-produit.ts`,
+`outils/entretien-rejouer.ts`, `prisma.config.ts` et `packages/widget/demo/serveur.ts` appellent
+tous `process.loadEnvFile()` sur **la racine du dépôt**. Next, lui, résout `.env.local` depuis le
+dossier de l’application — `apps/serveur/`. Il n’y avait rien à cet endroit-là, et Next ne s’en
+plaint pas : un fichier d’environnement absent n’est pas une erreur.
+
+⚠️ Exporter les variables dans le shell ne sauvait rien non plus : `turbo` 2 filtre
+l’environnement des tâches, et aucune clé `env`/`globalEnv` n’est déclarée dans `turbo.json`.
+
+**Correctif** — `next.config.ts` charge le `.env.local` **de la racine**. La racine reste donc le
+seul endroit où ce fichier existe, ce qui était déjà ce que disait le README : le correctif rend
+la documentation vraie plutôt que de la changer. Sans effet en conteneur — il n’y a pas de
+`.env.local` dans l’image, et `try/catch` couvre son absence.
+
+⛔ L’autre voie — poser un second `.env.local` dans `apps/serveur/` — a été écartée : deux copies
+d’un fichier de secrets divergent, et la divergence se découvre en production.
+
+**Ce qui l’a laissé passer** — la recette de P-014 s’est jouée **contre le conteneur**, où les
+variables viennent de `--env-file`. Personne n’avait démarré `pnpm dev` contre une vraie base
+depuis que la liste des variables obligatoires existe. `/sante` le disait pourtant : aucun test
+ne le lisait en développement.
+
+---
+
+## 006 — Les tests d’intégration visent le premier Postgres venu
+
+**Statut** : ✅ Résolu (2026-09-05, PR #15)
+**Constaté le** : 2026-09-05, pendant P-015
+**Où** : les sept `*.integration.test.ts`, et `playwright.config.ts`
+
+**Symptôme** — `pnpm test:integration` sur un poste correctement configuré :
+
+```
+error: password authentication failed for user "feedys"
+ Test Files  7 failed (7)
+      Tests  77 skipped (77)
+```
+
+**Cause** — huit fichiers portaient la même ligne recopiée :
+
+```ts
+const ADMIN = process.env['DATABASE_URL'] ?? 'postgresql://feedys:feedys@localhost:5432/feedys'
+```
+
+⚠️ vitest ne charge **aucun** `.env.local`. Le repli ne s’appliquait donc pas « en dernier
+recours » : il s’appliquait **à tous les coups** sur un poste. Et il visait `localhost:5432`,
+c’est-à-dire le premier Postgres venu — sur le poste où le défaut est sorti, celui d’un **autre
+projet**, Feedys écoutant sur 5434.
+
+⛔ **Ce qui rend ce défaut grave n’est pas l’échec.** Ces tests font `create database` puis
+`drop database` sur la connexion d’administration. Ils ne l’ont pas fait sur la base d’à côté
+uniquement parce que le mot de passe ne concordait pas. Un repli silencieux vers un hôte qu’on ne
+contrôle pas est pire qu’une variable absente : l’absence se voit, le repli travaille.
+
+**Correctif** — `tests/base-dessai.ts` : `urlBaseDessai()` **échoue franchement**, avec un message
+qui dit quoi faire et prévient que le port n’est pas forcément 5432. `tests/env-integration.ts`,
+branché en `setupFiles`, charge le `.env.local` de la racine avant le premier test. Les huit
+répliques de la ligne sont supprimées.
+
+**Ce qui l’a laissé passer** — la CI pose `DATABASE_URL` dans l’environnement du job : le repli
+n’y sert jamais, et il était donc invisible là où on regarde. `tests/base-dessai.test.ts` lit
+désormais **le texte des huit fichiers** et rougit si la ligne revient — parce que le défaut
+n’était pas une valeur fausse, c’était une ligne recopiée huit fois.
+
+---
+
+## 007 — La dictée meurt en plein milieu et renvoie à l’écran d’accueil
+
+**Statut** : ✅ Résolu (2026-09-05, PR #15)
+**Constaté le** : 2026-09-05, pendant P-015, point 1 — **par un humain, à la voix**
+**Où** : `packages/widget/src/dictee/reconnaissance.ts`, `packages/widget/src/ui/useDictee.ts`
+
+**Symptôme** — « Je clique, ça se lance, je parle, et ça finit par s’arrêter en plein milieu. Ça
+revient sur le menu d’accueil. » La parole est perdue : ni transcript, ni retour, rien.
+
+**Cause** — deux défauts qui se composent, et il fallait les deux pour produire exactement ça.
+
+**① `speech-to-element` ne relance pas Chrome, contrairement à ce que ce dépôt affirmait.**
+L’en-tête de `reconnaissance.ts` disait : « Ce qu’elle nous apporte vraiment, et qui justifie la
+dépendance : Chrome coupe `SpeechRecognition` tout seul après un silence, et il faut le relancer
+sans perdre ce qui précède. » C’est faux. Dans `dist/index.js` :
+
+```js
+this._service.onend = () => { this._stopping = !1 }
+```
+
+Rien d’autre. Aucun `start()` derrière. Le drapeau `isRestarting` de la bibliothèque appartient à
+son mode « élément », qu’on n’utilise pas — délibérément, pour ne pas poser d’écouteurs sur le
+document de l’hôte. Et `useDictee` passait `surFin: () => undefined`. Chrome coupait, personne ne
+relançait : le micro restait ouvert, l’onde continuait de bouger, et plus un mot n’était transcrit.
+⚠️ **L’écran mentait** — il avait l’air d’écouter.
+
+**② `terminer()` jetait le transcript provisoire.** Web Speech n’arrête un segment qu’aux pauses.
+Tant qu’il n’a rien arrêté, **la phrase entière vit dans le provisoire** — et `terminer()` ne
+lisait que `acquis.current`, qui ne reçoit que du définitif. Quand le guet de silence terminait
+l’écoute mains libres après ①, `acquis` était vide : `surTranscript` n’était pas appelé, le
+panneau revenait à l’accueil, et la parole disparaissait.
+
+**Correctif** — la relance est écrite **chez nous**, dans `dicter()` : sur `onStop`, si ce n’est
+pas nous qui avons arrêté, on redémarre le moteur en conservant le transcript. ⛔ Avec un plafond
+de trois relances stériles d’affilée, remis à zéro dès qu’un mot arrive — sans quoi un micro
+débranché ferait tourner une boucle dans la page de l’hôte. Passé ce plafond, `surFin` prévient la
+coquille, qui **termine l’écoute et rend ce qui a été capté** plutôt que de laisser un écran qui
+n’écoute plus.
+
+Et `useDictee` garde le provisoire dans un `ref`, recollé au définitif au moment de terminer.
+⚠️ Une **annulation**, elle, continue de tout jeter, provisoire compris : c’est tout l’intérêt du
+geste.
+
+**Ce qui l’a laissé passer** — deux choses, et la seconde est la plus instructive.
+
+D’abord, aucun test ne rejouait « Chrome rend la main tout seul » : `onStop` n’était jamais
+déclenché nulle part.
+
+Ensuite, **le faux moteur de `ui/dictee.test.tsx` ne respectait pas le contrat du vrai.** Son
+`murmurer()` appelait `surTexte('', provisoire)` — il remettait le définitif à vide. Le vrai
+`dicter()` rend toujours le transcript arrêté **depuis le début**. Le faux rendait donc le défaut
+② strictement indétectable : il n’y avait jamais de définitif ET de provisoire en même temps. Un
+bouchon qui ment sur le contrat est un test qui protège le mauvais code.
+
+---
+
+## 008 — Deux secondes de réflexion coupent la parole en mains libres
+
+**Statut** : ✅ Résolu (2026-09-05, PR #15)
+**Constaté le** : 2026-09-05, pendant P-015, point 1 — **par un humain, à la voix**
+**Où** : `packages/widget/src/dictee/silence.ts`
+
+**Symptôme** — après le correctif de [007](#007--la-dictée-meurt-en-plein-milieu-et-renvoie-à-lécran-daccueil),
+la dictée tient. Mais : « ça se coupe un peu si on marque un temps de pause ». L’écoute mains
+libres se termine pendant que la personne cherche ses mots.
+
+⚠️ **Ce n’est pas le même défaut que 007, et c’est important.** 007 perdait la parole ; 008 la
+rend — l’écoute se termine proprement et le transcript arrive dans le champ. Mais elle se termine
+**trop tôt**, et quelqu’un qu’on coupe deux fois cesse de dicter.
+
+**Cause** — `APRES_MS = 2_000`, posé par défaut avant que quiconque ait dicté un vrai retour.
+⛔ Et le module déclarait, six lignes plus haut, l’exact contraire de ce que sa valeur faisait :
+
+> Un arrêt manqué coûte un clic […] Un arrêt prématuré coupe quelqu’un au milieu d’une phrase, et
+> il ne recommencera pas.
+
+Quelqu’un qui décrit un problème le reconstitue en parlant — « alors, quand je clique sur… euh…
+le bouton suivant ». Deux secondes de silence sont un temps de réflexion ordinaire.
+
+**Correctif** — `APRES_MS` passe à `5_000`, avec [D-017](../00-Projet/DECISIONS_LOG.md) qui dit
+pourquoi cinq. ⚠️ Le côté long ne coûte rien : qui a fini n’attend pas, le second clic et
+« Envoyer maintenant » sont visibles en permanence.
+
+**Ce qui l’a laissé passer** — les tests vérifiaient que le guet s’arrête **au bon moment par
+rapport à sa propre constante**, jamais que la constante était juste. Un test rejoue désormais une
+pause de réflexion de quatre secondes et exige qu’elle ne coupe pas — c’est un test de valeur
+produit, pas de mécanique.

@@ -21,12 +21,13 @@ import { identifiant } from '../identifiants'
 import type { DepotBackOffice } from './depot-bo'
 import { creerDepotBackOffice } from './depot-bo'
 import { appliquerMigrations } from './migrations'
+import { urlBaseDessai } from '../../../../tests/base-dessai'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const RACINE = path.resolve(ICI, '../../../..')
 const DOSSIER_MIGRATIONS = path.join(RACINE, 'db', 'migrations')
 
-const ADMIN = process.env['DATABASE_URL'] ?? 'postgresql://feedys:feedys@localhost:5432/feedys'
+const ADMIN = urlBaseDessai()
 
 /** ⛔ Inventée. Jamais un vrai retour copié d’une base (CLAUDE.md §Secrets). */
 const SYNTHESE: Synthese = {

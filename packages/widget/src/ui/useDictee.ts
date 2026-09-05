@@ -82,6 +82,16 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
   const guet = useRef<Guet | null>(null)
   const lireNiveau = useRef<() => number>(SANS_SON)
   const acquis = useRef('')
+  /**
+   * ⚠️ Ce que le moteur entend SANS L’AVOIR ENCORE ARRÊTÉ.
+   *
+   * ⛔ Il fait partie du transcript, et ce n’est pas un détail : Web Speech
+   *    n’arrête un segment qu’aux pauses, donc une phrase entamée vit ici et
+   *    nulle part ailleurs. Le lire au moment de terminer est ce qui évite de
+   *    renvoyer quelqu’un à l’accueil en lui effaçant sa phrase
+   *    ([BUGS_LOG](../../../../03-Bugs/BUGS_LOG.md) 007).
+   */
+  const enCours = useRef('')
   /** ⚠️ Une écoute annulée ne doit pas être ressuscitée par un micro qui s’ouvre en retard. */
   const generation = useRef(0)
 
@@ -96,6 +106,7 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
     micro.current = null
     guet.current = null
     lireNiveau.current = SANS_SON
+    enCours.current = ''
     setEcoute(null)
     setProvisoire('')
     setDuSon(false)
@@ -103,12 +114,19 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
   }, [])
 
   const terminer = useCallback(() => {
-    const transcript = acquis.current.trim()
+    const transcript = recoller(acquis.current, enCours.current)
     fermer()
     setDefinitif('')
     acquis.current = ''
     if (transcript !== '') options_.current.surTranscript(transcript)
   }, [fermer])
+
+  /**
+   * ⚠️ `demarrer` ne dépend de rien pour rester stable ; il lui faut pourtant
+   *    `terminer` quand le moteur renonce. Le ref évite la dépendance.
+   */
+  const terminerRef = useRef(terminer)
+  terminerRef.current = terminer
 
   const annuler = useCallback(() => {
     // ⛔ Rien n’est rendu. C’est tout l’intérêt du geste.
@@ -126,6 +144,7 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
       setDefinitif('')
       setProvisoire('')
       acquis.current = ''
+      enCours.current = ''
       guet.current = (options_.current.guetterSilence ?? guetterSilence)()
 
       // ⚠️ La reconnaissance démarre TOUT DE SUITE, sans attendre le micro : elle
@@ -133,10 +152,15 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
       reconnaissance.current = (options_.current.dicter ?? dicter)({
         surTexte: (fini, encours) => {
           acquis.current = fini
+          enCours.current = encours
           setDefinitif(fini)
           setProvisoire(encours)
         },
-        surFin: () => undefined,
+        // ⛔ Le moteur a épuisé ses relances : l’écran « j’écoute » deviendrait
+        //    un mensonge — l’onde bouge, le micro est ouvert, et plus rien
+        //    n’est transcrit. On rend la main avec ce qui a été capté, et le
+        //    champ texte prend le relais (03-Bugs/BUGS_LOG.md 007).
+        surFin: () => terminerRef.current(),
         surErreur: () => undefined,
       })
 
@@ -220,4 +244,20 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
     terminer,
     annuler,
   }
+}
+
+/**
+ * Recolle la fin de phrase encore provisoire au transcript déjà arrêté.
+ *
+ * ⚠️ Même règle d’espace que `dictee/reconnaissance.ts` : Web Speech ne met
+ *    rien entre deux morceaux, et « le tri par datese remet à zéro » est ce
+ *    qu’on obtient sans ça.
+ */
+function recoller(definitif: string, provisoire: string): string {
+  const fin = provisoire.trim()
+  const debut = definitif.trim()
+  if (fin === '') return debut
+  if (debut === '') return fin
+
+  return `${debut} ${fin}`
 }
