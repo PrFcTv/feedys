@@ -11,6 +11,7 @@
  * 3. la sortie, toujours visible : glisser pour annuler, ou relâcher.
  */
 import { Onde } from './Onde'
+import { SANS_ONDE, TEXTES } from './textes'
 import type { PoigneeDictee } from './useDictee'
 
 export interface ProprietesEcoute {
@@ -21,7 +22,7 @@ export interface ProprietesEcoute {
 const COMPTEUR_A_PARTIR_DE = 30
 
 export function Ecoute({ dictee }: ProprietesEcoute) {
-  const { ecoute, definitif, provisoire, duSon, secondes, refuse } = dictee
+  const { ecoute, definitif, provisoire, duSon, secondes, sansOnde } = dictee
   if (ecoute === null) return null
 
   const transcript = `${definitif}${definitif !== '' && provisoire !== '' ? ' ' : ''}${provisoire}`
@@ -35,15 +36,16 @@ export function Ecoute({ dictee }: ProprietesEcoute) {
            on ne coupe pas la parole de quelqu’un qui est en train de parler.
       */}
       <p class="ecoute__transcript" aria-live="polite">
-        {transcript === '' ? <span class="ecoute__attente">Allez-y, je vous écoute.</span> : transcript}
+        {transcript === '' ? <span class="ecoute__attente">{TEXTES.ecoute.attente}</span> : transcript}
       </p>
 
-      {refuse && (
-        // ⚠️ Le seul cas où l’on dit quelque chose : le micro a été refusé, et la
-        //    personne doit savoir que l’onde ne viendra pas. ⛔ On ne s’excuse
-        //    toujours pas — le champ texte est resté à un clic.
+      {sansOnde !== null && (
+        // ⚠️ Le seul cas où l’on dit quelque chose pendant l’écoute : l’onde ne
+        //    viendra pas, et la personne doit savoir que la dictée CONTINUE
+        //    quand même. ⛔ On ne s’excuse toujours pas — le champ texte est
+        //    resté à un clic (ui/textes.ts §SANS_ONDE).
         <p class="ecoute__avis" role="status">
-          Le micro est refusé pour ce site. La dictée continue sans l’onde.
+          {SANS_ONDE[sansOnde]}
         </p>
       )}
 
@@ -51,7 +53,11 @@ export function Ecoute({ dictee }: ProprietesEcoute) {
         {/* ⚠️ « Glisser pour annuler » n’apparaît qu’au PREMIER SON. Un texte
               affiché à vide est du bruit (DESIGN.md, exigence 4). */}
         <span class="ecoute__annuler">
-          {duSon ? (ecoute.origine === 'clavier' ? 'Échap pour annuler' : '← glisser pour annuler') : ''}
+          {duSon
+            ? ecoute.origine === 'clavier'
+              ? TEXTES.ecoute.annulerClavier
+              : TEXTES.ecoute.annulerPointeur
+            : ''}
         </span>
         <span class="ecoute__compteur">{secondes >= COMPTEUR_A_PARTIR_DE ? minutage(secondes) : ''}</span>
       </p>

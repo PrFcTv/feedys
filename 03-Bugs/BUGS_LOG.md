@@ -131,7 +131,7 @@ C’est précisément ce que T-006 propose de surveiller d’abord.
 
 ## 004 — Sans carte, le champ de réponse invite à corriger une fiche qui n’existe pas
 
-**Statut** : 🟠 Contourné (2026-09-05) — voir [TICKETS_DIFFERES.md](../00-Projet/TICKETS_DIFFERES.md) T-007
+**Statut** : ✅ Résolu (2026-09-05, PR #17)
 **Constaté le** : 2026-09-05, pendant P-014, point 4
 **Où** : `packages/widget/src/ui/Widget.tsx`
 
@@ -141,11 +141,29 @@ la fiche au-dessus. » Il n’y a pas de fiche au-dessus.
 
 **Cause** — l’invite ne dépend que de la phase, pas de la présence d’une carte.
 
-**Correctif** — ⛔ aucun ici. Une phrase, mais qui touche à ce que le widget dit dans un état
-dégradé ; ça se décide, ça ne se glisse pas dans une PR de recette.
+⚠️ **Et le défaut est plus large que ce constat.** Le recensement de P-017 a trouvé **quatre**
+situations « en entretien, sans carte », pas une :
 
-**Ce qui l’a laissé passer** — aucun test ne regarde le widget dans l’état « entretien sans
-carte ». Le cas n’existe que quand le modèle tombe.
+1. le premier tour **encore en vol** — ⛔ sur le CHEMIN NOMINAL, pendant la latence du modèle,
+   avant toute panne. Le défaut était donc visible tous les jours, pas seulement modèle coupé ;
+2. le tour en échec — le cas décrit ici ;
+3. le tour rendu à `200` avec `comprehension: null` — transcript inintelligible ;
+4. le tour dont la question conclut l’entretien.
+
+**Correctif** — l’invite regarde désormais **ce qui est à l’écran** : la carte, puis la question.
+Trois invites au lieu d’une, dans un module de textes où elles se lisent côte à côte
+(`packages/widget/src/ui/textes.ts` — il n’en existait aucun, les phrases étaient en dur dans le
+JSX, et c’est aussi pour ça que celle-ci n’avait jamais été arbitrée).
+
+⚠️ **Un second défaut, trouvé au passage** : un tour en échec ne disait **rien du tout**. On
+cliquait « Répondre » et il ne se passait rien à l’écran. Le widget dit maintenant la seule chose
+qui compte pour la personne — « C’est noté. Ajoutez ce que vous voulez, ou envoyez. » — ⛔ sans
+dire que le bot est tombé : ce n’est pas son affaire.
+
+**Ce qui l’a laissé passer** — aucun test ne regardait le widget dans l’état « entretien sans
+carte ». Le test voisin vérifiait bien que la carte n’apparaît pas ; il ne regardait pas **ce que
+le champ disait** à ce moment-là. Il y a désormais six tests de composant sur ces états, et un
+parcours `widget:demo` qui coupe le tour pour de vrai.
 
 ---
 

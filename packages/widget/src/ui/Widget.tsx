@@ -29,6 +29,7 @@ import { Carte } from './Carte'
 import { Ecoute } from './Ecoute'
 import { piegerFocus } from './focus'
 import { Micro } from './Micro'
+import { TEXTES, TOUR_SANS_SUITE, inviteChamp } from './textes'
 import type { PortsDictee } from './useDictee'
 import { useDictee } from './useDictee'
 
@@ -212,16 +213,23 @@ export function Widget(ports: Ports) {
     if (phase === 'entretien') void conclure('abandon')
   }, [conclure, phase])
 
-  /** Demande un tour et pose la carte. ⚠️ Un échec ne dit rien : il n’affiche pas de carte. */
+  /** Demande un tour et pose la carte. ⚠️ Un échec n’affiche pas de carte. */
   const jouer = useCallback(
     async (identifiant: string, corps: CorpsTour): Promise<void> => {
       setAttente(true)
+      setAvis('')
       const resultat = await ports.demanderTour(identifiant, corps)
       setAttente(false)
 
       if (!resultat.ok) {
         // ⛔ La carte n’apparaît pas, le champ texte reste, « Envoyer » marche.
+        //
+        // ⚠️ Mais l’écran ne reste plus MUET : on cliquait « Répondre » et il
+        //    ne se passait rien du tout. La phrase dit la seule chose qui
+        //    compte pour la personne — sa parole est arrivée — et ⛔ ne dit
+        //    pas pourquoi le bot n’a pas répondu (textes.ts).
         setTour(null)
+        setAvis(TOUR_SANS_SUITE)
         return
       }
 
@@ -365,23 +373,31 @@ export function Widget(ports: Ports) {
   const enEntretien = phase === 'entretien'
   const rienAEnvoyer = vide && corrections === ''
 
+  // ⚠️ Une question vide n’est pas une question. Le serveur normalise déjà,
+  //    mais le widget rendait un `<p>` vide si jamais elle passait.
+  const question = tour?.question != null && tour.question.trim() !== '' ? tour.question : null
+
+  // ⛔ C’EST ICI QUE LE DÉFAUT 004 SE FERME : l’invite regarde la CARTE et la
+  //    QUESTION, pas la seule phase (packages/widget/src/ui/textes.ts).
+  const invite = inviteChamp({ enEntretien, aCarte: carte !== null, aQuestion: question !== null })
+
   return (
     <>
       {ouvert && (
         <div class="panneau" ref={panneau} role="dialog" aria-modal="true" aria-labelledby="w-titre">
           <div class="entete">
             <h2 class="titre" id="w-titre">
-              Qu’est-ce qui se passe ?
+              {TEXTES.titre}
             </h2>
-            <button class="fermer" type="button" onClick={fermer} aria-label="Fermer">
+            <button class="fermer" type="button" onClick={fermer} aria-label={TEXTES.fermer}>
               <Croix />
             </button>
           </div>
 
           {phase === 'envoye' ? (
             <div class="accuse" role="status">
-              <strong>C’est parti.</strong>
-              <p>Merci — vous n’avez rien d’autre à faire.</p>
+              <strong>{TEXTES.accuse.titre}</strong>
+              <p>{TEXTES.accuse.detail}</p>
             </div>
           ) : (
             <>
@@ -394,13 +410,13 @@ export function Widget(ports: Ports) {
 
                 {attente && carte === null && (
                   <p class="attente" role="status">
-                    Un instant…
+                    {TEXTES.attente}
                   </p>
                 )}
 
-                {tour?.question != null && (
+                {question !== null && (
                   <p class="question" role="status">
-                    {tour.question}
+                    {question}
                   </p>
                 )}
 
@@ -433,7 +449,7 @@ export function Widget(ports: Ports) {
                           l’autre (01-Specs/widget.md §Ouvert). */}
                     {micro && (
                       <p class="separateur" aria-hidden="true">
-                        <span>ou</span>
+                        <span>{TEXTES.separateur}</span>
                       </p>
                     )}
                     <textarea
@@ -441,12 +457,8 @@ export function Widget(ports: Ports) {
                       ref={champ}
                       value={texte}
                       disabled={phase === 'envoi'}
-                      aria-label={enEntretien ? 'Votre réponse' : 'Votre retour'}
-                      placeholder={
-                        enEntretien
-                          ? 'Répondez, ou corrigez la fiche au-dessus.'
-                          : 'Ce qui vous a bloqué, ou l’idée qui vient de vous venir.'
-                      }
+                      aria-label={invite.ariaLabel}
+                      placeholder={invite.placeholder}
                       onInput={(evenement) => {
                         setTexte(evenement.currentTarget.value)
                       }}
@@ -471,7 +483,7 @@ export function Widget(ports: Ports) {
                       disabled={rienAEnvoyer || attente}
                       onClick={repondre}
                     >
-                      Répondre
+                      {TEXTES.boutons.repondre}
                     </button>
                   )}
 
@@ -483,7 +495,11 @@ export function Widget(ports: Ports) {
                     disabled={enEntretien ? false : vide || phase === 'envoi'}
                     onClick={() => (enEntretien ? void conclure('envoi') : void expedier())}
                   >
-                    {phase === 'envoi' ? 'Envoi…' : enEntretien ? 'Envoyer maintenant' : 'Envoyer'}
+                    {phase === 'envoi'
+                      ? TEXTES.boutons.envoiEnCours
+                      : enEntretien
+                        ? TEXTES.boutons.envoyerMaintenant
+                        : TEXTES.boutons.envoyer}
                   </button>
                 </div>
               )}
@@ -501,7 +517,7 @@ export function Widget(ports: Ports) {
         onClick={() => (ouvert ? fermer() : ouvrir())}
       >
         {ouvert ? <Croix /> : <Bulle />}
-        <span class="lanceur__libelle">{ouvert ? 'Fermer' : 'Un retour'}</span>
+        <span class="lanceur__libelle">{ouvert ? TEXTES.fermer : TEXTES.lanceur}</span>
       </button>
     </>
   )
