@@ -66,11 +66,25 @@ sciemment.
 
 ---
 
-## T-004 — La séparation des rôles Postgres n’est pas outillée
+## ~~T-004 — La séparation des rôles Postgres n’est pas outillée~~ · ✅ clos
 
 **Différé le** : 2026-09-04, pendant P-002
-**Déclencheur de reprise** : P-013, quand le conteneur devra démarrer ailleurs que sur un poste
-**Coût si plus tard** : identique — c’est une procédure de déploiement, pas du schéma
+**Clos le** : 2026-09-05, pendant P-018, par [D-019](DECISIONS_LOG.md)
+
+⚠️ **« Une procédure de déploiement, pas du schéma » — c’était faux, et ça se serait vu en
+production.** La table `migrations` n’est créée par aucune migration : le runner la pose lui-même,
+elle appartient au propriétaire, et elle ne portait **aucun GRANT**. Or `GET /sante` la lit avec le
+rôle de service. Séparer les rôles faisait donc rendre 503 à la sonde, échouer le `HEALTHCHECK` de
+l’image, et **redémarrer le conteneur en boucle** — au moment précis où l’on croyait avoir durci le
+déploiement. Il a fallu `0003_privilege_registre.sql`.
+
+⚠️ **Et un rôle de service ne peut pas migrer du tout**, même sur une base déjà à jour : Postgres
+vérifie `CREATE` sur le schéma avant le court-circuit du `create table if not exists`. Mesuré, pas
+supposé. `DATABASE_URL_MIGRATIONS` est donc **obligatoire** dès qu’on sépare, pas seulement utile.
+
+La procédure entière est dans
+[hebergement.md](../04-Architecture/hebergement.md) §Le rôle de connexion, et
+`apps/serveur/infra/base/roles.integration.test.ts` la prouve sur une vraie connexion.
 
 `0001_socle.sql` crée le rôle de groupe `feedys_app` et lui accorde ses privilèges ([D-009]). Il
 ne crée **pas** le rôle de login qui s’en réclame : son nom et son mot de passe sont propres à

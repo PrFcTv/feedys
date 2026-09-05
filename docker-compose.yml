@@ -12,6 +12,12 @@ services:
     image: postgres:18-alpine
     container_name: feedys-postgres
     restart: unless-stopped
+    # ⚠️ LE CAS « RÔLE UNIQUE », et c’est assumé sur un poste. `feedys` est à la
+    #    fois superutilisateur et propriétaire : les GRANT de feedys_app ne
+    #    mordent donc PAS ici, et le démarrage le dit dans ses journaux.
+    #
+    # ⛔ En production, deux rôles — voir docker-compose.production.yml et
+    #    04-Architecture/hebergement.md §Le rôle de connexion.
     environment:
       POSTGRES_USER: feedys
       POSTGRES_PASSWORD: feedys

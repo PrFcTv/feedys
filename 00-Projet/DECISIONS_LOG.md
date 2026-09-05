@@ -607,3 +607,67 @@ depuis le processus qui sert les requêtes est ce qu’on évite, pas ce qu’on
 Un usage réel qui montrerait que trente minutes est trop long — quelqu’un qui se plaint d’attendre
 sa note — ou trop court, ce qui se verrait à des entretiens refermés alors que la personne
 répondait encore. ⚠️ Les lignes `cloture_balayage` de `audit` sont ce qui permettra de le dire.
+
+---
+
+## D-019 — Deux URL de base : une pour migrer, une pour servir
+
+**Prise le** : 2026-09-05, pendant P-018
+**Statut** : appliquée
+
+### Le contexte
+
+[D-009](DECISIONS_LOG.md) a décidé que « aucun `DELETE` nulle part » serait tenu par les privilèges
+Postgres et non par une règle de code : **c’est Postgres qui doit dire non**. Il a aussi écrit la
+condition de validité : « cette précaution ne vaut que si `DATABASE_URL` n’est pas le propriétaire
+des tables ». Pendant tout le MVP, elle ne l’était pas — le garde-fou était là, **inerte**, et rien
+ne le disait (T-004).
+
+### La décision
+
+`DATABASE_URL` porte le rôle qui **sert**, membre de `feedys_app`. `DATABASE_URL_MIGRATIONS` porte
+le rôle qui **migre**, le propriétaire. Le démarrage lit la seconde, le pool de l’application lit la
+première.
+
+⚠️ **La seconde est facultative, et son repli est la première.** Un poste et la CI n’ont qu’un
+rôle, et [D-016](DECISIONS_LOG.md) exige que `pnpm dev` démarre sans rien configurer. C’est le
+déploiement qui sépare, pas le dépôt.
+
+⛔ **Mais dès qu’on sépare, elle devient obligatoire** — et ce n’est pas un conseil de prudence,
+c’est mesuré : un rôle de service ne peut pas migrer **du tout**, même sur une base déjà à jour.
+Le runner commence par un `create table if not exists`, et Postgres vérifie le privilège `CREATE`
+sur le schéma **avant** de regarder si la table existe. On pouvait croire le contraire — le test
+l’a tranché.
+
+### Pourquoi pas un job de migration séparé
+
+C’est la solution habituelle, et [hebergement.md](../04-Architecture/hebergement.md) §La forme
+l’interdit : « aucun mécanisme du logiciel ne peut dépendre du fournisseur d’hébergement », le
+conteneur doit se déplacer d’un `docker run` à un autre. [D-016](DECISIONS_LOG.md) ajoute que
+l’image n’a **qu’une entrée** : ni `pnpm`, ni `tsx`, ni la hiérarchie du dépôt. Une seconde
+variable lue par le même `register()` est la seule forme compatible avec les deux.
+
+### Le contrôle qui va avec, et pourquoi il ne refuse pas
+
+Le démarrage annonce désormais le rôle de service : superutilisateur, propriétaire, hors groupe, ou
+séparé. ⛔ **Il n’empêche jamais de démarrer** — un poste est légitimement en rôle unique, et la
+CI aussi. Refuser là transformerait une information en panne.
+
+⚠️ La question SQL emploie `pg_has_role(current_user, relowner, 'member')` et non une comparaison
+de noms : un rôle **membre du propriétaire** peut faire `set role` vers lui, et contourne donc les
+GRANT tout autant. Un contrôle qui ne verrait pas ce cas rassurerait à tort.
+
+### Ce qu’on a découvert en le faisant
+
+⛔ **La table `migrations` ne portait aucun GRANT.** Elle n’est créée par aucune migration — le
+runner la pose lui-même — et appartient donc au propriétaire. Or `GET /sante` la lit avec le pool
+de service. Séparer les rôles faisait rendre 503 à la sonde, échouer le `HEALTHCHECK` de l’image,
+et **redémarrer le conteneur en boucle** — au moment précis où l’on croyait avoir durci le
+déploiement. D’où `0003_privilege_registre.sql`.
+
+⚠️ Un mode de défaillance qui n’apparaît qu’au durcissement est le pire des deux mondes.
+
+### Ce qui la renverserait
+
+Un besoin de migrer sans démarrer le serveur — c’est déjà ce que D-016 nommait. Il faudrait alors
+le second empaquetage qu’on évite depuis P-013.

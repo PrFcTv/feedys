@@ -65,7 +65,9 @@ describe('⛔ aucun repli vers un Postgres deviné', () => {
     'apps/serveur/domaine/notification/envoyer.integration.test.ts',
     'apps/serveur/domaine/synthese/produire.integration.test.ts',
     'apps/serveur/infra/base/depot-bo.integration.test.ts',
+    'apps/serveur/domaine/entretien/balayage.integration.test.ts',
     'apps/serveur/infra/base/migrations.integration.test.ts',
+    'apps/serveur/infra/base/roles.integration.test.ts',
     'playwright.config.ts',
   ]
 

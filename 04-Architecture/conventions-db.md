@@ -160,6 +160,11 @@ create unique index on produits (cle_publique);              -- vérifié à cha
 Le rôle applicatif reçoit `SELECT, INSERT, UPDATE` sur les tables métier, **et `SELECT, INSERT`
 seulement sur `audit`**.
 
+⚠️ **La table `migrations` a son propre `GRANT SELECT`** ([0003](../db/migrations/), P-018). Elle
+n’est créée par aucune migration — le runner la pose lui-même — et n’en portait donc aucun. Or la
+sonde `GET /sante` la lit avec le rôle de service : sans ce `grant`, séparer les rôles faisait
+rendre 503 à la sonde et redémarrer le conteneur en boucle.
+
 ⛔ **Aucun `GRANT DELETE` n’est accordé au MVP.** Le jour où une suppression sera nécessaire, elle
 sera accordée **table par table**, avec sa justification en commentaire dans la migration qui
 l’ouvre.

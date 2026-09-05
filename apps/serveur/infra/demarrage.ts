@@ -24,9 +24,11 @@ import { Client } from 'pg'
 
 import {
   enKo,
+  messageRole,
   messageVariablesManquantes,
   messageWidget,
   variablesManquantes,
+  verdictRole,
   verdictWidget,
 } from '../domaine/demarrage/controles'
 
@@ -98,7 +100,16 @@ export async function verifierDemarrage(journal: Journal = CONSOLE): Promise<Res
   // ⚠️ Une connexion à soi, pas le pool de l’application : le verrou d’avis est
   //    lié à la session, et un pool le poserait sur une connexion pour le
   //    relâcher sur une autre.
-  const client = new Client({ connectionString: process.env['DATABASE_URL'] })
+  //
+  // ⚠️ DEUX RÔLES, DEUX MOMENTS. Migrer crée des tables : ça demande le
+  //    propriétaire. Servir n’en demande pas, et ne DOIT pas l’avoir — un
+  //    propriétaire contourne tous les GRANT ([D-009]). `DATABASE_URL_MIGRATIONS`
+  //    porte donc le premier rôle, `DATABASE_URL` le second.
+  //
+  // ⛔ Elle est FACULTATIVE, et son repli est `DATABASE_URL` : un poste et la CI
+  //    n’ont qu’un rôle, et `pnpm dev` doit démarrer sans rien configurer
+  //    ([D-016]). C’est le déploiement qui les sépare, pas le dépôt.
+  const client = new Client({ connectionString: urlDesMigrations() })
 
   try {
     await client.connect()
@@ -127,11 +138,20 @@ export async function verifierDemarrage(journal: Journal = CONSOLE): Promise<Res
           ? `Feedys ne peut pas démarrer — ${erreur.message}`
           : `Feedys ne peut pas démarrer — les migrations ont échoué.\n  ${
               erreur instanceof Error ? erreur.message : String(erreur)
-            }`,
+            }${indiceDeRole(erreur)}`,
     }
   } finally {
     await client.end()
   }
+
+  // ── 4bis. le rôle de service ──────────────────────────────────────────
+  //
+  // ⛔ IL NE REFUSE JAMAIS. Un poste est légitimement en rôle unique, et la CI
+  //    aussi. Il DIT, dans les journaux, si le garde-fou de D-009 mord vraiment.
+  //
+  // ⚠️ Sur la connexion de SERVICE, jamais sur celle des migrations : celle-ci
+  //    est propriétaire par construction, et répondrait toujours « oui ».
+  await annoncerLeRole(journal)
 
   // ── 5. le widget ───────────────────────────────────────────────────────────
   const verdict = verdictWidget(await poidsWidgetGzip())
@@ -144,6 +164,91 @@ export async function verifierDemarrage(journal: Journal = CONSOLE): Promise<Res
   journal.info(`widget.js — ${enKo(verdict.octets)} gzip, sous le budget.`)
 
   return { ok: true }
+}
+
+/**
+ * ⚠️ L’erreur qu’on VA voir si quelqu’un sépare les rôles à moitié.
+ *
+ *    Un rôle de service ne peut pas migrer, même sur une base déjà à jour : le
+ *    runner commence par un `create table if not exists`, et Postgres vérifie le
+ *    privilège `CREATE` sur le schéma AVANT de regarder si la table existe.
+ *
+ * ⛔ Sans cet indice, le message serait « permission denied for schema public »
+ *    et rien d’autre — exact, et parfaitement inutile à trois heures du matin.
+ */
+function indiceDeRole(erreur: unknown): string {
+  const texte = erreur instanceof Error ? erreur.message : String(erreur)
+  if (!/permission denied/i.test(texte)) return ''
+
+  return [
+    '',
+    '  ⚠️ Ce rôle n’a pas le droit de migrer. Migrer crée des tables : c’est le',
+    '     propriétaire qui le fait, et DATABASE_URL_MIGRATIONS le désigne',
+    '     (04-Architecture/hebergement.md §Le rôle de connexion).',
+  ].join('\n')
+}
+
+/**
+ * L’URL avec laquelle on MIGRE.
+ *
+ * ⚠️ Le repli sur `DATABASE_URL` est ce qui garde un poste jouable sans rien
+ *    configurer. ⛔ En production, les deux doivent différer — c’est tout
+ *    l’objet de [T-004].
+ */
+function urlDesMigrations(): string | undefined {
+  const migrations = process.env['DATABASE_URL_MIGRATIONS']?.trim()
+  return migrations !== undefined && migrations !== '' ? migrations : process.env['DATABASE_URL']
+}
+
+/**
+ * La question que le démarrage pose à Postgres sur lui-même.
+ *
+ * ⚠️ `pg_has_role(current_user, relowner, 'member')` et non
+ *    `pg_get_userbyid(relowner) = current_user` : un rôle MEMBRE du propriétaire
+ *    peut faire `set role` vers lui, et contourne donc les GRANT tout autant.
+ */
+const ETAT_ROLE = `
+  select
+    current_user::text as role,
+    coalesce((select rolsuper from pg_roles where rolname = current_user), false) as superutilisateur,
+    pg_has_role(current_user, 'feedys_app', 'member') as membre,
+    count(*) filter (where pg_has_role(current_user, c.relowner, 'member')) as possedees,
+    count(*) as tables
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'r'
+`
+
+/**
+ * ⛔ N’échoue jamais. Si la question elle-même ne peut pas être posée, on le dit
+ *    et on continue : un contrôle d’information qui empêcherait de servir serait
+ *    un refus déguisé.
+ */
+async function annoncerLeRole(journal: Journal): Promise<void> {
+  const client = new Client({ connectionString: process.env['DATABASE_URL'] })
+
+  try {
+    await client.connect()
+    const { rows } = await client.query(ETAT_ROLE)
+    const ligne = rows[0]
+
+    if (ligne === undefined) return
+
+    const verdict = verdictRole({
+      role: String(ligne['role']),
+      superutilisateur: ligne['superutilisateur'] === true,
+      membreDuGroupe: ligne['membre'] === true,
+      tablesPossedees: Number(ligne['possedees']),
+      tables: Number(ligne['tables']),
+    })
+
+    if (verdict.separe) journal.info(messageRole(verdict))
+    else journal.alerte(messageRole(verdict))
+  } catch {
+    journal.alerte('rôle de connexion · impossible de le vérifier. Le démarrage continue.')
+  } finally {
+    await client.end().catch(() => undefined)
+  }
 }
 
 /**

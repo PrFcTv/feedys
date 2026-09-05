@@ -23,6 +23,13 @@ services:
     # ⚠️ Toutes les variables viennent d’un fichier hors dépôt. Les obligatoires
     #    sont listées dans 04-Architecture/hebergement.md ; sans l’une d’elles le
     #    conteneur refuse de démarrer, bruyamment.
+    #
+    # ⚠️ LE CAS « DEUX RÔLES ». `.env.production` porte les deux URL :
+    #      DATABASE_URL             → feedys_service, membre de feedys_app
+    #      DATABASE_URL_MIGRATIONS  → le propriétaire des tables
+    #    ⛔ Un propriétaire qui sert contourne tous les GRANT, et rien ne le
+    #    signalerait. Le rôle de service se crée à la main, une fois :
+    #    04-Architecture/hebergement.md §Le rôle de connexion.
     env_file:
       - .env.production
     ports:

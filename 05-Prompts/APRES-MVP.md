@@ -17,7 +17,7 @@ ce qu’on imagine.
 | P-015 · la recette qui manque | [RECETTE_MVP] points 1 et 6, [BUGS_LOG] 005 à 008 | ✅ fait |
 | P-016 · le filet de clôture | [BUGS_LOG] 003, T-006 | ✅ fait |
 | P-017 · ce que le widget dit quand ça casse | [BUGS_LOG] 004, T-007 | ✅ fait |
-| P-018 · le rôle de connexion | T-004 | ⏳ à faire |
+| P-018 · le rôle de connexion | T-004 | ✅ fait |
 | P-019 · la première mise en service | T-003 | ⏳ à faire |
 | P-020 · le retour au collaborateur | [ROADMAP] ① | 🔒 après P-019 |
 | P-021 · le rejeu des trente secondes | [ROADMAP] ② | 🔒 après P-019 |
@@ -221,7 +221,14 @@ gagne le tableau des états dégradés avec leur phrase.
 
 # Lot 8 — La première mise en service
 
-## P-018 · Le rôle de connexion n’est plus le propriétaire
+## P-018 · Le rôle de connexion n’est plus le propriétaire — ✅ fait
+
+⚠️ **Joué le 2026-09-05.** Le prompt disait « ⛔ Aucune nouvelle migration de schéma si les GRANT
+existants suffisent » — ils ne suffisaient pas, et le trou ne se serait vu **qu’en production** :
+la table `migrations` ne portait aucun GRANT, or la sonde la lit avec le rôle de service. Séparer
+les rôles aurait fait redémarrer le conteneur en boucle. Et un rôle de service ne peut pas migrer
+du tout, même sur une base à jour — mesuré : Postgres vérifie `CREATE` sur le schéma avant le
+court-circuit du `if not exists`.
 
 **Objectif** — que les `GRANT` de `0001_socle.sql` mordent en usage, et pas seulement en test.
 Referme [T-004][TICKETS_DIFFERES].
