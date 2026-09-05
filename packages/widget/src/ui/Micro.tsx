@@ -17,6 +17,7 @@
  */
 import { useRef, useState } from 'preact/hooks'
 
+import { TEXTES } from './textes'
 import type { Ecoute, Origine } from './useDictee'
 
 export interface ProprietesMicro {
@@ -68,7 +69,7 @@ export function Micro({ ecoute, demarrer, passerEnMainsLibres, terminer, annuler
         class="micro__bouton"
         type="button"
         aria-pressed={ecoute !== null}
-        aria-label={ecoute === null ? 'Parler — maintenir pour dicter' : 'Terminer la dictée'}
+        aria-label={ecoute === null ? TEXTES.micro.parler : TEXTES.micro.terminer}
         style={{ '--w-glisse': `${glissement}px` }}
         onPointerDown={(evenement) => {
           // Un clic pendant les mains libres termine. C’est la sortie annoncée.
@@ -145,9 +146,9 @@ export function Micro({ ecoute, demarrer, passerEnMainsLibres, terminer, annuler
 }
 
 function legende(ecoute: Ecoute | null): string {
-  if (ecoute === null) return 'maintenir pour parler'
-  if (ecoute.mode === 'mains-libres') return 'j’écoute — cliquez pour terminer'
-  return 'relâchez pour terminer'
+  if (ecoute === null) return TEXTES.micro.maintenir
+  if (ecoute.mode === 'mains-libres') return TEXTES.micro.mainsLibres
+  return TEXTES.micro.relacher
 }
 
 /** ⛔ Pas d’emoji comme marqueur d’état (references-visuelles.md). */

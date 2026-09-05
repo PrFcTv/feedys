@@ -583,3 +583,167 @@ describe('window.feedys', () => {
     expect(racine.querySelector('.panneau')).toBeNull()
   })
 })
+
+/**
+ * ⛔ CE BLOC EST CE QUI MANQUAIT.
+ *
+ * BUGS_LOG 004 §Ce qui l’a laissé passer : « aucun test ne regarde le widget dans
+ * l’état ” entretien sans carte “ ». Le test voisin vérifiait bien que la carte
+ * n’apparaît pas — il ne regardait pas CE QUE LE CHAMP DIT à ce moment-là.
+ *
+ * ⚠️ Quatre situations produisent « en entretien, sans carte », et une seule est
+ *    un échec. Elles sont toutes ici.
+ */
+describe('l’invite du champ suit ce qui est À L’ÉCRAN, pas la phase', () => {
+  it('⛔ tour en échec : l’invite ne parle plus d’une fiche qui n’existe pas', async () => {
+    const { racine, trouver } = installer({
+      demanderTour: async (): Promise<ResultatTour> => ({ ok: false }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.carte')).toBeNull()
+    const champ = champDe(racine)
+    expect(champ.placeholder).not.toContain('fiche')
+    expect(champ.placeholder).toBe('Ajoutez ce qui vous revient.')
+  })
+
+  it('⚠️ premier tour encore en vol : même chose, et c’est le CHEMIN NOMINAL', async () => {
+    // ⛔ Le défaut 004 n’attendait pas une panne : pendant la latence du modèle,
+    //    la phase est déjà à ’entretien’ et la carte n’est pas encore là.
+    let relacher: (() => void) | undefined
+    const bloquee = new Promise<void>((resoudre) => {
+      relacher = resoudre
+    })
+
+    const { racine, trouver } = installer({
+      demanderTour: async (): Promise<ResultatTour> => {
+        await bloquee
+        return { ok: false }
+      },
+    })
+
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.attente')).not.toBeNull()
+    expect(trouver('.carte')).toBeNull()
+    expect(champDe(racine).placeholder).not.toContain('fiche')
+
+    relacher?.()
+  })
+
+  it('question sans carte : on invite à répondre, sans parler de fiche', async () => {
+    const { racine, trouver } = installer({
+      demanderTour: async (): Promise<ResultatTour> => ({
+        ok: true,
+        tour: {
+          comprehension: null,
+          question: 'Je n’ai pas bien saisi — vous pouvez redire ?',
+          motif: 'transcript inintelligible',
+        },
+      }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.carte')).toBeNull()
+    expect(trouver('.question')).not.toBeNull()
+    const champ = champDe(racine)
+    expect(champ.placeholder).toBe('Répondez, ou ajoutez ce qui vous revient.')
+    expect(champ.placeholder).not.toContain('fiche')
+  })
+
+  it('✅ carte présente : là, et là seulement, on invite à corriger la fiche', async () => {
+    const { racine, trouver } = installer()
+
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.carte')).not.toBeNull()
+    expect(champDe(racine).placeholder).toBe('Répondez, ou corrigez la fiche au-dessus.')
+  })
+
+  it('avant l’entretien, l’invite est celle de l’accueil', async () => {
+    const { racine } = installer()
+
+    await ouvrir(racine)
+
+    const champ = champDe(racine)
+    expect(champ.placeholder).toBe('Ce qui vous a bloqué, ou l’idée qui vient de vous venir.')
+    expect(champ.getAttribute('aria-label')).toBe('Votre retour')
+  })
+
+  it('⚠️ l’aria-label suit la même règle que l’invite', async () => {
+    const { racine } = installer({
+      demanderTour: async (): Promise<ResultatTour> => ({ ok: false }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    expect(champDe(racine).getAttribute('aria-label')).toBe('Votre réponse')
+  })
+})
+
+describe('ce que le widget dit quand un tour n’aboutit pas', () => {
+  it('⛔ ne laisse plus l’écran MUET — on cliquait, il ne se passait rien', async () => {
+    const { racine, trouver } = installer({
+      demanderTour: async (): Promise<ResultatTour> => ({ ok: false }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    const avis = trouver('.avis')!
+    expect(avis.textContent).toBe('C’est noté. Ajoutez ce que vous voulez, ou envoyez.')
+    expect(avis.getAttribute('role')).toBe('status')
+  })
+
+  it('⛔ n’explique pas ce qui manque, ne s’excuse pas, ne promet rien', async () => {
+    const { racine, trouver } = installer({
+      demanderTour: async (): Promise<ResultatTour> => ({ ok: false }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    const dit = `${trouver('.avis')?.textContent ?? ''} ${champDe(racine).placeholder}`.toLowerCase()
+    for (const interdit of ['désol', 'excus', 'erreur', 'indisponible', 'panne', 'réessay', 'bientôt', 'bug']) {
+      expect(dit).not.toContain(interdit)
+    }
+  })
+
+  it('l’avis disparaît dès que le tour suivant part', async () => {
+    let premier = true
+    const { racine, trouver } = installer({
+      demanderTour: async (): Promise<ResultatTour> => {
+        if (premier) {
+          premier = false
+          return { ok: false }
+        }
+        return {
+          ok: true,
+          tour: { comprehension: CARTE, question: 'Et sur quel écran ?', motif: 'il manque l’écran' },
+        }
+      },
+    })
+
+    await entrerEnEntretien(racine)
+    expect(trouver('.avis')?.textContent).not.toBe('')
+
+    await ecrire(racine, 'sur la liste des dossiers')
+    await cliquerRepondre(racine)
+
+    expect(trouver('.avis')?.textContent).toBe('')
+    expect(trouver('.carte')).not.toBeNull()
+  })
+
+  it('⛔ une question vide n’est pas une question — rien n’est rendu', async () => {
+    const { racine, trouver } = installer({
+      demanderTour: async (): Promise<ResultatTour> => ({
+        ok: true,
+        tour: { comprehension: CARTE, question: '   ', motif: 'question vide' },
+      }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.question')).toBeNull()
+  })
+})

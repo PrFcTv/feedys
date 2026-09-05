@@ -15,7 +15,7 @@ import type { Dictee as Reconnaissance, OptionsDictee } from '../dictee/reconnai
 import { dicter } from '../dictee/reconnaissance'
 import type { Guet, OptionsGuet } from '../dictee/silence'
 import { guetterSilence } from '../dictee/silence'
-import type { Micro, Ouverture } from '../dictee/micro'
+import type { Micro, Ouverture, RefusMicro } from '../dictee/micro'
 import { ouvrirMicro } from '../dictee/micro'
 
 /** Maintenu, ou mains libres. Le second s’obtient par un clic simple. */
@@ -51,7 +51,12 @@ export interface PoigneeDictee {
   /** Secondes écoulées. ⚠️ Le compteur ne s’affiche qu’au-delà de trente. */
   readonly secondes: number
   /** Le micro a-t-il été refusé ? Sert à ne pas rester sur un écran mort. */
-  readonly refuse: boolean
+  /**
+   * ⚠️ La CAUSE, pas un booléen : `refuse` est une décision de la personne,
+   *    `indisponible` une absence du navigateur. Les deux donnent une onde
+   *    plate, et on n’en dit pas la même chose (ui/textes.ts §SANS_ONDE).
+   */
+  readonly sansOnde: RefusMicro | null
   /** Le niveau instantané, pour l’onde. Rend 0 hors écoute. */
   niveau(): number
   demarrer(origine: Origine): void
@@ -75,7 +80,7 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
   const [provisoire, setProvisoire] = useState('')
   const [duSon, setDuSon] = useState(false)
   const [secondes, setSecondes] = useState(0)
-  const [refuse, setRefuse] = useState(false)
+  const [sansOnde, setSansOnde] = useState<RefusMicro | null>(null)
 
   const micro = useRef<Micro | null>(null)
   const reconnaissance = useRef<Reconnaissance | null>(null)
@@ -140,7 +145,7 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
       const mien = (generation.current += 1)
 
       setEcoute({ mode: 'appui', origine })
-      setRefuse(false)
+      setSansOnde(null)
       setDefinitif('')
       setProvisoire('')
       acquis.current = ''
@@ -174,7 +179,9 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
         if (!ouverture.ok) {
           // ⚠️ Sans micro, pas d’onde et pas d’arrêt sur silence — mais la
           //    reconnaissance, elle, a sa propre capture et continue.
-          setRefuse(ouverture.refus === 'refuse')
+          // ⚠️ `indisponible` était avalé : l’onde restait plate et RIEN ne le
+          //    disait. Une onde morte sans un mot ressemble à un produit cassé.
+          setSansOnde(ouverture.refus)
           return
         }
 
@@ -237,7 +244,7 @@ export function useDictee(options: OptionsUseDictee): PoigneeDictee {
     provisoire,
     duSon,
     secondes,
-    refuse,
+    sansOnde,
     niveau: () => lireNiveau.current(),
     demarrer,
     passerEnMainsLibres,

@@ -154,12 +154,20 @@ bonne valeur de N.
 
 ---
 
-## T-007 — Sans carte, le champ d’entretien invite à corriger une fiche absente
+## ~~T-007 — Sans carte, le champ d’entretien invite à corriger une fiche absente~~ · ✅ clos
 
 **Différé le** : 2026-09-05, pendant P-014
-**Déclencheur de reprise** : le prochain passage sur les textes du widget, **ou** un relevé montrant
-que les tours en échec ne sont pas si rares
-**Coût si plus tard** : identique — une invite conditionnelle, quelques lignes
+**Clos le** : 2026-09-05, pendant P-017
+
+Le déclencheur prévu — « le prochain passage sur les textes du widget » — est tombé : c’était
+P-017. ⚠️ Et le ticket sous-estimait le sujet sur deux points. Le défaut ne demandait pas « une
+invite conditionnelle » mais **trois invites**, parce que quatre situations produisent « en
+entretien, sans carte » — dont une **sur le chemin nominal**, pendant la latence du modèle. Et il
+n’existait **aucun endroit** où poser une phrase : les textes du widget étaient en dur dans le JSX,
+ce qui est la vraie raison pour laquelle celle-ci n’avait jamais été arbitrée.
+
+Le tableau des états dégradés et leurs phrases vivent désormais dans
+[01-Specs/widget.md](../01-Specs/widget.md) §Ce que le widget dit quand ça ne se passe pas bien.
 
 Modèle coupé, le tour rend `503`, le panneau reste ouvert sans carte : c’est le comportement voulu.
 Mais l’invite du champ reste « Répondez, ou corrigez la fiche au-dessus », et il n’y a pas de fiche

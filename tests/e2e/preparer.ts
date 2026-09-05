@@ -17,7 +17,7 @@ import { Client } from 'pg'
 import { appliquerMigrations } from '../../apps/serveur/infra/base/migrations'
 import { identifiant } from '../../apps/serveur/infra/identifiants'
 import type { Synthese } from '../../apps/serveur/domaine/synthese/schema'
-import { ADMIN_E2E, BASE_E2E, urlBaseE2E } from '../../playwright.config'
+import { ADMIN_E2E, BASE_E2E, CLE_DEMO_E2E, urlBaseE2E } from '../../playwright.config'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const DOSSIER_MIGRATIONS = path.resolve(ICI, '../../db/migrations')
@@ -58,6 +58,15 @@ async function semer(client: Client): Promise<void> {
   await client.query(
     `insert into produits (id, nom, domaine, cle_publique, secret_hash)
      values ('prod_e2e', 'Pistache', 'pistache.exemple.fr', 'fdy_pub_e2e', 'argon2-bidon')`,
+  )
+
+  // ⚠️ Le produit de la fausse application hôte. `domaine = 'localhost'` parce
+  //    qu’elle est servie sur `localhost:4321` et que `origineAutorisee` ignore
+  //    le port — seul le nom d’hôte compte (domaine/retours/origine.ts).
+  await client.query(
+    `insert into produits (id, nom, domaine, cle_publique, secret_hash)
+     values ('prod_demo', 'Pistache Demo', 'localhost', $1, 'argon2-bidon')`,
+    [CLE_DEMO_E2E],
   )
 
   const bugId = 'ret_e2e_bug'

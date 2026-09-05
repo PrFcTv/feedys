@@ -269,6 +269,49 @@ Le widget est utilisé toute la journée par des gens qui n’ont pas choisi de 
   en gris clair.
 - Le transcript en direct est annoncé en `aria-live="polite"`.
 
+## Ce que le widget dit quand ça ne se passe pas bien
+
+⛔ **Quatre règles, et elles ne se discutent pas.** Dans un état dégradé, le widget :
+**ne s’excuse pas** · **n’explique pas ce qui manque** — qu’un modèle soit tombé n’est pas
+l’affaire du collaborateur · **ne promet rien** · **ne diagnostique rien**. Ce qui reste :
+**inviter à continuer**.
+
+### L’invite du champ suit ce qui est à l’écran
+
+⛔ **Elle ne dépend PAS de la phase.** C’était tout le défaut
+[004](../03-Bugs/BUGS_LOG.md) : `phase === 'entretien'` restait vrai alors que la carte n’était
+jamais arrivée, et le champ invitait à corriger une fiche absente.
+
+| Ce qui est à l’écran | L’invite |
+|---|---|
+| Avant l’entretien | « Ce qui vous a bloqué, ou l’idée qui vient de vous venir. » |
+| Une carte | « Répondez, ou corrigez la fiche au-dessus. » |
+| Une question, **sans** carte | « Répondez, ou ajoutez ce qui vous revient. » |
+| Ni carte ni question | « Ajoutez ce qui vous revient. » |
+
+⚠️ **Quatre situations produisent « en entretien, sans carte »**, et une seule est un échec : le
+premier tour encore en vol — **sur le chemin nominal**, pendant la latence du modèle —, le tour en
+échec, le tour rendu sans compréhension, et le tour dont la question conclut.
+
+### Les autres états dégradés
+
+| État | Ce qui s’affiche |
+|---|---|
+| Le premier tour se fait attendre | « Un instant… » — ⛔ seulement tant qu’il n’y a pas de carte à regarder |
+| Le tour n’aboutit pas | « C’est noté. Ajoutez ce que vous voulez, ou envoyez. » |
+| L’envoi n’aboutit pas | le message du serveur, verbatim — ou « L’envoi n’a pas abouti. Réessayez dans un instant. » |
+| Réseau coupé à l’envoi | « Pas de connexion. Votre retour part dès qu’elle revient. » — le brouillon est gardé, l’envoi repart tout seul |
+| Micro refusé | « Le micro est refusé pour ce site. La dictée continue sans l’onde. » |
+| Micro indisponible | « La dictée continue, sans l’onde. » — ⚠️ l’onde restait morte **sans un mot**, ce qui ressemble à un produit cassé |
+| Dictée indisponible (pas de Web Speech) | ⛔ **rien.** Le bloc micro disparaît, le champ prend la place ([D-003]) |
+
+⚠️ **Le message de refus du serveur ne remonte jamais au tour d’entretien**, et c’est voulu :
+« Le bot n’est pas joignable » explique une panne. L’envoi, lui, le relaie — parce que là, la
+personne doit savoir que sa parole n’est pas partie.
+
+⛔ **Les textes vivent tous dans `packages/widget/src/ui/textes.ts`**, jamais en dur dans le JSX.
+Une phrase qu’on ne peut pas lire à côté des autres est une phrase qu’on n’arbitre pas.
+
 ## Ce que le widget ne fait jamais
 
 - Il ne s’ouvre pas tout seul, jamais, sous aucune condition.

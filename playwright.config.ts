@@ -28,6 +28,23 @@ export const ORIGINE = `http://localhost:${PORT}`
 
 export const BASE_E2E = 'feedys_e2e'
 
+/**
+ * La fausse application hôte de `pnpm widget:demo`, servie à côté.
+ *
+ * ⚠️ C’est LE SEUL endroit où le widget est testé rendu dans la page de
+ *    quelqu’un d’autre — le reste des parcours ne voit que `/widget.js` en tant
+ *    qu’actif HTTP. T-003 dit que ça ne remplace pas un hôte réel, et c’est vrai.
+ */
+export const PORT_DEMO = 4321
+export const ORIGINE_DEMO = `http://localhost:${PORT_DEMO}`
+
+/**
+ * ⛔ Inventée, sans valeur hors de ce test. Le produit qui la porte est semé par
+ *    `preparer.ts` avec `domaine = 'localhost'` — `origineAutorisee` ignore le
+ *    port et le schéma, seul le nom d’hôte compte.
+ */
+export const CLE_DEMO_E2E = 'fdy_pub_demo_e2e'
+
 /** ⛔ Inventé, et sans valeur hors de ce test. Le dépôt est public. */
 export const MOT_DE_PASSE_E2E = 'e2e-mot-de-passe-de-test'
 
@@ -62,7 +79,8 @@ export default defineConfig({
 
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 
-  webServer: {
+  webServer: [
+    {
     // ⚠️ `next dev` plutôt que `build` + `start` : le parcours démarre en
     //    quelques secondes au lieu d’une minute, et les erreurs de rendu
     //    remontent en console — ce qu’on veut justement voir échouer.
@@ -79,9 +97,28 @@ export default defineConfig({
       DATABASE_URL: urlBaseE2E(),
       FEEDYS_BO_MOT_DE_PASSE: MOT_DE_PASSE_E2E,
       FEEDYS_URL_PUBLIQUE: ORIGINE,
-      // ⚠️ Exigée par la composition, jamais appelée ici : le back-office ne
-      //    parle pas au modèle.
+      // ⚠️ Exigée par la composition. ⛔ Ce n’est pas un identifiant de modèle
+      //    valide, et c’est VOULU : le tour d’entretien échoue donc en 503, ce
+      //    qui est exactement l’état dégradé que `widget-demo.spec.ts` recette.
       FEEDYS_MODELE: 'bouchon-e2e',
     },
-  },
+    },
+    {
+      // La fausse application hôte — volontairement hostile (CSS agressif,
+      // reset global, une modale à z-index 9999).
+      //
+      // ⚠️ Elle charge `widget.js` DEPUIS le serveur Feedys ci-dessus, sur un
+      //    AUTRE PORT : c’est la seule façon de voir le widget comme un hôte le
+      //    voit — deux origines, CORS compris.
+      command: `pnpm exec tsx packages/widget/demo/serveur.ts`,
+      url: ORIGINE_DEMO,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+      env: {
+        PORT: String(PORT_DEMO),
+        FEEDYS_URL: ORIGINE,
+        FEEDYS_CLE_DEMO: CLE_DEMO_E2E,
+      },
+    },
+  ],
 })

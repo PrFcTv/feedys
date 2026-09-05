@@ -16,7 +16,7 @@ ce qu’on imagine.
 |---|---|---|
 | P-015 · la recette qui manque | [RECETTE_MVP] points 1 et 6, [BUGS_LOG] 005 à 008 | ✅ fait |
 | P-016 · le filet de clôture | [BUGS_LOG] 003, T-006 | ✅ fait |
-| P-017 · ce que le widget dit quand ça casse | [BUGS_LOG] 004, T-007 | ⏳ à faire |
+| P-017 · ce que le widget dit quand ça casse | [BUGS_LOG] 004, T-007 | ✅ fait |
 | P-018 · le rôle de connexion | T-004 | ⏳ à faire |
 | P-019 · la première mise en service | T-003 | ⏳ à faire |
 | P-020 · le retour au collaborateur | [ROADMAP] ① | 🔒 après P-019 |
@@ -166,7 +166,15 @@ si on retire la réservation de ligne.
 
 ---
 
-## P-017 · Ce que le widget dit quand le modèle ne répond pas
+## P-017 · Ce que le widget dit quand le modèle ne répond pas — ✅ fait
+
+⚠️ **Joué le 2026-09-05.** Le recensement a montré que le défaut était plus large que
+[BUGS_LOG] 004 : **quatre** situations produisent « en entretien, sans carte », dont une **sur le
+chemin nominal** — pendant la latence du modèle, avant toute panne. Et il n’existait **aucun**
+module de textes : les phrases étaient en dur dans le JSX, ce qui est la vraie raison pour laquelle
+celle-ci n’avait jamais été arbitrée. Deux défauts silencieux ont été fermés au passage : un tour
+en échec ne disait **rien du tout**, et un micro `indisponible` laissait une onde morte sans un mot.
+Le parcours `widget:demo` a été câblé dans Playwright — il n’existait pas.
 
 **Objectif** — une phrase, choisie. Referme [BUGS_LOG] 004 et [T-007][TICKETS_DIFFERES].
 

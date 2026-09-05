@@ -40,6 +40,7 @@ référence du MVP marche de bout en bout.**
 | P-014 · recette du MVP | ✅ fait — ⚠️ deux points sur huit non joués, faute de clé de modèle |
 | P-015 · la recette qui manquait | ✅ fait — **les huit points au vert** ([RECETTE_MVP](../03-Bugs/RECETTE_MVP.md)), quatre défauts corrigés ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 005 à 008) |
 | P-016 · le filet de clôture | ✅ fait — un entretien muet depuis trente minutes se referme et se synthétise tout seul ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 003, [D-018](DECISIONS_LOG.md)) |
+| P-017 · les textes des états dégradés | ✅ fait — l’invite suit ce qui est à l’écran, et le widget parle enfin quand un tour n’aboutit pas ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 004) |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
