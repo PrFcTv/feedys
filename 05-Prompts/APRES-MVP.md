@@ -18,7 +18,7 @@ ce qu’on imagine.
 | P-016 · le filet de clôture | [BUGS_LOG] 003, T-006 | ✅ fait |
 | P-017 · ce que le widget dit quand ça casse | [BUGS_LOG] 004, T-007 | ✅ fait |
 | P-018 · le rôle de connexion | T-004 | ✅ fait |
-| P-019 · la première mise en service | T-003 | ⏳ à faire |
+| P-019 · la première mise en service | T-003 | ⏳ **la moitié AVANT est écrite** — la pose attend un hôte |
 | P-020 · le retour au collaborateur | [ROADMAP] ① | 🔒 après P-019 |
 | P-021 · le rejeu des trente secondes | [ROADMAP] ② | 🔒 après P-019 |
 | P-022 · l’audio réécoutable | [ROADMAP] ③ | 🔒 après P-019 |
@@ -281,6 +281,12 @@ hostile à nous.
 ⚠️ **Ce prompt n’est pas jouable seul.** Il demande un logiciel métier réel, une ligne de `<script>`
 posée dedans, et des collaborateurs qui parlent. Le rôle de Claude Code y est d’outiller et de
 consigner, pas de constater à ma place.
+
+✅ **La moitié « AVANT la pose » est écrite** (2026-09-05) : la liste de vérification vit dans
+[hebergement.md](../04-Architecture/hebergement.md) §La pose chez un hôte, en six étapes — le
+service répond, la restauration jouée pour de vrai, le produit et sa clé, la ligne de `<script>`,
+l’identité signée, et ce qu’on regarde dans les dix minutes qui suivent. ⛔ **Ce qui reste demande
+un hôte réel** : la pose elle-même, `03-Bugs/MISE_EN_SERVICE.md`, et la clôture de T-003.
 
 ```
 Prépare et consigne la première mise en service de Feedys chez un hôte réel.

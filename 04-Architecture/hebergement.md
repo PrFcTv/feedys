@@ -193,6 +193,84 @@ sans `node_modules` complet. Elle tourne en `node`, pas en root.
 --env-file` fait exactement la même chose que le compose : ce fichier est une commodité, pas un
 mécanisme.
 
+## La pose chez un hôte — la liste de vérification
+
+⚠️ **À jouer dans l’ordre.** Chaque ligne se coche pour de vrai, pas de tête. Ce qui a été vu
+entre dans `03-Bugs/MISE_EN_SERVICE.md` — au format de `RECETTE_MVP.md`.
+
+⛔ **Aucun nom de client, aucun domaine réel, aucune clé ne rejoint le dépôt.** Les exemples
+restent en `exemple.fr`. Le dépôt est public.
+
+### 1 · Le service répond
+
+- [ ] `docker compose -f docker-compose.production.yml up -d` — §Construire et déployer ci-dessus ;
+- [ ] `GET /sante` rend **200** et `migrations: 'a_jour'` — §La sonde ;
+- [ ] les journaux de démarrage portent la ligne du **rôle de connexion** — §Le rôle de connexion.
+      ⚠️ Si elle dit « il est superutilisateur » ou « il est propriétaire », les GRANT ne mordent
+      pas : c’est le moment de le corriger, pas après ;
+- [ ] `feedys.<domaine>/widget.js` se télécharge depuis l’extérieur, en **brotli ou gzip**.
+
+### 2 · ⛔ La restauration, une fois, pour de vrai
+
+⛔ **Avant la pose, pas après.** Une sauvegarde jamais restaurée n’existe pas (§La sauvegarde).
+
+- [ ] prendre un dump, le restaurer **dans une base jetable**, et compter les `messages` ;
+- [ ] noter dans `MISE_EN_SERVICE.md` **ce qui a été restauré et depuis quel dump**.
+
+### 3 · Le produit et sa clé
+
+```bash
+pnpm produit:creer -- --nom "Nom du logiciel" --domaine app.exemple.fr
+```
+
+- [ ] le **domaine d’origine** est celui d’où la page sera servie. ⚠️ Le port et le schéma sont
+      ignorés, seul le nom d’hôte compte — et ⛔ **pas de joker de sous-domaine** :
+      `app.exemple.fr` ne couvre pas `autre.exemple.fr` ;
+- [ ] le **secret est affiché une seule fois**. Il part chez l’hôte, dans l’environnement de SON
+      serveur. ⛔ Jamais dans une page, jamais dans le dépôt, jamais dans une conversation.
+
+### 4 · La ligne de `<script>`
+
+```html
+<script src="https://feedys.exemple.fr/widget.js" data-cle="fdy_pub_…" defer></script>
+```
+
+- [ ] ⛔ **par `<script src>`, jamais par un paquet npm** — c’est ce qui garde le widget distinct
+      du logiciel hôte, et la raison est juridique avant d’être technique
+      ([licences.md](licences.md)) ;
+- [ ] posée sur **toutes** les pages où quelqu’un peut buter, pas seulement l’accueil ;
+- [ ] la bulle apparaît, et ⛔ **ne s’ouvre pas toute seule**.
+
+### 5 · L’identité signée
+
+⚠️ Facultative, et **on la branche quand même** : sans elle, un retour arrive sans auteur, et on
+ne peut ni revenir vers la personne ni pondérer selon son métier ([D-005](../00-Projet/DECISIONS_LOG.md)).
+
+- [ ] le serveur de l’hôte signe `{ ref, nom, role, exp }` avec le secret — la recette est dans le
+      [README](../README.md) §Attacher une identité ;
+- [ ] `window.feedys` est posé **avant** la balise du widget ;
+- [ ] un premier retour d’essai porte `identite_verifiee = true` au back-office.
+      ⚠️ `false` n’est pas un rejet — le retour est accepté quand même —, mais c’est le signe
+      que la signature ne colle pas.
+
+### 6 · Les dix minutes qui suivent
+
+C’est la partie qui ne s’automatise pas, et c’est celle qui compte. Dans un vrai navigateur, sur
+une vraie page de l’hôte :
+
+- [ ] ⛔ **la console de l’hôte** : toute ligne écrite par nous est un défaut, y compris
+      l’avertissement de snapdom ([T-005](../00-Projet/TICKETS_DIFFERES.md)) ;
+- [ ] les **styles de l’hôte** ne traversent pas le widget, ni l’inverse ;
+- [ ] le `z-index` : rien de l’hôte ne passe **par-dessus** le panneau — modales comprises ;
+- [ ] le **poids réellement téléchargé**, mesuré dans l’onglet réseau, avec les en-têtes qu’un vrai
+      navigateur envoie ;
+- [ ] un retour **dicté à la voix** va jusqu’au bout, et la note arrive.
+
+⚠️ **Ce qui se corrige en une ligne se corrige tout de suite** ; le reste devient une entrée de
+`BUGS_LOG.md`, ou un ticket différé avec son déclencheur.
+
+⛔ **Et ce que la vraie page apprend, la fausse l’apprend aussi** : toute hostilité constatée chez
+un hôte rejoint `packages/widget/demo/index.html`. C’est ce qui empêche le même défaut de revenir.
 ## Ce qui doit être surveillé
 
 Trois choses, et une seule est technique :
