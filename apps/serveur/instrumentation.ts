@@ -16,6 +16,12 @@
  *    Postgres, sans clé de modèle et sans widget construit. Les contrôles y sont
  *    des avertissements, et c’est ce que l’étape 5 de hebergement.md appelle
  *    « un garde-fou de production, pas un test ».
+ *
+ * ⚠️ C’est aussi d’ici que part LE FILET — le balayage qui referme les entretiens
+ *    que le widget n’a pas refermés (D-018). ⛔ Seulement si le démarrage s’est
+ *    bien passé : un poste sans Postgres n’a rien à balayer, et un filet qui
+ *    échouerait toutes les cinq minutes dans la console de `pnpm dev` finirait
+ *    par masquer ce qu’elle doit montrer.
  */
 export async function register(): Promise<void> {
   // ⚠️ Next appelle `register()` aussi pour le runtime edge, où ni `pg` ni le
@@ -23,14 +29,19 @@ export async function register(): Promise<void> {
   if (process.env['NEXT_RUNTIME'] !== 'nodejs') return
 
   const { demarrerOuMourir, verifierDemarrage } = await import('./infra/demarrage')
+  const { demarrerFilet } = await import('./infra/filet')
 
   if (process.env['NODE_ENV'] !== 'production') {
     const resultat = await verifierDemarrage()
     if (!resultat.ok) {
       console.warn(`Feedys ⚠️  [${resultat.etape}] ${resultat.message}`)
+      return
     }
+
+    demarrerFilet()
     return
   }
 
   await demarrerOuMourir()
+  demarrerFilet()
 }

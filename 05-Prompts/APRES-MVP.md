@@ -15,7 +15,7 @@ ce qu’on imagine.
 | Prompt | Ce que ça referme | État |
 |---|---|---|
 | P-015 · la recette qui manque | [RECETTE_MVP] points 1 et 6, [BUGS_LOG] 005 à 008 | ✅ fait |
-| P-016 · le filet de clôture | [BUGS_LOG] 003, T-006 | ⏳ à faire |
+| P-016 · le filet de clôture | [BUGS_LOG] 003, T-006 | ✅ fait |
 | P-017 · ce que le widget dit quand ça casse | [BUGS_LOG] 004, T-007 | ⏳ à faire |
 | P-018 · le rôle de connexion | T-004 | ⏳ à faire |
 | P-019 · la première mise en service | T-003 | ⏳ à faire |
@@ -100,7 +100,15 @@ main sur un entretien ouvert rend `200` avec `question` à `null`, sans écrire 
 
 ---
 
-## P-016 · Le filet qui referme les entretiens muets
+## P-016 · Le filet qui referme les entretiens muets — ✅ fait
+
+⚠️ **Joué le 2026-09-05.** L’étape 1 a fait ce qu’elle devait et **a répondu autre chose que
+prévu** : la base de développement ne peut pas dire si le défaut est fréquent — ses dix `en_cours`
+sont les artefacts des tentatives d’injection de P-015. Le chiffre utile était dans l’autre volet :
+la clôture nominale arrive **en huit secondes au pire**, ce qui a fixé N à trente minutes
+([D-018](../00-Projet/DECISIONS_LOG.md)). Un défaut de prémisse a aussi été trouvé en chemin : le
+prompt demandait de distinguer le balayage « d’un abandon volontaire dans la table audit », or
+**aucune clôture n’écrivait dans `audit`** — il n’y avait rien dont se distinguer.
 
 **Objectif** — qu’un onglet tué ne coûte plus une note. Referme [BUGS_LOG] 003 et
 [T-006][TICKETS_DIFFERES].

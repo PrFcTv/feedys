@@ -542,3 +542,68 @@ sera une décision, pas une option ajoutée en passant.
 
 ⛔ **Détecter la fin de phrase par le modèle.** Il faudrait un aller-retour réseau à chaque pause,
 sur le seul écran où la latence se voit.
+
+---
+
+## D-018 — Le filet tourne dans le processus, et N vaut trente minutes
+
+**Prise le** : 2026-09-05, pendant P-016
+**Statut** : appliquée
+
+### Le contexte
+
+La clôture d’un entretien dépendait entièrement du navigateur. Un onglet tué et le retour restait
+`en_cours` pour toujours — ni synthèse, ni email ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 003, T-006).
+Deux choses étaient à trancher : **où** un balayage périodique peut tourner, et **au bout de
+combien de temps** un entretien est réputé mort.
+
+### Où il tourne — `setInterval`, dans le processus qui sert les requêtes
+
+[hebergement.md](../04-Architecture/hebergement.md) §Ce qui n’est pas là refuse une file, un worker
+et un cache ; §La forme interdit qu’un mécanisme dépende du planificateur d’un hébergeur — le
+conteneur doit se déplacer d’un `docker run` à un autre sans que rien ne change. Il ne reste que le
+processus lui-même, démarré depuis `instrumentation.ts` comme le reste ([D-016](DECISIONS_LOG.md)).
+
+⚠️ **C’est tenable parce que le travail est minuscule** : une passe est bornée à vingt retours,
+toutes les cinq minutes, et ne fait rien la plupart du temps.
+
+⛔ **Deux conteneurs derrière un proxy ne doublent pas les notes.** La réservation est un seul
+`update ... where statut = 'en_cours' returning id`, précédé d’un `for update skip locked` : le
+`returning` ne rend que les lignes qu’on a soi-même flippées. Le test d’intégration le prouve, et
+il rougit si on retire la réservation — vérifié en la retirant.
+
+### Combien de temps — trente minutes, et ce n’est pas une mesure
+
+T-006 disait de mesurer d’abord. La mesure a été jouée, et **elle a répondu autre chose que ce
+qu’on lui demandait** : sur treize retours, dix sont `en_cours`, mais ce sont les artefacts des
+cinq tentatives d’injection de P-015, jouées par curl sans qu’aucun `POST /fin` ne soit attendu.
+⛔ **Une base de développement ne peut pas dire si le défaut est fréquent en usage réel**, et on ne
+lui fait pas dire.
+
+Le second volet, lui, a donné un vrai chiffre : **quand le chemin nominal marche, la clôture arrive
+en huit secondes au pire** après le dernier message (0 s, 5 s, 8 s sur les trois retours clos).
+C’est ce chiffre qui fixe N : trente minutes sont **225 fois** le signal normal. Un entretien
+vivant ne peut pas être pris pour un entretien mort.
+
+⚠️ **Les deux côtés du choix.** Trop court, on coupe la parole de quelqu’un qui cherche ses mots
+ou qu’un collègue vient d’interrompre — et sa réponse en cours part à la poubelle. Trop long, la
+note arrive le lendemain et l’entretien reste affiché « en cours » au back-office entre-temps.
+
+### Ce qu’on n’a pas fait
+
+⛔ **Auditer aussi les clôtures ordinaires.** Ce serait symétrique, mais ça touche
+`terminerEntretien` — donc le chemin nominal — pour un besoin que personne n’a. Comme **rien
+d’autre n’écrit dans `audit` à la clôture**, la seule présence d’une ligne `cloture_balayage`
+suffit à identifier ce que le filet a rattrapé. C’est exactement la question qu’on se pose.
+
+⛔ **Une colonne `clos_par_balayage_le` sur `retours`.** Plus simple à interroger, mais `audit` est
+la zone prévue pour ce genre de trace, et elle est append-only par construction.
+
+⛔ **Réveiller le modèle en parallèle.** L’aval est joué en série : vingt synthèses simultanées
+depuis le processus qui sert les requêtes est ce qu’on évite, pas ce qu’on optimise.
+
+### Ce qui la renverserait
+
+Un usage réel qui montrerait que trente minutes est trop long — quelqu’un qui se plaint d’attendre
+sa note — ou trop court, ce qui se verrait à des entretiens refermés alors que la personne
+répondait encore. ⚠️ Les lignes `cloture_balayage` de `audit` sont ce qui permettra de le dire.

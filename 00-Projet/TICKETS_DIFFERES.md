@@ -111,11 +111,24 @@ celle-ci ; `debug` ne la couvre pas.
 
 ---
 
-## T-006 — Rien ne referme un entretien que le widget n’a pas refermé
+## ~~T-006 — Rien ne referme un entretien que le widget n’a pas refermé~~ · ✅ clos
 
 **Différé le** : 2026-09-05, pendant P-014
-**Déclencheur de reprise** : la première semaine où la part de retours restés `en_cours` dépasse
-5 %, **ou** le premier retour perdu dont quelqu’un se plaint
+**Clos le** : 2026-09-05, pendant P-016, par [D-018](DECISIONS_LOG.md)
+
+⚠️ **Le déclencheur prévu — « la première semaine où la part de retours restés `en_cours`
+dépasse 5 % » — n’est jamais tombé, et il ne pouvait pas tomber** : il n’y a pas encore d’usage
+réel. La mesure que ce ticket demandait a quand même été jouée, et c’est elle qui a tranché —
+autrement que prévu. Elle a montré que **la base de développement ne peut rien dire** (dix
+`en_cours` sur treize, mais ce sont les artefacts des tentatives d’injection de P-015, jouées par
+curl sans jamais de `POST /fin`), **et** elle a donné le seul chiffre utile : quand le chemin
+nominal marche, la clôture arrive **en huit secondes au pire** après le dernier message.
+
+C’est ce chiffre-là, et non une distribution de silences, qui a fixé N à trente minutes : deux
+ordres de grandeur au-dessus du signal normal. Le détail est dans [D-018](DECISIONS_LOG.md).
+
+Ce qui suit est conservé tel quel — c’est l’énoncé du problème, et il n’a pas bougé.
+
 **Coût si plus tard** : identique — c’est une tâche périodique, elle se branche sans rien déplacer
 
 La clôture d’un entretien dépend entièrement d’une requête du navigateur : `POST /fin`, envoyée à
