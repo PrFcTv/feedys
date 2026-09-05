@@ -456,6 +456,9 @@ tenu **sur le fichier servi**, pas sur le build local.
 
 # Après le MVP
 
-L’ordre de valeur est dans [../00-Projet/ROADMAP.md]. Le premier suivant est **le retour au
-collaborateur** — « ce que vous avez signalé est corrigé » — parce que c’est lui qui fait qu’on
-continue à parler. Sans lui, Feedys est un puits.
+L’ordre de valeur est dans [../00-Projet/ROADMAP.md]. La séquence qui le joue — neuf prompts,
+P-015 à P-023, en trois lots — est dans [APRES-MVP.md](APRES-MVP.md).
+
+⛔ Ne pas écrire ici quel prompt vient en premier : ce serait l’ordre d’exécution recopié à un
+troisième endroit, périmé au premier merge. [APRES-MVP.md](APRES-MVP.md) est la seule table
+d’ordonnancement.

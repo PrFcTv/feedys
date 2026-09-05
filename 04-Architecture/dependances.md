@@ -75,9 +75,11 @@ les rende impossibles.
 | `rrweb` | MIT | 20 111 | rejeu de session : garder les 30 dernières secondes en tampon et les joindre au retour. **Voir** le bug au lieu de le reconstituer | ROADMAP ② |
 | `wavesurfer.js` | BSD-3 | 10 396 | forme d’onde + lecture, dans le back-office. Le transcript efface le ton ; l’audio le garde | ROADMAP ③ |
 
-⚠️ **Conséquence sur le MVP, à ne pas oublier** : `contextes` doit pouvoir accueillir un chemin de
-rejeu, et `messages` porte déjà `audio_chemin` ([conventions-db.md](conventions-db.md)). Les deux
-colonnes existent dès `0001_socle.sql` — c’est gratuit maintenant, c’est une migration plus tard.
+⚠️ **Conséquence sur le MVP** : `messages` porte déjà `audio_chemin`
+([conventions-db.md](conventions-db.md)) — l’audio de ③ ne coûtera donc pas de migration.
+⛔ Le chemin de rejeu de ②, lui, n’a **pas** de colonne : `contextes` s’arrête à `capture_chemin`,
+vérifié le 2026-09-05 dans `0001_socle.sql`. Ce qui était annoncé « gratuit maintenant » ne l’a
+pas été : P-021 devra porter sa propre migration.
 
 ## Ce qu’on a écarté, et pourquoi
 

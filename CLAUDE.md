@@ -276,6 +276,7 @@ la sortie. Pas d’affirmation de succès sans preuve.
 | Ce qui est fait, en cours, à venir | [00-Projet/ROADMAP.md] |
 | Pourquoi telle décision technique | [00-Projet/DECISIONS_LOG.md] |
 | **La séquence de prompts jusqu’au MVP** | [05-Prompts/MVP.md] |
+| **La séquence après le MVP** | [05-Prompts/APRES-MVP.md] |
 | Le comportement du bot — la pièce maîtresse | [01-Specs/entretien.md] |
 | Le comportement du widget | [01-Specs/widget.md] |
 | Comment un retour entre — l’API, ses refus, son invariant | [01-Specs/ingestion.md] |

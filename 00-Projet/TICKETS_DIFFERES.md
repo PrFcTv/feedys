@@ -156,3 +156,22 @@ Mais l’invite du champ reste « Répondez, ou corrigez la fiche au-dessus », 
 widget ne s’excuse pas et n’explique pas ce qui manque (01-Specs/widget.md) — il faut donc une
 phrase qui invite à continuer sans avouer une panne, et ça se choisit avec le reste des textes,
 pas au détour d’une PR de recette.
+
+---
+
+## T-008 — La liste du back-office ne distingue rien en mode dégradé
+
+**Différé le** : 2026-09-05, à la relecture de [05-Prompts/APRES-MVP.md](../05-Prompts/APRES-MVP.md)
+**Déclencheur de reprise** : le mode dégradé devient fréquent — un relevé, pas une impression
+**Coût si plus tard** : identique — l’affichage de la liste n’est contraint par rien d’autre
+
+Sans synthèse, les lignes de la liste sont indiscernables : « sans note — synthèse absente »,
+autant de fois qu’il y a de retours en attente. La fiche, elle, dit tout.
+
+⚠️ **C’est une observation, pas un défaut**, et elle est restée orpheline : elle a été relevée
+pendant P-014 dans [RECETTE_MVP](../03-Bugs/RECETTE_MVP.md) §5, avec son propre « à revoir », sans
+que rien ne la reprenne — ni BUGS_LOG, ni ce registre. C’est exactement ce que CLAUDE.md
+§Documentation appelle mourir dans un commentaire de code.
+
+**En attendant** : rien. Le mode dégradé est censé être rare, et c’est précisément sa fréquence
+qui rouvrira le sujet.

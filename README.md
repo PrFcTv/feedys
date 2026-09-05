@@ -174,6 +174,7 @@ Emprunts et attributions : [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
 | Pourquoi ce produit existe | [00-Projet/VISION.md](00-Projet/VISION.md) |
 | Pourquoi telle décision | [00-Projet/DECISIONS_LOG.md](00-Projet/DECISIONS_LOG.md) |
 | **Construire — la séquence de prompts** | [05-Prompts/MVP.md](05-Prompts/MVP.md) |
+| **La suite — les prompts d’après** | [05-Prompts/APRES-MVP.md](05-Prompts/APRES-MVP.md) |
 | Le comportement du bot | [01-Specs/entretien.md](01-Specs/entretien.md) |
 | Le widget | [01-Specs/widget.md](01-Specs/widget.md) |
 | Comment un retour entre | [01-Specs/ingestion.md](01-Specs/ingestion.md) |

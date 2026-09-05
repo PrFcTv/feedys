@@ -67,7 +67,14 @@ production (docker build .) et pnpm widget:demo.
 Vérifie aussi, pendant que le modèle répond :
 - la console reste à zéro erreur — c’est le point 7, rejoué modèle branché ;
 - la limite de deux relances est tenue par le SERVEUR et pas seulement par le
-  widget : tente un troisième tour à la main, avec curl.
+  widget. Sur un entretien ENCORE OUVERT, rejoue un troisième tour à la main
+  avec curl : la réponse est 200 et `question` vaut `null` — la question du
+  modèle est jetée par borner(), elle n’est PAS refusée, et aucun motif de
+  refus ne couvre ce cas. Vérifie en base qu’aucune troisième ligne `bot` n’a
+  été écrite.
+  ⚠️ Si l’entretien a déjà été refermé par le point 1, le serveur rend 409
+  `entretien_clos` : ça prouve la clôture, PAS le plafond. Refais-le sur un
+  retour neuf.
 
 Puis :
 - mets à jour 03-Bugs/RECETTE_MVP.md — le tableau des huit points, et une
@@ -82,7 +89,8 @@ Puis :
 
 **Acceptation** — le tableau de `RECETTE_MVP.md` n’a plus aucun ⛔ **non joué** · les quatre
 tentatives d’injection sont écrites *in extenso* avec leur verdict · un troisième tour appelé à la
-main est refusé par le serveur.
+main sur un entretien ouvert rend `200` avec `question` à `null`, sans écrire de troisième ligne
+`bot`.
 
 ---
 
@@ -256,6 +264,10 @@ AVANT la pose :
   créer le produit et sa clé, poser la ligne de <script>, régler le domaine
   d’origine, brancher l’identité signée côté hôte (DECISIONS_LOG.md D-005), et
   ce qu’on regarde dans les dix minutes qui suivent.
+- ⚠️ La restauration du dump se joue UNE FOIS, pour de vrai, AVANT la pose
+  (hebergement.md §La sauvegarde) : une sauvegarde jamais restaurée n’existe
+  pas. Ce qui a été restauré, et depuis quel dump, entre dans
+  MISE_EN_SERVICE.md.
 - ⛔ Aucun nom de client, aucun domaine réel, aucune clé dans le dépôt. Les
   exemples restent en exemple.fr.
 
@@ -336,7 +348,8 @@ collaborateur informé ne peut pas répondre dans Feedys, et rien dans l’écra
 **Objectif** — voir le bug plutôt que le reconstituer. Le plus gros gain de temps de diagnostic.
 
 ⚠️ **Le budget du widget est l’obstacle, et il n’est pas négociable** : 60 Ko gzip
-(01-Specs/widget.md), dont 23,2 Ko sont déjà servis. `rrweb` n’y rentre pas. Le précédent existe et
+(01-Specs/widget.md), dont 26,0 Ko sont déjà consommés — les 23,2 Ko souvent cités sont la mesure
+brotli, sur le fil ([RECETTE_MVP]). Il reste 34 Ko, et `rrweb` n’y rentre pas. Le précédent existe et
 il est bon : snapdom est **servi par Feedys, pas empaqueté dans le widget**
 ([D-011](../00-Projet/DECISIONS_LOG.md)).
 
@@ -364,6 +377,12 @@ Attendu :
 - Le stockage, la durée de rétention et l’effacement se tranchent dans 01-Specs/
   et dans une entrée DECISIONS_LOG, pas au fil du code.
 - La lecture au back-office, sur la fiche, jamais dans la liste.
+- ⚠️ La colonne qui porte le chemin du rejeu N’EXISTE PAS : `contextes` s’arrête
+  à `capture_chemin`. Il faut donc une migration — une colonne nullable typée,
+  ⛔ jamais de metadata.
+- 04-Architecture/dependances.md : rrweb quitte §Ce qu’on prendra après le MVP
+  pour §Ce qu’on prend, avec la date de vérification et le poids gzip mesuré —
+  et en dépendance d’apps/serveur, pas de packages/widget, comme snapdom.
 
 ⛔ Ne touche pas à la boucle d’entretien. ⛔ N’ajoute rien au MCP.
 ```
@@ -379,9 +398,11 @@ panneau se ferme sans retour.
 **Objectif** — rendre le ton au développeur. « Ça, ça m’énerve tous les matins » ne dit pas la même
 chose écrit et dit.
 
-⚠️ Le tuyau existe déjà : l’API d’ingestion accepte un audio depuis le premier jour, par invariant
-(`CLAUDE.md` §La parole d’abord). Ce qui manque, c’est **de le garder** — et garder la voix de
-quelqu’un n’est pas garder son transcript.
+⚠️ Le tuyau **et le rangement** existent déjà : l’ingestion accepte un audio depuis P-003, l’écrit
+sur le volume `FEEDYS_STOCKAGE` et garde son chemin dans `messages.audio_chemin`
+(01-Specs/ingestion.md). Ce qui manque est **aux deux bouts** : le widget ne l’enregistre pas et ne
+l’envoie pas, rien ne le rejoue, et rien ne l’efface — garder la voix de quelqu’un n’est pas garder
+son transcript.
 
 ```
 Conserve l’audio d’un retour et rends-le réécoutable au back-office.
@@ -389,14 +410,13 @@ Conserve l’audio d’un retour et rends-le réécoutable au back-office.
 Lis 01-Specs/ingestion.md, 01-Specs/back-office.md,
 04-Architecture/hebergement.md et 04-Architecture/dependances.md.
 
-ÉTAPE 1 — deux questions à trancher avant le code, dans 01-Specs/ et une entrée
-DECISIONS_LOG :
-- OÙ vit le fichier. hebergement.md refuse une file et un worker ; lis ce qu’il
-  dit du stockage et respecte-le. Le volume attendu est petit : quelques dizaines
-  de secondes, quelques retours par jour.
-- COMBIEN DE TEMPS on le garde, et ce qui l’efface. ⚠️ C’est l’enregistrement de
-  la voix d’une personne identifiée : la rétention se décide, elle ne se laisse
-  pas être « pour toujours, par défaut ».
+ÉTAPE 1 — UNE question à trancher avant le code, dans 01-Specs/ et une entrée
+DECISIONS_LOG, puis tu t’arrêtes et tu me montres :
+- COMBIEN DE TEMPS on garde l’audio, et ce qui l’efface. ⚠️ C’est
+  l’enregistrement de la voix d’une personne identifiée : la rétention se
+  décide, elle ne se laisse pas être « pour toujours, par défaut ».
+⛔ Ne rouvre PAS la question du stockage : où vit le fichier est déjà tranché,
+spécifié et implémenté (01-Specs/ingestion.md, le volume FEEDYS_STOCKAGE).
 
 ÉTAPE 2 :
 - Le widget envoie l’audio EN PLUS du transcript quand la dictée a servi.
@@ -405,9 +425,15 @@ DECISIONS_LOG :
 - La lecture sur la fiche du back-office. Vérifie la licence de wavesurfer.js en
   lisant son LICENSE ; s’il ne tient pas dans MIT/Apache-2.0/ISC/BSD, un
   <audio controls> fait le travail et coûte zéro octet.
-- Tout emprunt substantiel → ATTRIBUTIONS.md dans le même commit.
+- Tout emprunt substantiel → ATTRIBUTIONS.md dans le même commit, et
+  04-Architecture/dependances.md tranché : wavesurfer.js rejoint §Ce qu’on
+  prend, avec la date et le poids mesuré — ou §Ce qu’on a écarté si
+  <audio controls> l’emporte.
 
-⛔ Ne transcris rien côté serveur ici : Whisper est un autre sujet (T-002).
+⛔ Ne transcris rien côté serveur ici : Whisper est un autre sujet, sans ticket
+ouvert — voir §Ce qui n’est pas encore un prompt. Son déclencheur dépend
+notamment de l’issue de T-002, qui porte sur la dictée LOCALE de Chrome et pas
+sur Whisper.
 ```
 
 **Acceptation** — un retour dicté porte son audio et se réécoute depuis la fiche · couper le
@@ -442,7 +468,10 @@ Attendu :
 - Libellés en français, tokens de DESIGN.md, ’ pour l’apostrophe.
 
 Tests : création, unicité de la clé, désactivation → l’ingestion rend 404, et le
-secret n’est jamais relu en clair après sa création.
+secret n’est jamais réaffiché après sa création — aucune page ni réponse d’API
+du back-office ne le porte, ni en clair ni chiffré. ⚠️ La vérification
+d’identité, elle, le déchiffre à chaque ingestion : c’est D-015, et ce n’est pas
+ce qu’on teste ici.
 
 Dans le même commit : 01-Specs/back-office.md mis à jour.
 ```
@@ -463,5 +492,7 @@ tombé. Les écrire maintenant reviendrait à deviner.
 | **T-005** · l’avertissement snapdom dans la console de l’hôte | un intégrateur signale la ligne — c’est P-019 qui le dira —, **ou** snapdom expose de quoi la taire |
 | **④ le regroupement** de retours similaires | un volume qui le justifie. [ROADMAP] : « le construire avant serait deviner » |
 | **Whisper côté serveur** | Chrome n’est plus tenable, **ou** T-002 échoue et la confidentialité l’exige. Le tuyau est déjà prêt : l’ingestion accepte l’audio depuis P-003 |
+| **Slack, les webhooks, l’ouverture d’issues** — [ROADMAP] §hors MVP | des retours réels ont prouvé que la note est bonne. D-007 : « ils s’ajouteront quand la note aura prouvé qu’elle est bonne » — P-019 ouvre la mesure, il ne la tranche pas |
+| **T-008** · la liste du back-office en mode dégradé | le mode dégradé devient fréquent — un relevé, pas une impression ([RECETTE_MVP] §5) |
 
 Le détail de chaque ticket, avec son coût si on le fait plus tard, est dans [TICKETS_DIFFERES].
