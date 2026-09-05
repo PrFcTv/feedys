@@ -25,12 +25,13 @@ import { identifiant } from '../../../infra/identifiants'
 import { GET as lister } from './retours/route'
 import { GET as lire } from './retours/[id]/route'
 import { POST as marquer } from './retours/[id]/statut/route'
+import { urlBaseDessai } from '../../../../../tests/base-dessai'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const RACINE = path.resolve(ICI, '../../../../..')
 const DOSSIER_MIGRATIONS = path.join(RACINE, 'db', 'migrations')
 
-const ADMIN = process.env['DATABASE_URL'] ?? 'postgresql://feedys:feedys@localhost:5432/feedys'
+const ADMIN = urlBaseDessai()
 
 const ORIGINE = 'https://feedys.exemple.fr'
 const JETON = 'jeton-mcp-de-test'

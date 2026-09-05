@@ -2,6 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { defineConfig, devices } from '@playwright/test'
+import { chargerEnvLocal, urlBaseDessai } from './tests/base-dessai'
 
 /**
  * Les parcours de bout en bout.
@@ -30,8 +31,14 @@ export const BASE_E2E = 'feedys_e2e'
 /** ⛔ Inventé, et sans valeur hors de ce test. Le dépôt est public. */
 export const MOT_DE_PASSE_E2E = 'e2e-mot-de-passe-de-test'
 
-export const ADMIN_E2E =
-  process.env['DATABASE_URL'] ?? 'postgresql://feedys:feedys@localhost:5432/feedys'
+/**
+ * ⛔ Aucun repli : `urlBaseDessai()` échoue franchement si `DATABASE_URL` est
+ *    absente, plutôt que de viser le premier Postgres venu
+ *    (03-Bugs/BUGS_LOG.md 006).
+ */
+chargerEnvLocal()
+
+export const ADMIN_E2E = urlBaseDessai()
 
 export function urlBaseE2E(): string {
   const url = new URL(ADMIN_E2E)

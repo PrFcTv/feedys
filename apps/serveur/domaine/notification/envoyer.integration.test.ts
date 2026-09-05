@@ -24,12 +24,13 @@ import type { Synthese } from '../synthese/schema'
 import type { PortSmtp, PortsNotification } from './envoyer'
 import { envoyerNote } from './envoyer'
 import type { MessageEmail } from './message'
+import { urlBaseDessai } from '../../../../tests/base-dessai'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const RACINE = path.resolve(ICI, '../../../..')
 const DOSSIER_MIGRATIONS = path.join(RACINE, 'db', 'migrations')
 
-const ADMIN = process.env['DATABASE_URL'] ?? 'postgresql://feedys:feedys@localhost:5432/feedys'
+const ADMIN = urlBaseDessai()
 
 const DOMAINE = 'pistache.exemple.fr'
 const DESTINATAIRE = 'developpeur@exemple.fr'

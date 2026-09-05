@@ -42,19 +42,35 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-/** Le moteur de reconnaissance, piloté à la main. */
+/**
+ * Le moteur de reconnaissance, piloté à la main.
+ *
+ * ⚠️ Il ACCUMULE le définitif, comme le vrai : `dicter` rend à chaque fois le
+ *    transcript arrêté DEPUIS LE DÉBUT, pas le dernier morceau. Un faux qui
+ *    remettait le définitif à vide en murmurant a laissé passer
+ *    [BUGS_LOG](../../../../03-Bugs/BUGS_LOG.md) 007.
+ */
 function fauxMoteur() {
   let surTexte: OptionsDictee['surTexte'] | undefined
+  let surFin: OptionsDictee['surFin']
+  let definitif = ''
   const arreter = vi.fn()
 
   return {
     arreter,
     dicter: (options: OptionsDictee): Reconnaissance => {
       surTexte = options.surTexte
+      surFin = options.surFin
+      definitif = ''
       return { arreter }
     },
-    dire: (definitif: string) => surTexte?.(definitif, ''),
-    murmurer: (provisoire: string) => surTexte?.('', provisoire),
+    /** Le moteur a épuisé ses relances : il ne repartira pas. */
+    renoncer: () => surFin?.(),
+    dire: (morceau: string) => {
+      definitif = definitif === '' ? morceau : `${definitif} ${morceau}`
+      surTexte?.(definitif, '')
+    },
+    murmurer: (provisoire: string) => surTexte?.(definitif, provisoire),
     demarre: () => surTexte !== undefined,
   }
 }
@@ -416,5 +432,119 @@ describe('source et transcriptBrut', () => {
       source: 'texte',
       contexte: CONTEXTE,
     })
+  })
+})
+
+/**
+ * ⚠️ LE DÉFAUT QUI RENVOYAIT À L’ACCUEIL EN PLEINE PHRASE
+ *    (03-Bugs/BUGS_LOG.md 007).
+ *
+ * Web Speech n’arrête un segment qu’aux pauses. Tant qu’il n’a rien arrêté, la
+ * phrase entière vit dans le PROVISOIRE — et `terminer()` ne lisait que le
+ * définitif. Résultat : on parle, ça s’arrête, le panneau revient à l’accueil,
+ * et la parole est perdue. C’est exactement ce que le produit promet de ne
+ * jamais faire.
+ */
+describe('⛔ terminer ne perd jamais ce qui vient d’être dit', () => {
+  it('garde le provisoire quand le moteur n’a encore rien arrêté', async () => {
+    const { racine, moteur, trouver } = installer()
+    await ouvrir(racine)
+
+    // Un clic simple : mains libres, comme quelqu’un qui a un long retour.
+    await appuyer(racine)
+    await envoyerEvenement(racine, pointeur('pointerup'))
+
+    await act(async () => {
+      moteur.murmurer('le planning se recharge tout seul pendant que je saisis')
+    })
+
+    // On termine avant que Web Speech ait arrêté quoi que ce soit.
+    await envoyerEvenement(racine, pointeur('pointerdown'))
+
+    expect(trouver('.ecoute')).toBeNull()
+    // ⛔ Ce qui ne doit PAS arriver : un champ vide et un retour à l’accueil.
+    expect(champDe(racine)!.value).toBe('le planning se recharge tout seul pendant que je saisis')
+  })
+
+  it('recolle le définitif et la fin de phrase encore provisoire', async () => {
+    const { racine, moteur, trouver } = installer()
+    await ouvrir(racine)
+
+    await appuyer(racine)
+
+    // Un appui bref bascule en mains libres ; c’est le second clic qui termine.
+    await envoyerEvenement(racine, pointeur('pointerup'))
+
+    await act(async () => {
+      moteur.dire('le tri par date')
+    })
+    await act(async () => {
+      moteur.murmurer('se remet à zéro')
+    })
+    await envoyerEvenement(racine, pointeur('pointerdown'))
+
+    expect(trouver('.ecoute')).toBeNull()
+    expect(champDe(racine)!.value).toBe('le tri par date se remet à zéro')
+  })
+
+  it('⛔ mais une annulation jette tout, provisoire compris', async () => {
+    const { racine, moteur, trouver } = installer()
+    await ouvrir(racine)
+
+    await appuyer(racine)
+    await act(async () => {
+      moteur.murmurer('je me suis trompé')
+    })
+    // Glisser vers la gauche au-delà du seuil : c’est le geste qui annule.
+    await envoyerEvenement(racine, pointeur('pointermove', -200))
+
+    expect(trouver('.ecoute')).toBeNull()
+    expect(champDe(racine)!.value).toBe('')
+  })
+})
+
+/**
+ * ⚠️ Quand le moteur renonce pour de bon (micro coupé, réseau tombé, Chrome
+ *    qui ne repart plus), l’écran « j’écoute » deviendrait un mensonge : l’onde
+ *    bouge encore, le micro est ouvert, et plus un mot n’est transcrit.
+ *
+ * ⛔ On ne laisse personne parler dans le vide. On rend la main avec ce qui a
+ *    été capté, et le champ texte prend le relais.
+ */
+describe('quand le moteur renonce pour de bon', () => {
+  it('sort de l’écoute et rend ce qui a été capté', async () => {
+    const { racine, moteur, trouver } = installer()
+    await ouvrir(racine)
+
+    await appuyer(racine)
+    await envoyerEvenement(racine, pointeur('pointerup'))
+
+    await act(async () => {
+      moteur.dire('la recherche ne trouve pas les dossiers archivés')
+    })
+    await act(async () => {
+      moteur.renoncer()
+    })
+    await calmer()
+
+    expect(trouver('.ecoute')).toBeNull()
+    expect(champDe(racine)!.value).toBe('la recherche ne trouve pas les dossiers archivés')
+  })
+
+  it('⛔ ne laisse pas l’écran d’écoute ouvert sur un moteur muet', async () => {
+    const { racine, moteur, trouver } = installer()
+    await ouvrir(racine)
+
+    await appuyer(racine)
+    await envoyerEvenement(racine, pointeur('pointerup'))
+
+    // Il renonce avant d’avoir entendu quoi que ce soit.
+    await act(async () => {
+      moteur.renoncer()
+    })
+    await calmer()
+
+    expect(trouver('.ecoute')).toBeNull()
+    expect(champDe(racine)).not.toBeNull()
   })
 })
