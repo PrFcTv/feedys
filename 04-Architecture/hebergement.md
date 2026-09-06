@@ -115,14 +115,41 @@ demande le propriétaire. Servir n’en demande pas, et ne doit pas l’avoir.
 de login : son nom et son mot de passe sont propres à chaque installation et n’ont rien à faire
 dans un dépôt public.
 
+### ⛔ Qui est le propriétaire — il n’y a rien à créer
+
+**Le propriétaire existe déjà : c’est `POSTGRES_USER`**, créé par l’image Postgres au premier
+démarrage (`docker-compose.production.yml`, `${POSTGRES_USER:-feedys}`). C’est lui qui a appliqué
+les migrations, donc lui qui possède les tables.
+
+⛔ **Il n’y a pas de rôle « feedys_proprietaire » à créer**, et il ne faut pas en créer un : un
+second propriétaire ne posséderait rien, et ne pourrait donc pas migrer non plus.
+
 ### La procédure, une fois, dans `psql`
 
-⚠️ En production la base ne publie aucun port :
-`docker compose -f docker-compose.production.yml exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"`.
+⚠️ En production la base ne publie aucun port. Et `docker compose` n’a PAS accès à
+`.env.production` tout seul — ce fichier n’est qu’un `env_file` pour le conteneur `feedys` :
+sans `--env-file`, la commande **avorte avant d’agir**, sur
+`required variable POSTGRES_PASSWORD is missing a value`.
+
+⛔ **Charger le fichier dans le shell règle les deux problèmes d’un coup** — l’interpolation de
+compose, *et* les variables que la ligne `psql` utilise elle-même :
+
+```bash
+set -a; . ./.env.production; set +a
+
+docker compose -f docker-compose.production.yml --env-file .env.production   exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+```
+
+⚠️ Sans le `set -a`, `"$POSTGRES_USER"` est **vide** dans le shell appelant — `--env-file` alimente
+compose, pas l’environnement de qui l’invoque — et `psql -U ""` échoue.
 
 ```sql
 -- Le rôle qui SERT. ⚠️ `inherit` explicite : sans lui, il faudrait un `set role`
 -- à chaque connexion, et les GRANT de feedys_app ne s’appliqueraient pas.
+--
+-- ⛔ Ce n'est pas un détail de style : un rôle NOINHERIT est bel et bien MEMBRE
+--    de feedys_app, et ne peut pourtant rien lire. Le démarrage le détecte
+--    désormais et le dit — il ne le voyait pas avant.
 create role feedys_service login password '…' inherit in role feedys_app;
 ```
 
@@ -130,8 +157,15 @@ Puis, dans l’environnement du conteneur (`.env.production`, hors dépôt) :
 
 ```
 DATABASE_URL=postgresql://feedys_service:…@postgres:5432/feedys
-DATABASE_URL_MIGRATIONS=postgresql://feedys_proprietaire:…@postgres:5432/feedys
+DATABASE_URL_MIGRATIONS=postgresql://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/feedys
 ```
+
+⚠️ **La seconde porte le rôle de `docker-compose.production.yml`**, celui-là même dont
+`POSTGRES_PASSWORD` est déjà dans ce fichier. Ce n’est pas un nouveau secret à inventer.
+
+⛔ **`pnpm db:migrate` suit la même règle** — `DATABASE_URL_MIGRATIONS` d’abord, repli sur
+`DATABASE_URL`. Ce n’était pas le cas : l’outil lisait `DATABASE_URL` en dur et tentait donc de
+migrer avec le rôle de service, sur un `permission denied for schema public` sans explication.
 
 ⛔ **Les deux sont obligatoires dès qu’on sépare**, et ce n’est pas un conseil : un rôle de service
 ne peut pas migrer **du tout**, même sur une base déjà à jour. Le runner commence par un
@@ -147,10 +181,30 @@ pour ça** — un poste et la CI sont légitimement en rôle unique :
 ```
 Feedys · rôle de connexion · feedys_service — membre de feedys_app, propriétaire d’aucune des 8 tables. Les GRANT s’appliquent.
 Feedys ⚠️  rôle de connexion · feedys — il est superutilisateur. ⛔ Les GRANT ne mordent pas…
+Feedys ⚠️  rôle de connexion · feedys_service — il n’hérite pas des privilèges de feedys_app…
+Feedys ⚠️  rôle de connexion · feedys_service — la base ne contient AUCUNE table…
 ```
 
 C’est la seule façon de savoir si le garde-fou est actif : sans cette ligne, un `DATABASE_URL` mal
 configuré ne produit **ni erreur, ni test rouge**.
+
+⚠️ **Les deux dernières lignes existent parce que le contrôle mentait dans ces deux cas.** Un rôle
+`NOINHERIT` est membre du groupe — `pg_has_role(…, 'member')` répond `true` — et ne peut rien lire ;
+et une base vide fait dire « propriétaire d’aucune des **0** tables. Les GRANT s’appliquent », alors
+que `DATABASE_URL` désigne simplement la mauvaise base du cluster. Les rôles sont cluster-wide :
+`feedys_app` existe partout, l’appartenance répond « oui » partout.
+
+### ⛔ Et `DATABASE_URL` doit RÉPONDRE, sans quoi le démarrage est refusé
+
+⚠️ Depuis la séparation, l’étape « la base répond » ouvre `DATABASE_URL_MIGRATIONS`. **Plus rien ne
+regardait `DATABASE_URL`** : une coquille dans le mot de passe du rôle de service faisait démarrer
+le conteneur **vert**, écouter, et échouer sur chaque requête.
+
+⛔ `/sante` rend alors 503, le `HEALTHCHECK` passe `unhealthy` — et **`restart: unless-stopped` ne
+redémarre pas un conteneur unhealthy.** Il reste debout à ne rien servir : exactement le « serveur à
+moitié démarré » qu’on déclare pire qu’un redémarrage en boucle. Les deux connexions sont désormais
+ouvertes pour de bon, chacune avec un délai de dix secondes — le défaut de `pg` étant l’attente
+infinie.
 
 ### Ce qui le prouve
 

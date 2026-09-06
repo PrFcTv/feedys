@@ -165,6 +165,21 @@ n’est créée par aucune migration — le runner la pose lui-même — et n’
 sonde `GET /sante` la lit avec le rôle de service : sans ce `grant`, séparer les rôles faisait
 rendre 503 à la sonde et redémarrer le conteneur en boucle.
 
+⛔ **Conséquence, et c’est la seule entorse du dépôt : `0003` n’est PAS applicable à la main.**
+`0001_socle.sql` documente le chemin manuel (`psql --single-transaction -f`) ; rejoué depuis une
+base vierge, il s’arrête sur `0003` avec « relation "migrations" does not exist ». La table qu’il
+privilégie est posée par le runner, **avant** la boucle des migrations — jamais par un fichier de
+ce dossier.
+
+⚠️ **Le fichier n’est pas corrigé, et le refus est délibéré.** `0003` est déjà appliquée, et son
+sha256 est au registre : la réécrire ferait échouer le démarrage de toute base à jour sur « la base
+et le dépôt ont divergé » — c’est-à-dire la règle immédiatement au-dessus. Ce qui se corrige ici est
+donc la **documentation** : le chemin supporté est `pnpm db:migrate` (ou le démarrage du
+conteneur), qui pose la table d’abord.
+
+⛔ Pour le prochain fichier qui dépendrait d’un objet du runner : l’envelopper dans un
+`do $$ … to_regclass('public.migrations') is not null … $$` **dès l’écriture**, pas après.
+
 ⛔ **Aucun `GRANT DELETE` n’est accordé au MVP.** Le jour où une suppression sera nécessaire, elle
 sera accordée **table par table**, avec sa justification en commentaire dans la migration qui
 l’ouvre.
