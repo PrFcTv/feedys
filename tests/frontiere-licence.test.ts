@@ -19,9 +19,19 @@ const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 let eslint: ESLint
 
-beforeAll(() => {
+beforeAll(async () => {
   eslint = new ESLint({ cwd: racine })
-})
+
+  // ⚠️ UNE PASSE À BLANC, et ce n’est pas une précaution de style. Le PREMIER
+  //    `lintText` résout toute la configuration ESLint du dépôt — plusieurs
+  //    secondes. Sans ce préchauffage, ce coût tombait sur le premier test, qui
+  //    dépassait le délai par défaut de vitest sous charge parallèle : le
+  //    fichier rougissait PAR INTERMITTENCE, et jamais pour ce qu’il prouve.
+  //
+  // ⛔ Un test qui échoue au hasard finit par être relancé sans être lu, et
+  //    celui-ci garde l’invariant le plus fragile du projet.
+  await frontiere('export const x = 1\n', 'packages/widget/src/prechauffage.ts')
+}, 60_000)
 
 /** Fait tourner ESLint sur du code qui n’a pas besoin d’exister sur le disque. */
 async function frontiere(code: string, chemin: string): Promise<Linter.LintMessage[]> {
