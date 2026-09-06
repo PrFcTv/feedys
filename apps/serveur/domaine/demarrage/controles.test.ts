@@ -4,6 +4,7 @@ import {
   BUDGET_WIDGET_OCTETS,
   VARIABLES_OBLIGATOIRES,
   enKo,
+  indiceDeRole,
   messageVariablesManquantes,
   messageWidget,
   variablesManquantes,
@@ -120,7 +121,7 @@ describe('verdictRole — le garde-fou de D-009 mord-il vraiment ?', () => {
   const SEPARE = {
     role: 'feedys_service',
     superutilisateur: false,
-    membreDuGroupe: true,
+    heriteDuGroupe: true,
     tablesPossedees: 0,
     tables: 8,
   }
@@ -154,10 +155,35 @@ describe('verdictRole — le garde-fou de D-009 mord-il vraiment ?', () => {
   })
 
   it('signale un rôle qui ne possède rien mais n’hérite pas du groupe', () => {
-    expect(verdictRole({ ...SEPARE, membreDuGroupe: false })).toMatchObject({
+    expect(verdictRole({ ...SEPARE, heriteDuGroupe: false })).toMatchObject({
       separe: false,
-      motif: 'hors_groupe',
+      motif: 'sans_heritage',
     })
+  })
+
+  /**
+   * ⛔ LE CAS QUI PASSAIT POUR UNE RÉUSSITE. Les rôles sont cluster-wide :
+   *    `feedys_app` existe dans TOUTES les bases du cluster, et l’héritage y
+   *    répond « oui » partout. Une `DATABASE_URL` qui désigne une base vide — ou
+   *    la mauvaise base du même cluster, le copier-coller le plus banal — donnait
+   *    « propriétaire d’aucune des 0 tables. Les GRANT s’appliquent. »
+   *
+   * ⚠️ Combiné au fait que l’échec de connexion était avalé, l’exploitant lisait
+   *    une ligne rassurante sur une configuration morte.
+   */
+  it('⛔ zéro table n’est PAS une séparation réussie — c’est une base vide', () => {
+    expect(verdictRole({ ...SEPARE, tables: 0 })).toMatchObject({
+      separe: false,
+      motif: 'base_vide',
+    })
+  })
+
+  it('⚠️ et le message de base vide n’accuse pas les GRANT — on ne les a pas vus', () => {
+    const message = messageRole({ separe: false, role: 'feedys_service', motif: 'base_vide' })
+
+    expect(message).toContain('AUCUNE table')
+    expect(message).toContain('DATABASE_URL')
+    expect(message).not.toContain('Les GRANT ne mordent pas')
   })
 })
 
@@ -170,12 +196,43 @@ describe('messageRole', () => {
   })
 
   it('⛔ ne contient JAMAIS d’URL — elle porte un mot de passe', () => {
-    for (const motif of ['superutilisateur', 'proprietaire', 'hors_groupe'] as const) {
+    for (const motif of ['superutilisateur', 'proprietaire', 'sans_heritage'] as const) {
       const message = messageRole({ separe: false, role: 'feedys', motif })
 
       expect(message).not.toContain('postgresql://')
       expect(message).not.toContain('DATABASE_URL')
       expect(message).toContain('hebergement.md')
     }
+
+    // ⚠️ `base_vide` nomme DATABASE_URL — c’est la variable à corriger — mais
+    //    toujours pas sa valeur.
+    expect(messageRole({ separe: false, role: 'feedys', motif: 'base_vide' })).not.toContain(
+      'postgresql://',
+    )
+  })
+})
+
+/**
+ * ⛔ L’INDICE QUI MANQUAIT À TROIS HEURES DU MATIN.
+ *
+ * ⚠️ Il vit dans le module PUR, et pas dans `infra/demarrage.ts` où il était :
+ *    `pnpm db:migrate` en a autant besoin que le démarrage, et un outil ne doit
+ *    pas importer l’infrastructure du serveur pour obtenir une phrase.
+ */
+describe('indiceDeRole', () => {
+  it('explique « permission denied » par le rôle, et nomme la variable', () => {
+    const indice = indiceDeRole(new Error('permission denied for schema public'))
+
+    expect(indice).toContain('DATABASE_URL_MIGRATIONS')
+    expect(indice).toContain('hebergement.md')
+  })
+
+  it('⛔ se tait sur toute autre erreur — un indice qui parle toujours ne dit rien', () => {
+    expect(indiceDeRole(new Error('connection refused'))).toBe('')
+    expect(indiceDeRole('la base et le dépôt ont divergé')).toBe('')
+  })
+
+  it('accepte ce qui n’est pas une Error — un rejet peut être n’importe quoi', () => {
+    expect(indiceDeRole('permission denied for schema public')).toContain('propriétaire')
   })
 })

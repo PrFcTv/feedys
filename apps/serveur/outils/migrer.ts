@@ -12,7 +12,9 @@ import { fileURLToPath } from 'node:url'
 
 import { Client } from 'pg'
 
+import { indiceDeRole } from '../domaine/demarrage/controles'
 import { DivergenceError, appliquerMigrations } from '../infra/base/migrations'
+import { nomDeLUrlDesMigrations, urlDesMigrations } from '../infra/base/url-migrations'
 
 /** Résolus depuis le module, pas depuis le cwd : le conteneur ne démarre pas à la racine. */
 const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -25,7 +27,14 @@ try {
 }
 
 async function principal(): Promise<void> {
-  const url = process.env['DATABASE_URL']
+  // ⛔ `DATABASE_URL_MIGRATIONS` D’ABORD, avec repli sur `DATABASE_URL`.
+  //
+  // ⚠️ Cet outil lisait `DATABASE_URL` en dur, et la séparation des rôles
+  //    n’avait été câblée qu’au démarrage du conteneur. Or c’est LE chemin
+  //    documenté partout — docker-compose, README, message d’erreur des tests —
+  //    et celui qu’emprunte qui veut éprouver la séparation sur son poste : il
+  //    migrait donc avec le rôle de SERVICE, qui ne peut pas migrer du tout.
+  const url = urlDesMigrations()
 
   if (!url) {
     throw new Error(
@@ -62,5 +71,13 @@ principal().catch((erreur: unknown) => {
     return
   }
 
+  // ⚠️ L’indice de rôle est le même qu’au démarrage, et pour la même erreur :
+  //    « permission denied for schema public » est exact et parfaitement
+  //    inutile. Il dit désormais avec QUELLE variable on a essayé.
   console.error(erreur)
+  const indice = indiceDeRole(erreur)
+  if (indice !== '') {
+    console.error(`${indice}
+     (URL utilisée ici : ${nomDeLUrlDesMigrations()})`)
+  }
 })

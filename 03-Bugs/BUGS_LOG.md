@@ -484,3 +484,118 @@ part.
 rien n’est rendu ») n’assérait que l’**absence du `<p>`**. Il passait en laissant l’état bloqué
 hors couverture. Il vérifie maintenant que l’entretien **se conclut**.
 
+---
+
+## 013 — Une coquille dans le mot de passe du rôle de service fait démarrer le conteneur en vert
+
+**Statut** : ✅ Résolu (2026-09-06, PR #21)
+**Constaté le** : 2026-09-06, en **relecture adverse de P-018**
+**Où** : `apps/serveur/infra/demarrage.ts`
+
+**Symptôme** — `DATABASE_URL_MIGRATIONS` est bonne, `DATABASE_URL` a une faute de frappe dans son
+mot de passe. Le démarrage affiche :
+
+```
+Feedys · base à jour — 3 migration(s).
+Feedys ⚠️  rôle de connexion · impossible de le vérifier. Le démarrage continue.
+Feedys · widget.js — 26.4 Ko gzip, sous le budget.
+Feedys · prêt.
+```
+
+⛔ Le conteneur écoute, et le pool échoue sur **chaque** requête. `/sante` rend 503, le
+`HEALTHCHECK` passe `unhealthy` — et **`restart: unless-stopped` ne redémarre pas un conteneur
+unhealthy** : il reste debout à ne rien servir. C’est exactement le « serveur à moitié démarré qui
+répond 500 à tout » que `instrumentation.ts` déclare *pire* qu’un redémarrage en boucle.
+
+⚠️ La seule ligne qui en parle ressemble à une gêne bénigne, et n’est pas une erreur.
+
+**Cause** — P-018 a fait glisser l’étape 2 (« la base répond ») de `DATABASE_URL` vers
+`urlDesMigrations()`. Dès lors, **plus rien ne regardait `DATABASE_URL`** : le seul endroit qui la
+touchait encore était `annoncerLeRole`, dont le `catch` avale **tout** — y compris
+`password authentication failed`.
+
+⛔ Le contrôle *informatif* du rôle et l’ouverture *réelle* de la connexion de service avaient été
+fondus en une seule fonction qui ne doit jamais échouer. Les deux n’ont pas le même statut : une
+connexion qui ne s’ouvre pas est une **panne**, un verdict de rôle est une **information**.
+
+**Correctif** — `verifierLeService` les sépare. L’échec de `connect()` rend
+`{ ok: false, etape: 'base' }` et refuse le démarrage, en nommant `DATABASE_URL` — jamais sa valeur.
+L’échec de la *requête*, lui, reste une alerte et laisse démarrer. Les deux connexions portent
+désormais `connectionTimeoutMillis: 10 000` (le défaut de `pg` est l’attente **infinie**), et la
+requête de rôle un `statement_timeout` de 5 s : un contrôle informatif n’a pas à pouvoir figer un
+démarrage.
+
+**Ce qui l’a laissé passer** — aucun test ne démarrait avec **deux URL différentes**, dont une
+cassée. Le cas n’existe que là où les rôles sont séparés, c’est-à-dire nulle part sur un poste ni
+en CI. ⚠️ C’est le mode de défaillance propre à P-018 : un durcissement qui n’est éprouvé que par
+le déploiement qu’il durcit.
+
+---
+
+## 014 — Le démarrage annonce « Les GRANT s’appliquent » dans deux cas où ils ne s’appliquent pas
+
+**Statut** : ✅ Résolu (2026-09-06, PR #21)
+**Constaté le** : 2026-09-06, en **relecture adverse de P-018**
+**Où** : `apps/serveur/domaine/demarrage/controles.ts`
+
+**Symptôme** — deux configurations mortes, une ligne rassurante.
+
+1. **Rôle `NOINHERIT`.** Mesuré sur un vrai rôle :
+   `pg_has_role(…, 'member') = true`, et `select … from retours` → `42501 permission denied`. Le
+   journal disait « membre de feedys_app, propriétaire d’aucune des 8 tables. **Les GRANT
+   s’appliquent.** »
+2. **Mauvaise base.** `DATABASE_URL` désigne une base vide, ou une autre base du même cluster —
+   le copier-coller d’URL le plus banal. Le journal disait « propriétaire d’aucune des **0** tables.
+   Les GRANT s’appliquent. »
+
+⚠️ Combiné à [013](#013--une-coquille-dans-le-mot-de-passe-du-rôle-de-service-fait-démarrer-le-conteneur-en-vert),
+l’exploitant lisait une ligne verte sur une installation qui ne servait rien.
+
+**Cause** — deux questions mal posées.
+
+- `pg_has_role(current_user, 'feedys_app', 'member')` demande « en est-il membre ? ». La question
+  utile est « **en hérite-t-il ?** », c’est-à-dire `'usage'`. ⛔ C’est exactement la faute que
+  `hebergement.md` désigne nommément — « ⚠️ `inherit` explicite » — et le contrôle censé l’attraper
+  passait à côté d’elle.
+- Les rôles sont **cluster-wide** : `feedys_app` existe dans **toutes** les bases, et l’appartenance
+  y répond « oui » partout. `tablesPossedees === 0` sur `tables === 0` n’est donc pas une séparation
+  réussie : c’est l’absence de toute observation.
+
+**Correctif** — `'usage'` remplace `'member'` pour l’appartenance (`'member'` reste juste pour la
+**possession** : un membre du propriétaire peut faire `set role` et contourne tout autant). Et
+`tables === 0` devient un motif à part entière, `base_vide`, dont le message **n’accuse pas les
+GRANT** — on ne les a pas vus, ce n’est pas pareil que les avoir vus inopérants.
+
+⚠️ Au passage, `relkind in ('r', 'p')` : une table partitionnée est un `'p'`, et n’aurait pas
+compté.
+
+**Ce qui l’a laissé passer** — les tests de `verdictRole` appelaient la fonction avec des états
+cohérents choisis à la main : aucun ne venait d’un vrai Postgres, et aucun ne posait le cas
+`NOINHERIT`, qui n’est pas représentable dans un booléen nommé `membreDuGroupe`. Un bloc
+d’intégration crée maintenant un vrai rôle `noinherit`, s’y connecte, et vérifie que « membre » dit
+oui, qu’« usage » dit non, que le `SELECT` est refusé, et que le verdict rend `sans_heritage`.
+
+---
+
+## 015 — `pnpm db:migrate` migre avec le rôle de service, et n’explique pas son refus
+
+**Statut** : ✅ Résolu (2026-09-06, PR #21)
+**Constaté le** : 2026-09-06, en **relecture adverse de P-018**
+**Où** : `apps/serveur/outils/migrer.ts`
+
+**Symptôme** — quelqu’un veut éprouver la séparation des rôles sur son poste. Il renseigne les deux
+URL dans `.env.local`, lance `pnpm db:migrate`, et reçoit un objet d’erreur brut :
+`permission denied for schema public`. Rien ne lui dit qu’il vient de migrer avec le mauvais rôle.
+
+**Cause** — la séparation n’avait été câblée que dans `infra/demarrage.ts`. `migrer.ts` lisait
+`DATABASE_URL` en dur, alors que `pnpm db:migrate` est **le chemin documenté partout** —
+`docker-compose.yml`, le README, le message d’erreur de `tests/base-dessai.ts`. ⛔ Une règle
+appliquée à un seul de ses deux appelants n’est pas une règle.
+
+**Correctif** — `urlDesMigrations()` vit dans son propre module, importé par les deux. `indiceDeRole`
+descend dans le module **pur** (`domaine/demarrage/controles.ts`), pour que l’outil puisse l’afficher
+sans importer l’infrastructure du serveur. Il nomme en plus la variable réellement utilisée.
+
+**Ce qui l’a laissé passer** — la fonction était `private` dans `demarrage.ts`, et rien ne cherchait
+ses autres appelants. Un `grep DATABASE_URL_MIGRATIONS` sur `apps/serveur/outils/` ne rendait rien,
+et personne ne l’avait fait.

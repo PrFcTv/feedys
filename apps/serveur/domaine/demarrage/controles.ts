@@ -153,7 +153,18 @@ export interface EtatRole {
   /** `current_user` — sans danger dans un journal, contrairement à l’URL. */
   readonly role: string
   readonly superutilisateur: boolean
-  readonly membreDuGroupe: boolean
+  /**
+   * ⛔ HÉRITE-T-IL, et pas « en est-il membre ». La question n’est pas la même,
+   *    et la différence est exactement la faute que ce contrôle existe pour
+   *    attraper : un rôle `NOINHERIT` EST membre de `feedys_app` — `pg_has_role`
+   *    en mode `member` dit `true` — et ne peut pourtant rien lire, faute de
+   *    `set role` à chaque connexion. Le journal annonçait alors « Les GRANT
+   *    s’appliquent » sur un rôle qui se voit refuser un simple `select`.
+   *
+   * ⚠️ C’est `pg_has_role(…, 'usage')` qui répond à la bonne question, et
+   *    hebergement.md insiste depuis toujours sur le `inherit` explicite.
+   */
+  readonly heriteDuGroupe: boolean
   /** Les tables du schéma dont ce rôle est propriétaire, ou membre du propriétaire. */
   readonly tablesPossedees: number
   readonly tables: number
@@ -164,7 +175,7 @@ export type VerdictRole =
   | {
       readonly separe: false
       readonly role: string
-      readonly motif: 'superutilisateur' | 'proprietaire' | 'hors_groupe'
+      readonly motif: 'superutilisateur' | 'proprietaire' | 'sans_heritage' | 'base_vide'
     }
 
 /**
@@ -175,7 +186,14 @@ export type VerdictRole =
 export function verdictRole(etat: EtatRole): VerdictRole {
   if (etat.superutilisateur) return { separe: false, role: etat.role, motif: 'superutilisateur' }
   if (etat.tablesPossedees > 0) return { separe: false, role: etat.role, motif: 'proprietaire' }
-  if (!etat.membreDuGroupe) return { separe: false, role: etat.role, motif: 'hors_groupe' }
+  if (!etat.heriteDuGroupe) return { separe: false, role: etat.role, motif: 'sans_heritage' }
+
+  // ⛔ ZÉRO TABLE N’EST PAS UNE SÉPARATION RÉUSSIE, c’est une base vide — ou la
+  //    mauvaise base du même cluster, le copier-coller d’URL le plus banal qui
+  //    soit. Les rôles sont cluster-wide : `feedys_app` existe dans TOUTES les
+  //    bases, et l’héritage y répond « oui » partout. Sans ce test, le journal
+  //    disait « propriétaire d’aucune des 0 tables. Les GRANT s’appliquent. »
+  if (etat.tables === 0) return { separe: false, role: etat.role, motif: 'base_vide' }
 
   return { separe: true, role: etat.role, tables: etat.tables }
 }
@@ -195,10 +213,23 @@ export function messageRole(verdict: VerdictRole): string {
     )
   }
 
+  // ⚠️ `base_vide` ne parle pas des GRANT : ils sont peut-être parfaits, mais on
+  //    ne les a pas regardés. Confondre les deux enverrait chercher là où il n’y
+  //    a rien.
+  if (verdict.motif === 'base_vide') {
+    return (
+      `rôle de connexion · ${verdict.role} — la base ne contient AUCUNE table. ` +
+      '⛔ Rien n’a pu être vérifié : DATABASE_URL désigne probablement une autre base du ' +
+      'cluster, ou une base qui n’a pas été migrée. Les rôles, eux, existent dans toutes ' +
+      'les bases — c’est pourquoi l’appartenance au groupe, elle, répond « oui ».'
+    )
+  }
+
   const cause = {
     superutilisateur: 'il est superutilisateur',
     proprietaire: 'il est propriétaire de ses tables',
-    hors_groupe: 'il n’est pas membre de feedys_app',
+    sans_heritage:
+      'il n’hérite pas des privilèges de feedys_app — il n’en est pas membre, ou il l’est en NOINHERIT',
   }[verdict.motif]
 
   return (
@@ -206,4 +237,29 @@ export function messageRole(verdict: VerdictRole): string {
     '⛔ Les GRANT ne mordent pas : « aucun DELETE nulle part » n’est PAS tenu par la base.\n' +
     '  La procédure est dans 04-Architecture/hebergement.md §Le rôle de connexion.'
   )
+}
+
+/**
+ * ⚠️ L’erreur qu’on VA voir si quelqu’un sépare les rôles à moitié.
+ *
+ *    Un rôle de service ne peut pas migrer, même sur une base déjà à jour : le
+ *    runner commence par un `create table if not exists`, et Postgres vérifie le
+ *    privilège `CREATE` sur le schéma AVANT de regarder si la table existe.
+ *
+ * ⛔ Sans cet indice, le message serait « permission denied for schema public »
+ *    et rien d’autre — exact, et parfaitement inutile à trois heures du matin.
+ *
+ * ⚠️ Il vit ICI, dans le module pur, parce que `pnpm db:migrate` en a besoin
+ *    autant que le démarrage — et que l’outil ne doit pas importer `infra`.
+ */
+export function indiceDeRole(erreur: unknown): string {
+  const texte = erreur instanceof Error ? erreur.message : String(erreur)
+  if (!/permission denied/i.test(texte)) return ''
+
+  return [
+    '',
+    '  ⚠️ Ce rôle n’a pas le droit de migrer. Migrer crée des tables : c’est le',
+    '     propriétaire qui le fait, et DATABASE_URL_MIGRATIONS le désigne',
+    '     (04-Architecture/hebergement.md §Le rôle de connexion).',
+  ].join('\n')
 }

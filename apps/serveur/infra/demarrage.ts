@@ -24,6 +24,7 @@ import { Client } from 'pg'
 
 import {
   enKo,
+  indiceDeRole,
   messageRole,
   messageVariablesManquantes,
   messageWidget,
@@ -34,6 +35,11 @@ import {
 
 import { lireActif } from './actifs'
 import { DivergenceError, appliquerMigrations } from './base/migrations'
+import {
+  DELAI_CONNEXION_MS,
+  nomDeLUrlDesMigrations,
+  urlDesMigrations,
+} from './base/url-migrations'
 import { racineDepot } from './racine'
 
 export interface Journal {
@@ -101,25 +107,27 @@ export async function verifierDemarrage(journal: Journal = CONSOLE): Promise<Res
   //    lié à la session, et un pool le poserait sur une connexion pour le
   //    relâcher sur une autre.
   //
-  // ⚠️ DEUX RÔLES, DEUX MOMENTS. Migrer crée des tables : ça demande le
-  //    propriétaire. Servir n’en demande pas, et ne DOIT pas l’avoir — un
-  //    propriétaire contourne tous les GRANT ([D-009]). `DATABASE_URL_MIGRATIONS`
-  //    porte donc le premier rôle, `DATABASE_URL` le second.
-  //
-  // ⛔ Elle est FACULTATIVE, et son repli est `DATABASE_URL` : un poste et la CI
-  //    n’ont qu’un rôle, et `pnpm dev` doit démarrer sans rien configurer
-  //    ([D-016]). C’est le déploiement qui les sépare, pas le dépôt.
-  const client = new Client({ connectionString: urlDesMigrations() })
+  // ⚠️ L’URL est celle des MIGRATIONS, avec son repli sur `DATABASE_URL` — le
+  //    pourquoi vit dans `base/url-migrations.ts`, qui sert aussi à
+  //    `pnpm db:migrate`.
+  const client = new Client({
+    connectionString: urlDesMigrations(),
+    connectionTimeoutMillis: DELAI_CONNEXION_MS,
+  })
 
   try {
     await client.connect()
   } catch (erreur) {
-    // ⛔ Rien de DATABASE_URL n’est affiché — elle porte un mot de passe.
+    // ⛔ Rien de l’URL n’est affiché — elle porte un mot de passe. ⚠️ Son NOM,
+    //    lui, est ce qui manquait : quand les deux variables portent encore le
+    //    même rôle — un déploiement à moitié fait — « la base ne répond pas »
+    //    envoyait vérifier DATABASE_URL et le conteneur Postgres, qui allaient
+    //    tous les deux très bien.
     return {
       ok: false,
       etape: 'base',
       message:
-        'Feedys ne peut pas démarrer — la base ne répond pas.\n' +
+        `Feedys ne peut pas démarrer — la base ne répond pas sur ${nomDeLUrlDesMigrations()}.\n` +
         `  ${erreur instanceof Error ? erreur.message : String(erreur)}`,
     }
   }
@@ -141,17 +149,14 @@ export async function verifierDemarrage(journal: Journal = CONSOLE): Promise<Res
             }${indiceDeRole(erreur)}`,
     }
   } finally {
-    await client.end()
+    // ⚠️ `.catch` : un `end()` qui jette ici écraserait le verdict `{ok:false}`
+    //    qu’on vient de composer, et `demarrerOuMourir` mourrait sans message.
+    await client.end().catch(() => undefined)
   }
 
-  // ── 4bis. le rôle de service ──────────────────────────────────────────
-  //
-  // ⛔ IL NE REFUSE JAMAIS. Un poste est légitimement en rôle unique, et la CI
-  //    aussi. Il DIT, dans les journaux, si le garde-fou de D-009 mord vraiment.
-  //
-  // ⚠️ Sur la connexion de SERVICE, jamais sur celle des migrations : celle-ci
-  //    est propriétaire par construction, et répondrait toujours « oui ».
-  await annoncerLeRole(journal)
+  // ── 4bis. la connexion de SERVICE ────────────────────────────────────────
+  const service = await verifierLeService(journal)
+  if (!service.ok) return service
 
   // ── 5. le widget ───────────────────────────────────────────────────────────
   const verdict = verdictWidget(await poidsWidgetGzip())
@@ -167,88 +172,108 @@ export async function verifierDemarrage(journal: Journal = CONSOLE): Promise<Res
 }
 
 /**
- * ⚠️ L’erreur qu’on VA voir si quelqu’un sépare les rôles à moitié.
- *
- *    Un rôle de service ne peut pas migrer, même sur une base déjà à jour : le
- *    runner commence par un `create table if not exists`, et Postgres vérifie le
- *    privilège `CREATE` sur le schéma AVANT de regarder si la table existe.
- *
- * ⛔ Sans cet indice, le message serait « permission denied for schema public »
- *    et rien d’autre — exact, et parfaitement inutile à trois heures du matin.
- */
-function indiceDeRole(erreur: unknown): string {
-  const texte = erreur instanceof Error ? erreur.message : String(erreur)
-  if (!/permission denied/i.test(texte)) return ''
-
-  return [
-    '',
-    '  ⚠️ Ce rôle n’a pas le droit de migrer. Migrer crée des tables : c’est le',
-    '     propriétaire qui le fait, et DATABASE_URL_MIGRATIONS le désigne',
-    '     (04-Architecture/hebergement.md §Le rôle de connexion).',
-  ].join('\n')
-}
-
-/**
- * L’URL avec laquelle on MIGRE.
- *
- * ⚠️ Le repli sur `DATABASE_URL` est ce qui garde un poste jouable sans rien
- *    configurer. ⛔ En production, les deux doivent différer — c’est tout
- *    l’objet de [T-004].
- */
-function urlDesMigrations(): string | undefined {
-  const migrations = process.env['DATABASE_URL_MIGRATIONS']?.trim()
-  return migrations !== undefined && migrations !== '' ? migrations : process.env['DATABASE_URL']
-}
-
-/**
  * La question que le démarrage pose à Postgres sur lui-même.
  *
- * ⚠️ `pg_has_role(current_user, relowner, 'member')` et non
+ * ⚠️ `pg_has_role(current_user, relowner, 'member')` pour la POSSESSION, et non
  *    `pg_get_userbyid(relowner) = current_user` : un rôle MEMBRE du propriétaire
  *    peut faire `set role` vers lui, et contourne donc les GRANT tout autant.
+ *
+ * ⛔ MAIS `'usage'` POUR L’APPARTENANCE AU GROUPE, et la nuance est tout
+ *    l’intérêt du contrôle. `'member'` répond `true` à un rôle `NOINHERIT`, qui
+ *    ne peut pourtant RIEN lire sans un `set role` à chaque connexion : le
+ *    démarrage annonçait « Les GRANT s’appliquent » sur un rôle à qui Postgres
+ *    refuse un simple `select`. C’est la faute que hebergement.md désigne
+ *    nommément (« ⚠️ `inherit` explicite »), et le contrôle censé l’attraper
+ *    passait à côté.
+ *
+ * ⚠️ `relkind in ('r', 'p')` : une table partitionnée est un `'p'`. Aucune
+ *    aujourd’hui — et une table possédée par le rôle de service ne doit pas
+ *    échapper au compte le jour où il y en aura une.
+ *
+ * ⛔ EXPORTÉE POUR ÊTRE ÉPROUVÉE. `roles.integration.test.ts` la joue contre un
+ *    vrai rôle NOINHERIT. La recopier là-bas aurait fait un test qui reste vert
+ *    quand la requête de production change — c’est précisément le défaut qu’une
+ *    relecture a trouvé ailleurs dans ce dépôt.
  */
-const ETAT_ROLE = `
+export const ETAT_ROLE = `
   select
     current_user::text as role,
     coalesce((select rolsuper from pg_roles where rolname = current_user), false) as superutilisateur,
-    pg_has_role(current_user, 'feedys_app', 'member') as membre,
+    pg_has_role(current_user, 'feedys_app', 'usage') as herite,
     count(*) filter (where pg_has_role(current_user, c.relowner, 'member')) as possedees,
     count(*) as tables
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
-  where n.nspname = 'public' and c.relkind = 'r'
+  where n.nspname = 'public' and c.relkind in ('r', 'p')
 `
 
 /**
- * ⛔ N’échoue jamais. Si la question elle-même ne peut pas être posée, on le dit
- *    et on continue : un contrôle d’information qui empêcherait de servir serait
- *    un refus déguisé.
+ * La connexion de SERVICE — celle avec laquelle on servira.
+ *
+ * ⛔ ELLE EST OUVERTE POUR DE BON, ET SON ÉCHEC REFUSE LE DÉMARRAGE. C’est le
+ *    trou que P-018 avait creusé sans le voir : l’étape 2 testait `DATABASE_URL`
+ *    jusque-là ; depuis la séparation, elle teste `DATABASE_URL_MIGRATIONS`, et
+ *    plus rien ne regardait la première. Un `catch` avalait tout — y compris
+ *    « password authentication failed » — en une alerte d’apparence bénigne.
+ *
+ * ⚠️ Le conteneur démarrait alors VERT, écoutait, et le pool échouait sur CHAQUE
+ *    requête. `/sante` rend 503, le `HEALTHCHECK` passe unhealthy — et
+ *    `restart: unless-stopped` ne redémarre PAS un conteneur unhealthy : il
+ *    reste debout à ne rien servir. C’est exactement le « serveur à moitié
+ *    démarré » qu’instrumentation.ts déclare pire qu’un redémarrage en boucle.
+ *
+ * ⛔ Ce qui, lui, NE REFUSE JAMAIS, c’est le verdict sur le rôle : un poste est
+ *    légitimement en rôle unique, et la CI aussi. La connexion est une panne ;
+ *    le verdict est une information. Les confondre était la faute.
  */
-async function annoncerLeRole(journal: Journal): Promise<void> {
-  const client = new Client({ connectionString: process.env['DATABASE_URL'] })
+async function verifierLeService(journal: Journal): Promise<ResultatDemarrage> {
+  const client = new Client({
+    connectionString: process.env['DATABASE_URL'],
+    connectionTimeoutMillis: DELAI_CONNEXION_MS,
+  })
 
   try {
     await client.connect()
+  } catch (erreur) {
+    // ⛔ Jamais l’URL — elle porte un mot de passe. Son nom suffit à chercher.
+    return {
+      ok: false,
+      etape: 'base',
+      message: [
+        'Feedys ne peut pas démarrer — la base ne répond pas sur DATABASE_URL.',
+        `  ${erreur instanceof Error ? erreur.message : String(erreur)}`,
+        '  ⚠️ Les migrations, elles, sont passées : c’est bien la connexion de SERVICE',
+        '     qui est en cause (04-Architecture/hebergement.md §Le rôle de connexion).',
+      ].join('\n'),
+    }
+  }
+
+  try {
+    // ⚠️ Un délai court sur la requête aussi : un contrôle purement informatif
+    //    n’a pas à pouvoir bloquer un démarrage.
+    await client.query("set statement_timeout = '5s'")
     const { rows } = await client.query(ETAT_ROLE)
     const ligne = rows[0]
 
-    if (ligne === undefined) return
+    if (ligne !== undefined) {
+      const verdict = verdictRole({
+        role: String(ligne['role']),
+        superutilisateur: ligne['superutilisateur'] === true,
+        heriteDuGroupe: ligne['herite'] === true,
+        tablesPossedees: Number(ligne['possedees']),
+        tables: Number(ligne['tables']),
+      })
 
-    const verdict = verdictRole({
-      role: String(ligne['role']),
-      superutilisateur: ligne['superutilisateur'] === true,
-      membreDuGroupe: ligne['membre'] === true,
-      tablesPossedees: Number(ligne['possedees']),
-      tables: Number(ligne['tables']),
-    })
-
-    if (verdict.separe) journal.info(messageRole(verdict))
-    else journal.alerte(messageRole(verdict))
+      if (verdict.separe) journal.info(messageRole(verdict))
+      else journal.alerte(messageRole(verdict))
+    }
   } catch {
     journal.alerte('rôle de connexion · impossible de le vérifier. Le démarrage continue.')
   } finally {
     await client.end().catch(() => undefined)
   }
+
+  return { ok: true }
 }
 
 /**
