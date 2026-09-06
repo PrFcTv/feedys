@@ -338,3 +338,48 @@ pourquoi cinq. ⚠️ Le côté long ne coûte rien : qui a fini n’attend pas,
 rapport à sa propre constante**, jamais que la constante était juste. Un test rejoue désormais une
 pause de réflexion de quatre secondes et exige qu’elle ne coupe pas — c’est un test de valeur
 produit, pas de mécanique.
+
+---
+
+## 009 — Le filet referme l’entretien sous les doigts de quelqu’un, et sa phrase est jetée
+
+**Statut** : ✅ Résolu (2026-09-06, PR #19)
+**Constaté le** : 2026-09-06, en **relecture adverse de P-016** — jamais rencontré à l’usage
+**Où** : `apps/serveur/domaine/entretien/tour.ts`
+
+**Symptôme** — quelqu’un ouvre la bulle, dicte, le bot pose sa question, la carte s’affiche. On
+l’appelle ailleurs ; **l’onglet reste ouvert**, le panneau aussi. Trente-cinq minutes plus tard, il
+revient, tape la précision qui manquait, et clique « Envoyer maintenant ». Le widget affiche
+« C’est parti. Merci — vous n’avez rien d’autre à faire. »
+
+⛔ **Sa phrase n’est allée nulle part.** Elle n’est ni en base, ni dans la note, qui est déjà partie
+par email trente minutes plus tôt avec le premier tour seul. Rien, à l’écran ni dans les journaux,
+ne le signale.
+
+**Cause** — les deux gardes de statut du domaine refusaient **avant** d’écrire l’apport.
+`jouerTour` rendait 409 `entretien_clos`, et le widget affichait « C’est noté. » ;
+`terminerEntretien` rendait **200 sans rien écrire**, et le widget affichait l’accusé.
+
+⚠️ **Le code n’a pas changé — sa portée, si.** Tant que seul le widget refermait, cette branche
+n’était atteignable que par la course `POST /fin` × 2 (fermeture de page après un envoi manuel), où
+le champ est vide par construction : jeter un apport vide ne perd rien. Le filet de P-016 referme
+désormais **des entretiens dont le panneau est encore ouvert**, et la même branche se met à jeter
+de la parole. ⛔ C’est le mode de défaillance le plus traître qui soit : un correctif juste, qui
+rend faux du code qui ne bouge pas.
+
+**Correctif** — l’apport est écrit **avant** la garde de statut, dans les deux fonctions.
+`messages` est append-only et ne porte aucune contrainte de statut : écrire un tour sur un
+entretien clos est inoffensif. L’aval est ensuite rejoué — `deja_faite` le rend sans effet si la
+note est déjà partie, et s’il ne l’est pas, elle contient ces mots-là. ⚠️ Rien n’est rejoué quand
+il n’y a rien à ajouter : la course ordinaire `POST /fin` × 2 reste silencieuse et ne rappelle
+jamais le modèle.
+
+⚠️ Le reste du chemin est inchangé, et volontairement : l’entretien **ne se rouvre pas**, le refus
+409 reste un refus, et le statut posé par le filet fait foi. On ne perd plus la parole ; on ne
+ressuscite pas un entretien pour autant.
+
+**Ce qui l’a laissé passer** — aucun test ne jouait « le serveur referme pendant que quelqu’un
+écrit ». Tous les tests de clôture partaient d’un widget qui referme lui-même, où le champ est
+vide. ⛔ Et le commentaire d’en-tête de `balayage.ts` affirmait « CE N’EST PAS UNE PERTE DE
+PAROLE » — vrai du premier tour, faux de tous les suivants. Six tests couvrent désormais l’arrivée
+tardive, dont deux qui vérifient qu’à vide **rien** n’est écrit ni rejoué.

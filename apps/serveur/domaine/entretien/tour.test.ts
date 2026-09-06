@@ -405,3 +405,114 @@ describe('⛔ la sortie du modèle reste dans les bornes du contrat', () => {
     expect(SchemaTourRendu.safeParse(rendu).success).toBe(true)
   })
 })
+
+/**
+ * ⛔ LE CHEMIN DE PERTE DE PAROLE OUVERT PAR LE FILET (P-016).
+ *
+ * ⚠️ Tant que seul le widget refermait, un entretien clos ne se rencontrait que
+ *    par la course `POST /fin` × 2 — et le champ y est vide par construction.
+ *    Depuis le filet, un panneau resté ouvert trente minutes est refermé PENDANT
+ *    que quelqu’un écrit. Il revient, il tape, il envoie.
+ *
+ * ⛔ Les deux gardes de statut refusaient AVANT d’écrire. `jouerTour` rendait
+ *    409, et le widget affichait « C’est noté. » ; `terminerEntretien` rendait
+ *    200, et le widget affichait « C’est parti. ». Les deux mentaient.
+ */
+describe('⛔ la parole arrivée APRÈS la clôture ne se perd pas', () => {
+  const APRES = 'ah et ça le fait aussi sur la liste des contacts'
+
+  function portsClos(base: Base, aval?: PortsTour['aval'], signaler?: PortsTour['signaler']): PortsTour {
+    return {
+      ...portsAvec(base, { identifiant: 'bouchon', tour: () => Promise.resolve(tourAvecQuestion(null)), synthese: () => Promise.resolve({} as never) }),
+      ...(aval ? { aval } : {}),
+      ...(signaler ? { signaler } : {}),
+    }
+  }
+
+  it('⛔ « Répondre » sur un entretien refermé par le filet ÉCRIT quand même la phrase', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }], 'abandonne')
+    const aval = vi.fn(async () => undefined)
+
+    const resultat = await jouerTour({ ...ACCES, texte: APRES }, portsClos(base, aval))
+
+    // Le refus reste le bon — l’entretien EST clos, on ne le rouvre pas.
+    expect(resultat).toMatchObject({ ok: false, motif: 'entretien_clos' })
+    // ⛔ Mais la phrase est en base. C’est ce qui rend « C’est noté. » vrai.
+    expect(base.ecrits.map((m) => m.texte)).toEqual([APRES])
+    // ⚠️ Et la note repasse : si elle n’était pas encore partie, elle la contient.
+    expect(aval).toHaveBeenCalledWith(RETOUR)
+  })
+
+  it('⛔ « Envoyer maintenant » sur un entretien refermé ÉCRIT quand même la phrase', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }], 'abandonne')
+    const aval = vi.fn(async () => undefined)
+
+    const fin = await terminerEntretien(
+      { ...ACCES, raison: 'envoi', texte: APRES },
+      portsClos(base, aval),
+    )
+
+    expect(fin).toEqual({ ok: true, statut: 'abandonne' })
+    expect(base.ecrits.map((m) => m.texte)).toEqual([APRES])
+    expect(aval).toHaveBeenCalledWith(RETOUR)
+    // ⛔ On ne rouvre pas, et on ne re-clôture pas : le statut du filet fait foi.
+    expect(base.clotures).toEqual([])
+  })
+
+  it('⚠️ la correction de la carte est de la parole aussi — elle est écrite', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }], 'envoye')
+
+    await terminerEntretien(
+      { ...ACCES, raison: 'envoi', corrections: 'écran : Liste des contacts' },
+      portsClos(base),
+    )
+
+    expect(base.ecrits).toHaveLength(1)
+    expect(base.ecrits[0]?.texte).toContain('Liste des contacts')
+  })
+
+  it('⛔ un aval qui échoue ne fait pas échouer la fin — le message est déjà en base', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }], 'abandonne')
+    const signaler = vi.fn()
+    const aval = vi.fn(async () => {
+      throw new Error('modèle indisponible')
+    })
+
+    const fin = await terminerEntretien(
+      { ...ACCES, raison: 'envoi', texte: APRES },
+      portsClos(base, aval, signaler),
+    )
+
+    expect(fin).toEqual({ ok: true, statut: 'abandonne' })
+    expect(base.ecrits).toHaveLength(1)
+    // ⚠️ Le journal nomme le retour : sans lui, on sait qu’une note manque sans
+    //    savoir laquelle.
+    expect(String(signaler.mock.calls[0]?.[0])).toContain(RETOUR)
+  })
+
+  /**
+   * ⚠️ LA COURSE ORDINAIRE RESTE SILENCIEUSE. Le widget envoie un abandon en
+   *    `pagehide` APRÈS un envoi manuel : rien à écrire, et rien à resynthétiser.
+   *    ⛔ Sans cette garde, chaque fermeture de page rappellerait le modèle.
+   */
+  it('⛔ n’appelle PAS l’aval quand il n’y a rien à ajouter', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }], 'envoye')
+    const aval = vi.fn(async () => undefined)
+
+    const fin = await terminerEntretien({ ...ACCES, raison: 'abandon' }, portsClos(base, aval))
+
+    expect(fin).toEqual({ ok: true, statut: 'envoye' })
+    expect(base.ecrits).toEqual([])
+    expect(aval).not.toHaveBeenCalled()
+  })
+
+  it('⛔ ni sur un « Répondre » à vide', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }], 'abandonne')
+    const aval = vi.fn(async () => undefined)
+
+    await jouerTour({ ...ACCES }, portsClos(base, aval))
+
+    expect(base.ecrits).toEqual([])
+    expect(aval).not.toHaveBeenCalled()
+  })
+})

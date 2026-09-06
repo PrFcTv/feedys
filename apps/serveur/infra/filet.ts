@@ -77,7 +77,18 @@ export async function passe(options: OptionsFilet = {}): Promise<void> {
     if (bilan.clos > 0) {
       journal.info(
         `filet — ${bilan.clos} entretien(s) refermé(s) par silence, ` +
-          `${bilan.synthetises} synthétisé(s), ${bilan.echoues} en échec.`,
+          `${bilan.synthetises} passé(s) en aval, ${bilan.echoues} en échec, ` +
+          `${bilan.reportes} reporté(s).`,
+      )
+    }
+
+    // ⛔ REPORTÉ VEUT DIRE « refermé, sans note, et plus aucune passe ne le
+    //    reprendra » : `clore` ne regarde que les `en_cours`. Ça se rattrape à
+    //    la main (04-Architecture/hebergement.md §Le filet), donc ça s’alerte.
+    if (bilan.reportes > 0 || bilan.echoues > 0) {
+      journal.alerte(
+        `filet — ${bilan.echoues + bilan.reportes} entretien(s) refermé(s) sans note. ` +
+          'La requête de rattrapage est dans 04-Architecture/hebergement.md §Le filet.',
       )
     }
   } catch (erreur) {

@@ -24,7 +24,7 @@ import { identifiant } from '../../infra/identifiants'
 import { urlBaseDessai } from '../../../../tests/base-dessai'
 
 import type { PortsBalayage } from './balayage'
-import { SILENCE_AVANT_CLOTURE_MS, balayer } from './balayage'
+import { SILENCE_AVANT_CLOTURE_MS, balayer, estMuet } from './balayage'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const RACINE = path.resolve(ICI, '../../../..')
@@ -139,7 +139,7 @@ describe('ce que le filet referme', () => {
 
     const bilan = await balayer(ports(aval))
 
-    expect(bilan).toEqual({ clos: 1, synthetises: 1, echoues: 0 })
+    expect(bilan).toEqual({ clos: 1, synthetises: 1, echoues: 0, reportes: 0 })
     expect(await statutDe(id)).toBe('abandonne')
     expect(aval).toHaveBeenCalledExactlyOnceWith(id)
   })
@@ -250,7 +250,7 @@ describe('quand la synthèse échoue', () => {
       }),
     )
 
-    expect(bilan).toEqual({ clos: 1, synthetises: 0, echoues: 1 })
+    expect(bilan).toEqual({ clos: 1, synthetises: 0, echoues: 1, reportes: 0 })
     expect(await statutDe(id)).toBe('abandonne')
 
     const { rows } = await client.query('select texte from messages where retour_id = $1', [id])
@@ -271,10 +271,22 @@ describe('quand la synthèse échoue', () => {
     )
 
     expect(appels).toBe(3)
-    expect(bilan).toEqual({ clos: 3, synthetises: 2, echoues: 1 })
+    expect(bilan).toEqual({ clos: 3, synthetises: 2, echoues: 1, reportes: 0 })
   })
 
-  it('⚠️ le retour reste rattrapable : une passe suivante ne le reprend pas, il est clos', async () => {
+  /**
+   * ⛔ CE TEST S’APPELAIT « le retour reste rattrapable », ET IL PROUVE L’INVERSE.
+   *
+   * ⚠️ `seconde.clos === 0` ne dit pas qu’on le rattrapera : il dit que PLUS
+   *    AUCUNE PASSE NE LE REPRENDRA. Le retour est `abandonne`, terminal, et
+   *    `clore` ne regarde que les `en_cours`. Une panne modèle de dix minutes
+   *    couvre deux passes — jusqu’à quarante notes perdues d’un coup.
+   *
+   * ⛔ Le rattrapage existe, mais il est À LA MAIN, et c’est la requête de
+   *    04-Architecture/hebergement.md §Le filet. C’est aussi pourquoi
+   *    `signaler` nomme désormais le retour.
+   */
+  it('⛔ n’est PAS repris par la passe suivante — le rattrapage est à la main', async () => {
     const id = await retourMuetDepuis(SILENCE_AVANT_CLOTURE_MS + MINUTE)
 
     await balayer(
@@ -285,6 +297,121 @@ describe('quand la synthèse échoue', () => {
     const seconde = await balayer(ports())
 
     expect(seconde.clos).toBe(0)
+    expect(await statutDe(id)).toBe('abandonne')
+  })
+})
+
+/**
+ * ⛔ L’ACCORD ENTRE LA RÈGLE ET SA FORME SQL, PROUVÉ CONTRE LA VRAIE REQUÊTE.
+ *
+ * ⚠️ `estMuet` (domaine) et `REFERMER` (SQL) portent la même comparaison, écrite
+ *    deux fois — dont l’une en chaîne de caractères. Le test unitaire qui
+ *    prétendait garder cet accord comparait `estMuet` à son propre corps : il
+ *    serait resté vert si le SQL était passé de `< $1` à `<= $1`.
+ *
+ * ⛔ Ici, on interroge Postgres aux trois points qui décident : N−1 ms, N
+ *    exactement, N+1 ms. C’est le seul endroit où ça se prouve.
+ */
+describe('la borne, contre le vrai SQL', () => {
+  /** Pose un retour dont le dernier signe de vie est EXACTEMENT `instant`. */
+  async function retourAyantParleA(instant: Date): Promise<string> {
+    const id = identifiant()
+    await client.query(
+      `insert into retours (id, produit_id, source, statut, cree_le)
+       values ($1, 'prod_1', 'texte', 'en_cours', $2)`,
+      [id, instant.toISOString()],
+    )
+    await client.query(
+      `insert into messages (id, retour_id, ordre, role, texte, cree_le)
+       values ($1, $2, 1, 'collaborateur', $3, $4)`,
+      [identifiant(), id, PAROLE, instant.toISOString()],
+    )
+    return id
+  }
+
+  const PARLE_A = new Date('2026-09-05T12:00:00.000Z')
+
+  it('⚠️ à l’instant limite EXACT, le retour n’est pas refermé — la borne est stricte', async () => {
+    const id = await retourAyantParleA(PARLE_A)
+    const depot = creerDepotBalayage(bassin)
+
+    expect(await depot.clore(PARLE_A, 10)).toEqual([])
+    expect(await statutDe(id)).toBe('en_cours')
+  })
+
+  it('⛔ une milliseconde AVANT la borne, il n’est pas refermé non plus', async () => {
+    const id = await retourAyantParleA(PARLE_A)
+    const depot = creerDepotBalayage(bassin)
+
+    expect(await depot.clore(new Date(PARLE_A.getTime() - 1), 10)).toEqual([])
+    expect(await statutDe(id)).toBe('en_cours')
+  })
+
+  it('⛔ une milliseconde APRÈS, il l’est', async () => {
+    const id = await retourAyantParleA(PARLE_A)
+    const depot = creerDepotBalayage(bassin)
+
+    expect(await depot.clore(new Date(PARLE_A.getTime() + 1), 10)).toEqual([id])
+    expect(await statutDe(id)).toBe('abandonne')
+  })
+
+  /**
+   * ⚠️ Et c’est bien la MÊME borne que celle du domaine : `estMuet` est faux à
+   *    l’instant limite et vrai une milliseconde plus tard. Les trois cas
+   *    ci-dessus le disent du SQL, celui-ci le dit de la règle — écrits côte à
+   *    côte, une divergence saute aux yeux.
+   */
+  it('⚠️ et `estMuet` dit exactement la même chose aux mêmes points', () => {
+    const maintenant = new Date(PARLE_A.getTime() + SILENCE_AVANT_CLOTURE_MS)
+
+    expect(estMuet(PARLE_A, maintenant)).toBe(false)
+    expect(estMuet(new Date(PARLE_A.getTime() - 1), maintenant)).toBe(true)
+    expect(estMuet(PARLE_A, new Date(maintenant.getTime() + 1))).toBe(true)
+  })
+})
+
+/**
+ * ⛔ CE QUI PROUVE VRAIMENT `for update skip locked`.
+ *
+ * ⚠️ Le test « deux conteneurs qui balaient en même temps » monte deux `balayer`
+ *    par `Promise.all`, et ses assertions passeraient À L’IDENTIQUE en exécution
+ *    strictement séquentielle : rien n’y atteste le chevauchement. Il garde une
+ *    valeur — le résultat est bon — mais il ne prouve pas le mécanisme.
+ *
+ * ⛔ Ici, le chevauchement est FORCÉ : une troisième transaction tient la ligne
+ *    quand la passe démarre. `skip locked` doit la SAUTER, et surtout rendre la
+ *    main pendant que le verrou est encore tenu. Sans `skip locked`, la passe
+ *    resterait bloquée jusqu’au `commit` — c’est ce que la seconde assertion
+ *    vérifie.
+ */
+describe('la réservation, avec un verrou réellement concurrent', () => {
+  it('⛔ saute un candidat déjà verrouillé au lieu de l’attendre', async () => {
+    const id = await retourMuetDepuis(SILENCE_AVANT_CLOTURE_MS + MINUTE)
+
+    const tenancier = await bassin.connect()
+
+    try {
+      await tenancier.query('begin')
+      await tenancier.query('select id from retours where id = $1 for update', [id])
+
+      // ⛔ SANS `skip locked`, CE `await` NE RENDRAIT JAMAIS LA MAIN : le verrou
+      //    n’est relâché qu’au `rollback` du `finally`, c’est-à-dire après. Le
+      //    test partirait en délai d’attente. Qu’il rende un bilan est donc la
+      //    preuve — et le bilan lui-même dit que le candidat a été sauté, pas
+      //    écarté par la clause de date.
+      const bilan = await balayer(ports())
+
+      expect(bilan.clos).toBe(0)
+      expect(await statutDe(id)).toBe('en_cours')
+    } finally {
+      await tenancier.query('rollback')
+      tenancier.release()
+    }
+
+    // ⚠️ Et une fois le verrou rendu, la passe suivante le referme : il avait
+    //    bien été sauté, pas écarté.
+    const apres = await balayer(ports())
+    expect(apres.clos).toBe(1)
     expect(await statutDe(id)).toBe('abandonne')
   })
 })

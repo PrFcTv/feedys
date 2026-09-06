@@ -208,10 +208,27 @@ export async function jouerTour(entree: EntreeTour, ports: PortsTour): Promise<R
 
   const entretien = await ports.depot.charger(entree.retourId, acces.produitId)
   if (entretien === null) return refus('retour_inconnu')
-  if (entretien.statut !== 'en_cours') return refus('entretien_clos')
 
+  // ⛔ LA PAROLE S’ÉCRIT AVANT LA GARDE DE STATUT, ET C’EST L’ORDRE QUI COMPTE.
+  //    `messages` est append-only et ne porte aucune contrainte de statut :
+  //    écrire un tour sur un entretien clos est inoffensif. L’inverse ne l’est
+  //    pas.
+  //
+  // ⚠️ POURQUOI ÇA A CHANGÉ. Tant que seul le widget refermait, cette branche
+  //    n’était atteignable que par la course `POST /fin` × 2, où le champ est
+  //    vide par construction. Depuis le filet (P-016), un panneau resté ouvert
+  //    trente minutes est refermé SOUS LES PIEDS de quelqu’un qui est encore en
+  //    train d’écrire. Refuser avant d’écrire jetait sa phrase — et le widget
+  //    lui répondait « C’est noté ».
   const apportes = composerApports(entree, entretien.prochainOrdre)
   if (apportes.length > 0) await ports.depot.ecrire(entree.retourId, apportes)
+
+  if (entretien.statut !== 'en_cours') {
+    // ⚠️ La note est peut-être déjà partie — l’aval le sait et ne la refait pas
+    //    (`deja_faite`). Si elle ne l’est pas, elle contiendra ces mots-là.
+    if (apportes.length > 0) await rejouerAval(entree.retourId, ports)
+    return refus('entretien_clos')
+  }
 
   const fil: TourFil[] = [
     ...entretien.fil,
@@ -282,9 +299,20 @@ export async function terminerEntretien(entree: EntreeFin, ports: PortsTour): Pr
   //    peut envoyer un abandon en fermeture de page APRÈS un envoi manuel — la
   //    course est normale, et elle ne doit rien changer.
   if (entretien.statut !== 'en_cours') {
-    return entretien.statut === 'abandonne' || entretien.statut === 'envoye'
-      ? { ok: true, statut: entretien.statut }
-      : refus('entretien_clos')
+    if (entretien.statut !== 'abandonne' && entretien.statut !== 'envoye') {
+      return refus('entretien_clos')
+    }
+
+    // ⛔ MÊME RAISON QU’AU-DESSUS, ET C’EST ICI QUE ÇA MENTAIT LE PLUS FORT :
+    //    on rendait 200 sans rien écrire, et le widget affichait « C’est
+    //    parti. » sur une phrase qui n’était allée nulle part.
+    const tardifs = composerApports(entree, entretien.prochainOrdre)
+    if (tardifs.length > 0) {
+      await ports.depot.ecrire(entree.retourId, tardifs)
+      await rejouerAval(entree.retourId, ports)
+    }
+
+    return { ok: true, statut: entretien.statut }
   }
 
   // ⚠️ Ce que la personne venait d’écrire part AVEC la fin. Elle a cliqué sur
@@ -292,18 +320,42 @@ export async function terminerEntretien(entree: EntreeFin, ports: PortsTour): Pr
   const apportes = composerApports(entree, entretien.prochainOrdre)
   if (apportes.length > 0) await ports.depot.ecrire(entree.retourId, apportes)
 
+  // ⚠️ `CLORE` porte `where statut = 'en_cours'` : si le filet est passé une
+  //    fraction de seconde plus tôt, il ne touche AUCUNE ligne, en silence.
   await ports.depot.clore(entree.retourId, statut)
 
   // ⛔ APRÈS la clôture, et sans pouvoir la défaire.
-  if (ports.aval) {
-    try {
-      await ports.aval(entree.retourId)
-    } catch (erreur) {
-      ports.signaler?.('traitement en aval de la fin d’entretien', erreur)
-    }
-  }
+  //
+  // ⚠️ CE QUI EMPÊCHE LA DOUBLE NOTE N’EST PAS UN VERROU, c’est
+  //    `syntheses_retour_uniq` (0001_socle.sql). `dejaFaite` filtre le cas
+  //    ordinaire ; deux synthèses réellement en vol passent toutes deux ce
+  //    contrôle, et c’est la contrainte d’unicité qui refuse la seconde. On
+  //    l’écrit ici parce que le croire garanti par la réservation du balayage
+  //    serait faux — elle ne protège le filet que de lui-même.
+  await rejouerAval(entree.retourId, ports)
 
   return { ok: true, statut }
+}
+
+/**
+ * L’aval, joué sans jamais pouvoir faire échouer ce qui l’a déclenché.
+ *
+ * ⛔ Son échec ne remonte pas : le message est en base, et c’est lui qui compte.
+ *    Une note qui manque se rattrape — la requête est dans
+ *    04-Architecture/hebergement.md §Le filet ; une phrase perdue, non.
+ *
+ * ⚠️ `retourId` est dans le message, et ce n’est pas un détail : sans lui, les
+ *    journaux disent qu’une note a manqué sans dire laquelle. Un cuid n’est pas
+ *    de la parole — la règle « jamais le corps d’un retour » n’est pas en cause.
+ */
+async function rejouerAval(retourId: string, ports: PortsTour): Promise<void> {
+  if (!ports.aval) return
+
+  try {
+    await ports.aval(retourId)
+  } catch (erreur) {
+    ports.signaler?.(`traitement en aval de la fin d’entretien · ${retourId}`, erreur)
+  }
 }
 
 /**

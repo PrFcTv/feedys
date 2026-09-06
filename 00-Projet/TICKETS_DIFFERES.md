@@ -118,6 +118,12 @@ jamais une erreur.
 ⚠️ Ce n’est pas rien : Feedys est un invité, et la console de l’hôte ne lui appartient pas. Un
 avertissement inexpliqué dans un logiciel métier finit toujours par être imputé au dernier arrivé.
 
+⚠️ **Vérifié le 2026-09-06** : `2.24.15` est **toujours la dernière version publiée**, et
+l’avertissement est toujours gardé par `d > 0 && !options.reconcile && !cache.warnedReconcile`.
+Autrement dit : la seule façon de le taire reste `reconcile: true` — celle qu’on refuse ci-dessous
+— ou de forcer le drapeau interne `warnedReconcile`, ce qui reviendrait à écrire dans les entrailles
+d’une bibliothèque tierce pour cacher un message. ⛔ On ne fait pas ça.
+
 **En attendant** : on ne passe **pas** `reconcile: true`. Il double le temps de capture, et la
 capture est un aide-mémoire, pas une preuve ([01-Specs/widget.md]) — faire attendre quelqu’un qui a
 fini de parler coûte plus cher qu’une ligne de console. snapdom n’expose pas d’option pour taire

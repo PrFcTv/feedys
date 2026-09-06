@@ -56,6 +56,27 @@ couper quelqu’un qui cherche ses mots.
 ⛔ **Le widget n’en sait rien et n’a rien à en savoir.** Personne n’est prévenu qu’un entretien a
 été refermé : il n’y a plus personne devant l’écran, c’est la définition même du cas.
 
+#### ⛔ Sauf qu’il y a parfois encore quelqu’un
+
+« Sans signe de vie » veut dire « sans requête », pas « sans personne ». Un panneau resté **ouvert**
+n’envoie rien : quelqu’un qu’on appelle ailleurs, qui revient trente-cinq minutes plus tard et qui
+tape la précision qui manquait, écrit sur un entretien que le filet a déjà refermé.
+
+⛔ **Ce qu’il écrit alors est conservé.** Le serveur enregistre l’apport **avant** de regarder le
+statut, dans les deux chemins — `POST /tour` et `POST /fin`. Puis :
+
+| Ce que fait la personne | Ce que le serveur rend | Ce qu’il fait de sa phrase |
+|---|---|---|
+| « Répondre » | `409 entretien_clos` — l’entretien **ne se rouvre pas** | elle est écrite dans le fil |
+| « Envoyer maintenant » | `200`, avec le statut posé par le filet | elle est écrite dans le fil |
+
+Dans les deux cas, si la note n’est **pas encore** partie, elle est reproduite et la contient. Si
+elle est déjà partie, la phrase reste lisible au back-office et par MCP — c’est la note qui est
+incomplète, pas la parole qui est perdue.
+
+⚠️ **Rien n’est rejoué quand il n’y a rien à ajouter.** Le widget envoie légitimement un abandon en
+`pagehide` après un envoi manuel : ce cas-là ne doit ni écrire, ni rappeler le modèle.
+
 ## ⛔ Les cinq règles dures
 
 Elles ne se discutent pas, et un manquement est un bug, pas une préférence.
@@ -291,6 +312,7 @@ promet de ne pas mentir.
 | Le transcript est vide ou inintelligible | Une seule relance : « Je n’ai pas bien saisi — vous pouvez redire ? ». Puis on envoie le brut. |
 | Le collaborateur répond à côté | Ça compte comme un tour. On ne réinsiste pas sur la même question. |
 | Le collaborateur ferme le panneau en cours d’entretien | Le retour est **conservé et envoyé** en l’état, marqué `abandonne`. Un retour partiel vaut mieux que rien. |
+| Le filet referme pendant que le panneau est encore ouvert | Ce que la personne écrit ensuite est **écrit dans le fil quand même**, avant toute garde de statut, et la note est reproduite si elle n’est pas partie ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 009). |
 | Le collaborateur dit quelque chose de personnel ou sur quelqu’un | Le bot ne relance pas, ne commente pas, transmet tel quel. Ce n’est pas son rôle d’arbitrer. |
 
 ⛔ **Aucun de ces cas ne perd le retour.** C’est l’invariant : une fois que quelqu’un a parlé, sa
