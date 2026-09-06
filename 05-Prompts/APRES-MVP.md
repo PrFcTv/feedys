@@ -32,6 +32,38 @@ ce qu’on imagine.
 
 ---
 
+## ⛔ La relecture adverse du lot 7 — 2026-09-06
+
+Les quatre PR du lot 7 ont été écrites par la même main, et **aucune n'avait été relue**. Une passe
+adverse a été jouée sur chacune, avec la consigne de chercher des défauts réels, scénario de
+défaillance à l'appui, et « zéro constat » comme réponse valable.
+
+Elle a rendu **vingt-cinq constats**, dont **sept assez graves pour entrer au [BUGS_LOG]** :
+
+| PR | Ce qui en est sorti |
+|---|---|
+| [#19](https://github.com/PrFcTv/feedys/pull/19) · P-016 | ⛔ **009** — le filet referme un entretien dont le panneau est resté ouvert. Ce que la personne écrivait ensuite était **jeté**, et le widget répondait « C'est parti. » Plus une passe qui pouvait durer une heure, un aval en échec qui ne disait pas *quel* retour, et **un test tautologique** qui se présentait comme la garantie anti-divergence |
+| [#20](https://github.com/PrFcTv/feedys/pull/20) · P-017 | ⛔ **010, 011, 012** — la fiche et l'avis d'un entretien clos réapparaissaient à la réouverture ; l'invite regardait la phase en promettant le contraire ; une question blanche figeait l'entretien. Et `pnpm e2e` **n'était pas hors ligne** : il appelait pour de bon api.anthropic.com |
+| [#21](https://github.com/PrFcTv/feedys/pull/21) · P-018 | ⛔ **013, 014, 015** — le conteneur démarrait **vert** avec un `DATABASE_URL` cassé ; le contrôle de rôle annonçait « Les GRANT s'appliquent » sur un rôle `NOINHERIT` qui ne peut rien lire ; `pnpm db:migrate` migrait avec le rôle de service. La procédure `psql` de [hebergement.md](../04-Architecture/hebergement.md) **ne s'exécutait pas** |
+
+⚠️ **Ce que cette passe apprend, et qui vaut plus que les constats.** Trois des sept défauts sont
+de la même famille : **du code juste qui devient faux parce qu'autre chose a changé autour de lui.**
+Le filet a rendu atteignable une branche qui ne perdait rien tant que le champ y était vide ; P-017
+a rendu rémanent un avis qui ne l'était pas tant qu'un seul chemin le posait ; P-018 a déplacé
+l'étape « la base répond » et a laissé `DATABASE_URL` sans surveillance. ⛔ **Aucun de ces trois-là
+ne se voit en relisant le diff** — ils ne se voient qu'en relisant ce que le diff rend possible.
+
+⚠️ Trois propositions de la relecture ont été **refusées**, avec l'argument dans chaque PR : faire
+dépendre l'aval du `rowCount` de `clore` (ça perdrait les apports tardifs), réécrire
+`0003_privilege_registre.sql` (une migration appliquée ne se réécrit pas — son sha256 est au
+registre), et l'ordre de deux tests. Une relecture se discute ; elle ne s'applique pas.
+
+⛔ **Et une faute commise en corrigeant** : le premier test d'intégration écrit pour P-018 recopiait
+la requête de production au lieu de l'importer — le test tautologique reproché à P-016 deux PR plus
+tôt. Corrigé, et noté ici : c'est un piège auquel on retombe.
+
+---
+
 # Lot 7 — Finir le MVP pour de vrai
 
 ## P-015 · La recette qui manque — ✅ fait
