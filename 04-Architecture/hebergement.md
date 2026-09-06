@@ -271,6 +271,62 @@ une vraie page de l’hôte :
 
 ⛔ **Et ce que la vraie page apprend, la fausse l’apprend aussi** : toute hostilité constatée chez
 un hôte rejoint `packages/widget/demo/index.html`. C’est ce qui empêche le même défaut de revenir.
+## Le filet — les entretiens que personne n’a refermés
+
+Un entretien est normalement refermé par le navigateur (`POST /fin`). Un onglet tué, un poste
+éteint, un `keepalive` que le système laisse tomber — et le retour resterait `en_cours` pour
+toujours. Le **filet** balaie toutes les cinq minutes et referme ce qui est muet depuis plus de
+trente minutes ([D-018](../00-Projet/DECISIONS_LOG.md)). Il tourne **dans le processus qui sert**,
+pas dans un ordonnanceur : il n’y a rien à installer.
+
+⚠️ **Une passe est bornée deux fois** : vingt retours au plus, et trois minutes d’horloge au plus.
+La seconde borne n’est pas une redite — une synthèse peut coûter trois minutes à elle seule
+(délai de 60 s × trois tentatives), et vingt lentes faisaient une passe d’une heure pendant
+laquelle les onze passes suivantes ne partaient pas.
+
+### ⛔ Ce qu’il faut lire dans les journaux
+
+```
+Feedys · filet — 20 entretien(s) refermé(s) par silence, 18 passé(s) en aval, 0 en échec, 2 reporté(s).
+Feedys ⚠️  filet — 2 entretien(s) refermé(s) sans note. La requête de rattrapage est dans …
+```
+
+⛔ **« En échec » et « reporté » veulent dire la même chose pour l’exploitant : une note qui ne
+partira jamais toute seule.** Le retour est passé en `abandonne`, qui est terminal, et le balayage
+ne regarde que les `en_cours` — **aucune passe suivante ne le reprendra.** Une panne de modèle de
+dix minutes couvre deux passes, soit jusqu’à quarante notes.
+
+⚠️ Chaque échec nomme son retour dans le journal (`balayage — aval de <id> …`). Un identifiant
+n’est pas de la parole ; le corps du retour, lui, ne sort jamais dans un journal.
+
+### La requête de rattrapage
+
+Les retours refermés par le filet, sans note :
+
+```sql
+select r.id, r.cree_le
+  from retours r
+  join audit a on a.retour_id = r.id and a.action = 'cloture_balayage'
+  left join syntheses s on s.retour_id = r.id
+ where s.id is null
+ order by r.cree_le;
+```
+
+Puis, pour chacun : `pnpm entretien:rejouer -- --retour <id> --synthese`.
+
+⚠️ **`synthetises` dans le journal ne compte pas des notes écrites**, mais des avals qui n’ont pas
+jeté — la synthèse d’un retour dicté sans transcript ne produit rien, et c’est normal. Le compte
+des notes se prend en base, par la requête ci-dessus.
+
+### ⛔ Ce que le filet a failli coûter
+
+Le filet referme un entretien **dont le panneau est peut-être resté ouvert**. Quelqu’un qui revient
+après trente minutes et qui écrit envoie donc sa phrase sur un retour déjà clos. Les deux gardes de
+statut du domaine refusaient **avant** d’écrire : la phrase était jetée, et le widget répondait
+« C’est parti. ». Depuis, `domaine/entretien/tour.ts` écrit toujours l’apport **avant** de regarder
+le statut — `messages` est append-only et ne porte aucune contrainte de statut — puis rejoue l’aval
+si la note n’est pas encore partie ([03-Bugs/BUGS_LOG.md](../03-Bugs/BUGS_LOG.md) 009).
+
 ## Ce qui doit être surveillé
 
 Trois choses, et une seule est technique :
