@@ -114,6 +114,10 @@ export function Widget(ports: Ports) {
   const rendreLeFocus = useRef(false)
 
   const ouvrir = useCallback(() => {
+    // ⚠️ Ceinture et bretelles : un panneau qu’on ouvre n’a rien à dire encore.
+    //    Aucun chemin connu ne laisse d’avis ici, et c’est précisément le genre
+    //    d’affirmation qui a cessé d’être vraie une fois.
+    setAvis('')
     setOuvert((deja) => {
       // ⚠️ La collecte démarre au premier mot du geste, pas au rendu : l’URL
       //    d’une application à routeur peut changer sous nos pieds.
@@ -140,9 +144,28 @@ export function Widget(ports: Ports) {
     },
   })
 
+  /**
+   * ⛔ LA GÉNÉRATION DE L’ÉCRAN. Un tour part, la personne referme le panneau,
+   *    le tour revient : il posait alors sa carte et sa question SUR L’ÉCRAN
+   *    D’ACCUEIL, et son avis d’échec par-dessus. `useDictee` avait ce garde-fou
+   *    depuis toujours ; le composant ne l’avait pas.
+   *
+   * ⚠️ Elle avance à chaque fin d’entretien. Tout ce qui revient d’un `await`
+   *    avec une génération périmée n’écrit plus rien.
+   */
+  const generation = useRef(0)
+
   /** Ce que la personne a corrigé sur la carte, ou rien. */
   const corrections =
     carte && carteOrigine ? rendreCorrections(carteOrigine, carte) : ''
+
+  /**
+   * ⚠️ Une question vide n’est pas une question. Dérivée ICI, une seule fois :
+   *    l’affichage la neutralisait déjà, mais l’effet de conclusion regardait la
+   *    valeur BRUTE — une question blanche laissait donc l’entretien ouvert
+   *    indéfiniment, carte à l’écran, sans plus rien à quoi répondre.
+   */
+  const question = tour?.question != null && tour.question.trim() !== '' ? tour.question : null
 
   /** Ce qu’elle vient de dire ou d’écrire, prêt à partir. */
   const apport = useCallback((): { texte?: string; transcriptBrut?: string } => {
@@ -166,6 +189,14 @@ export function Widget(ports: Ports) {
     async (raison: 'envoi' | 'abandon', garderEnVie = false): Promise<void> => {
       const identifiant = retour
       if (identifiant === null) return
+
+      // ⛔ L’écran change de génération : un tour encore en vol ne posera plus
+      //    ni carte, ni question, ni avis sur ce qui vient après.
+      generation.current += 1
+      // ⚠️ Et plus rien n’est attendu. Sans ça, un tour en vol laisserait
+      //    « Un instant… » collé sur le panneau suivant, faute de pouvoir le
+      //    remettre à zéro lui-même une fois périmé.
+      setAttente(false)
 
       const corps: CorpsFin = {
         raison,
@@ -216,9 +247,16 @@ export function Widget(ports: Ports) {
   /** Demande un tour et pose la carte. ⚠️ Un échec n’affiche pas de carte. */
   const jouer = useCallback(
     async (identifiant: string, corps: CorpsTour): Promise<void> => {
+      const mienne = generation.current
       setAttente(true)
       setAvis('')
       const resultat = await ports.demanderTour(identifiant, corps)
+
+      // ⛔ L’ÉCRAN A BOUGÉ PENDANT L’APPEL : on n’écrit plus rien. `conclure` a
+      //    déjà remis l’attente à zéro — le faire ici écraserait celle d’un tour
+      //    plus récent.
+      if (generation.current !== mienne) return
+
       setAttente(false)
 
       if (!resultat.ok) {
@@ -295,10 +333,13 @@ export function Widget(ports: Ports) {
   }, [ports, ouvrir, fermer])
 
   // ── Plus rien à demander : on envoie, sans retenir personne ────────────────
+  // ⚠️ `question` et non `tour.question` : une question BLANCHE n’était rendue
+  //    nulle part à l’écran, et ne concluait rien non plus. L’entretien restait
+  //    ouvert pour toujours, carte affichée, invitant à répondre à rien.
   useEffect(() => {
-    if (phase !== 'entretien' || attente || tour === null || tour.question !== null) return
+    if (phase !== 'entretien' || attente || tour === null || question !== null) return
     void conclure('envoi')
-  }, [phase, attente, tour, conclure])
+  }, [phase, attente, tour, question, conclure])
 
   // ── L’accusé, puis la fermeture ────────────────────────────────────────────
   useEffect(() => {
@@ -308,6 +349,11 @@ export function Widget(ports: Ports) {
       setPhase('repos')
       setCarte(null)
       setCarteOrigine(null)
+      // ⛔ L’AVIS AUSSI. Ce chemin referme le panneau SANS passer par `fermer`,
+      //    qui était le seul endroit à le nettoyer : un « C’est noté. » resté
+      //    d’un tour en échec réapparaissait sous le champ vierge à la
+      //    réouverture suivante, sous une invite d’accueil qui n’en parle pas.
+      setAvis('')
       rendreLeFocus.current = true
       setOuvert(false)
     }, DUREE_ACCUSE)
@@ -372,10 +418,6 @@ export function Widget(ports: Ports) {
   const vide = texte.trim() === ''
   const enEntretien = phase === 'entretien'
   const rienAEnvoyer = vide && corrections === ''
-
-  // ⚠️ Une question vide n’est pas une question. Le serveur normalise déjà,
-  //    mais le widget rendait un `<p>` vide si jamais elle passait.
-  const question = tour?.question != null && tour.question.trim() !== '' ? tour.question : null
 
   // ⛔ C’EST ICI QUE LE DÉFAUT 004 SE FERME : l’invite regarde la CARTE et la
   //    QUESTION, pas la seule phase (packages/widget/src/ui/textes.ts).

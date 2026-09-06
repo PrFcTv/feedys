@@ -383,3 +383,104 @@ ressuscite pas un entretien pour autant.
 vide. ⛔ Et le commentaire d’en-tête de `balayage.ts` affirmait « CE N’EST PAS UNE PERTE DE
 PAROLE » — vrai du premier tour, faux de tous les suivants. Six tests couvrent désormais l’arrivée
 tardive, dont deux qui vérifient qu’à vide **rien** n’est écrit ni rejoué.
+
+---
+
+## 010 — Le panneau rouvert garde l’avis, la fiche et la question de l’entretien précédent
+
+**Statut** : ✅ Résolu (2026-09-06, PR #20)
+**Constaté le** : 2026-09-06, en **relecture adverse de P-017**
+**Où** : `packages/widget/src/ui/Widget.tsx`
+
+**Symptôme** — deux chemins, un même écran sale.
+
+1. Le tour d’entretien échoue → « C’est noté. Ajoutez ce que vous voulez, ou envoyez. » On clique
+   « Envoyer maintenant », l’accusé s’affiche, le panneau se referme tout seul. **On rouvre la
+   bulle pour signaler autre chose** : panneau vierge, invite d’accueil… et sous le champ, toujours
+   « C’est noté. »
+2. Un tour est en vol (« Un instant… »), on referme le panneau — c’est un abandon. Le tour revient
+   **après**. À la réouverture : la **fiche** et la **question** d’un entretien clos sont à
+   l’écran, sous une invite d’accueil qui n’en parle pas, avec un bouton « Envoyer » qui démarrera
+   un retour tout neuf. Et « Un instant… » restait collé, faute d’être jamais remis à zéro.
+
+⚠️ C’est le défaut [004](#004--sans-carte-le-champ-de-réponse-invite-à-corriger-une-fiche-qui-nexiste-pas)
+dans l’autre sens : là, l’invite parlait d’une fiche absente ; ici, une fiche est présente et
+l’invite n’en parle pas.
+
+**Cause** — deux trous distincts, tous deux sur la fin d’un entretien.
+
+- `fermer()` était le **seul** endroit à faire `setAvis('')`. Or la fermeture automatique de
+  l’accusé appelle `setOuvert(false)` en direct, sans passer par lui. Tant que `avis` n’était posé
+  que par un envoi en échec — qui le nettoyait lui-même avant tout succès — la rémanence était
+  impossible ; ⛔ **P-017 l’a rendue possible en posant un avis sur l’échec d’un TOUR**, et rien
+  n’a été ajouté en face.
+- `jouer` n’était gardé par **aucune génération**. `useDictee` a exactement ce garde-fou depuis
+  toujours (`generation`, `useDictee.ts`) ; le composant ne l’avait pas. `conclure('abandon')`
+  remet `retour` et `tour` à `null` sans annuler la requête en vol.
+
+**Correctif** — une génération d’écran (`useRef`), avancée par `conclure`. Tout ce qui revient d’un
+`await` avec une génération périmée n’écrit plus rien. `conclure` remet aussi `attente` à zéro,
+puisqu’un tour périmé ne peut plus le faire lui-même. Et la fermeture automatique nettoie l’avis,
+comme `fermer` le faisait déjà.
+
+**Ce qui l’a laissé passer** — aucun test ne **rouvrait** le panneau après un entretien, et aucun
+ne faisait revenir un tour **après** la fermeture. Quatre tests le font maintenant ; ils rougissent
+tous les quatre si l’on retire la génération ou le nettoyage.
+
+---
+
+## 011 — Pendant l’envoi, le champ invite à décrire un problème sous la fiche qu’on envoie
+
+**Statut** : ✅ Résolu (2026-09-06, PR #20)
+**Constaté le** : 2026-09-06, en **relecture adverse de P-017**
+**Où** : `packages/widget/src/ui/textes.ts`
+
+**Symptôme** — on répond au bot, la fiche est à l’écran, on clique « Envoyer maintenant ». Pendant
+toute la durée de la requête — plusieurs secondes sur un réseau lent — le champ repasse à
+« Ce qui vous a bloqué, ou l’idée qui vient de vous venir. » et son `aria-label` de « Votre
+réponse » à « Votre retour ». **Sous une fiche toujours affichée.** Un lecteur d’écran annonce le
+changement.
+
+**Cause** — `inviteChamp` testait `!enEntretien` **en premier**, et `enEntretien` vaut
+`phase === 'entretien'` — donc `false` dès que « Envoyer maintenant » fait basculer en `'envoi'`,
+alors que la carte est **délibérément maintenue** à l’écran, figée, le temps de la requête.
+
+⛔ La fonction s’engageait pourtant, six lignes plus haut, à l’exact contraire : « ELLE DÉPEND DE
+CE QUI EST RÉELLEMENT À L’ÉCRAN, pas de la phase ». Sa première branche regardait la phase.
+
+**Correctif** — `aCarte` et `aQuestion` sont testés **avant** `enEntretien`. L’ordre des trois
+tests **est** le contrat ; il est écrit comme tel dans le code et dans
+[01-Specs/widget.md](../01-Specs/widget.md) §L’invite du champ.
+
+**Ce qui l’a laissé passer** — les tests d’invite appelaient `inviteChamp` **directement**, avec
+des états cohérents choisis à la main. Aucun ne partait de l’écran réel pendant une phase de
+transition. Le test qui le couvre tient désormais la requête de fin ouverte et lit le champ
+pendant qu’elle tourne.
+
+---
+
+## 012 — Une question blanche laisse l’entretien ouvert pour toujours
+
+**Statut** : ✅ Résolu (2026-09-06, PR #20)
+**Constaté le** : 2026-09-06, en **relecture adverse de P-017**
+**Où** : `packages/widget/src/ui/Widget.tsx`
+
+**Symptôme** — si le bot rend `question: "   "`, le `<p class="question">` n’est pas rendu **et**
+l’entretien ne se conclut jamais. Le panneau reste ouvert indéfiniment, fiche affichée, champ
+invitant à « Répondez, ou corrigez la fiche au-dessus » alors qu’il n’y a plus rien à quoi
+répondre. Le retour ne part que si la personne clique « Envoyer maintenant » — ou jamais.
+
+⚠️ Le serveur normalise, donc le cas est rare. Il n’est pas impossible : c’est exactement la raison
+pour laquelle le widget se protégeait **déjà** à l’affichage.
+
+**Cause** — la question était neutralisée à un seul des deux endroits. L’affichage lisait la valeur
+dérivée ; l’effet de conclusion lisait `tour.question` **brute**, qui n’est pas `null`.
+
+**Correctif** — la question est dérivée **une seule fois**, en tête du composant, et l’effet de
+conclusion en dépend. Un widget qui se protège d’une valeur doit s’en protéger partout, ou nulle
+part.
+
+**Ce qui l’a laissé passer** — le test existant (« ⛔ une question vide n’est pas une question —
+rien n’est rendu ») n’assérait que l’**absence du `<p>`**. Il passait en laissant l’état bloqué
+hors couverture. Il vérifie maintenant que l’entretien **se conclut**.
+

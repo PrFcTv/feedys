@@ -747,3 +747,161 @@ describe('ce que le widget dit quand un tour n’aboutit pas', () => {
     expect(trouver('.question')).toBeNull()
   })
 })
+
+/**
+ * ⛔ CE QUE LA RELECTURE DE P-017 A TROUVÉ, ET QUE PERSONNE NE VOYAIT.
+ *
+ * ⚠️ Ces quatre défauts ont un point commun : ils ne se manifestent qu’à la
+ *    RÉOUVERTURE du panneau, ou pendant les quelques secondes d’une requête. Ni
+ *    la recette manuelle, ni les parcours ne s’attardent là.
+ */
+describe('l’écran ne garde rien de l’entretien précédent', () => {
+  /** Une promesse qu’on résout à la main : c’est comme ça qu’on tient un tour en vol. */
+  function differe<T>(): { promesse: Promise<T>; resoudre: (valeur: T) => void } {
+    let resoudre!: (valeur: T) => void
+    const promesse = new Promise<T>((r) => {
+      resoudre = r
+    })
+    return { promesse, resoudre }
+  }
+
+  const TOUR_MUET = { ok: false } as const
+
+  it('⛔ l’avis d’un tour en échec ne survit pas à l’accusé', async () => {
+    const { racine, trouver } = installer({ demanderTour: async () => TOUR_MUET })
+
+    await entrerEnEntretien(racine)
+    expect(trouver('.avis')?.textContent).toContain('C’est noté.')
+
+    vi.useFakeTimers()
+    await cliquerEnvoyer(racine)
+    await act(async () => {
+      vi.advanceTimersByTime(3_000)
+    })
+    await calmer()
+    vi.useRealTimers()
+
+    // ⛔ On rouvre pour signaler AUTRE CHOSE : le panneau doit être vierge.
+    await ouvrir(racine)
+    expect(trouver('.avis')?.textContent).toBe('')
+  })
+
+  it('⛔ un tour qui revient APRÈS la fermeture ne pose ni carte ni question', async () => {
+    const attendu = differe<ResultatTour>()
+    const { racine, trouver } = installer({ demanderTour: () => attendu.promesse })
+
+    await entrerEnEntretien(racine)
+    // Le tour est en vol. La personne referme le panneau : c’est un abandon.
+    await act(async () => {
+      trouver<HTMLButtonElement>('.fermer')!.click()
+    })
+    await calmer()
+
+    // ⚠️ Et SEULEMENT MAINTENANT, le modèle répond.
+    await act(async () => {
+      attendu.resoudre({
+        ok: true,
+        tour: { comprehension: CARTE, question: 'C’est nouveau ?', motif: 'la récurrence' },
+      })
+    })
+    await calmer()
+
+    await ouvrir(racine)
+
+    // ⛔ Sinon : la fiche ET la question d’un entretien clos réapparaissaient
+    //    sur un panneau d’accueil, sous une invite qui n’en parle pas — le
+    //    défaut 004 dans l’autre sens.
+    expect(trouver('.carte')).toBeNull()
+    expect(trouver('.question')).toBeNull()
+    expect(champDe(racine).placeholder).toBe('Ce qui vous a bloqué, ou l’idée qui vient de vous venir.')
+  })
+
+  it('⛔ un tour qui ÉCHOUE après la fermeture ne pose pas son avis non plus', async () => {
+    const attendu = differe<ResultatTour>()
+    const { racine, trouver } = installer({ demanderTour: () => attendu.promesse })
+
+    await entrerEnEntretien(racine)
+    await act(async () => {
+      trouver<HTMLButtonElement>('.fermer')!.click()
+    })
+    await calmer()
+
+    await act(async () => {
+      attendu.resoudre(TOUR_MUET)
+    })
+    await calmer()
+
+    await ouvrir(racine)
+    expect(trouver('.avis')?.textContent).toBe('')
+  })
+
+  it('⛔ ne laisse pas « Un instant… » collé sur le panneau suivant', async () => {
+    const attendu = differe<ResultatTour>()
+    const { racine, trouver } = installer({ demanderTour: () => attendu.promesse })
+
+    await entrerEnEntretien(racine)
+    expect(trouver('.attente')?.textContent).toContain('Un instant')
+
+    await act(async () => {
+      trouver<HTMLButtonElement>('.fermer')!.click()
+    })
+    await calmer()
+    await ouvrir(racine)
+
+    expect(trouver('.attente')).toBeNull()
+  })
+})
+
+describe('l’invite du champ pendant que la requête tourne', () => {
+  it('⛔ ne repasse pas à l’invite d’accueil tant que la fiche est à l’écran', async () => {
+    let resoudre!: (valeur: boolean) => void
+    const terminer = () =>
+      new Promise<boolean>((r) => {
+        resoudre = r
+      })
+
+    const { racine } = installer({ terminer })
+
+    await entrerEnEntretien(racine)
+    const champ = champDe(racine)
+    expect(champ.placeholder).toBe('Répondez, ou corrigez la fiche au-dessus.')
+
+    // « Envoyer maintenant » : la carte est DÉLIBÉRÉMENT maintenue à l’écran,
+    // figée, le temps de la requête.
+    await cliquerEnvoyer(racine)
+
+    // ⛔ Pendant tout ce temps — plusieurs secondes sur un réseau lent — le champ
+    //    repassait à « Ce qui vous a bloqué… » et l’aria-label de « Votre
+    //    réponse » à « Votre retour », SOUS une fiche toujours affichée.
+    expect(racine.querySelector('.carte')).not.toBeNull()
+    expect(champDe(racine).placeholder).toBe('Répondez, ou corrigez la fiche au-dessus.')
+    expect(champDe(racine).getAttribute('aria-label')).toBe('Votre réponse')
+
+    resoudre(true)
+    await calmer()
+  })
+})
+
+describe('une question blanche', () => {
+  /**
+   * ⛔ Le serveur normalise, donc le cas est rare. Mais le widget se protégeait
+   *    déjà à l’AFFICHAGE et pas à la conclusion : le `<p class="question">`
+   *    n’était pas rendu, et `conclure('envoi')` n’était jamais déclenché.
+   *    L’entretien restait ouvert indéfiniment, fiche à l’écran, invitant à
+   *    répondre à rien.
+   */
+  it('⛔ conclut l’entretien au lieu de le laisser ouvert pour toujours', async () => {
+    const { racine, terminer, trouver } = installer({
+      demanderTour: async () => ({
+        ok: true,
+        tour: { comprehension: CARTE, question: '   ', motif: 'aucun' },
+      }),
+    })
+
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.question')).toBeNull()
+    expect(terminer).toHaveBeenCalledOnce()
+    expect(terminer.mock.calls[0]?.[1]).toMatchObject({ raison: 'envoi' })
+  })
+})

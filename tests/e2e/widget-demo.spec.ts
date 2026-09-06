@@ -7,9 +7,13 @@
  *    « Répondez, ou corrigez la fiche au-dessus » alors qu’il n’y a pas de fiche
  *    — ne se voit qu’à l’écran, dans un état que seul un modèle absent produit.
  *
- * ⚠️ Le tour échoue POUR DE VRAI ici, en `503` : `FEEDYS_MODELE` vaut
- *    `bouchon-e2e`, qui n’est pas un identifiant valide. Rien n’est bouchonné
- *    côté widget, et l’ingestion, elle, rend bien `201`.
+ * ⚠️ Le tour échoue POUR DE VRAI ici, en `503`. Rien n’est bouchonné côté
+ *    widget, et l’ingestion, elle, rend bien `201`.
+ *
+ * ⛔ MAIS L’ÉCHEC EST LOCAL. `ANTHROPIC_BASE_URL` pointe sur un port que `fetch`
+ *    refuse d’ouvrir : aucune requête ne quitte la machine, et le parcours
+ *    échoue de la même façon partout. Il envoyait auparavant un vrai appel
+ *    authentifié à api.anthropic.com — voir `playwright.config.ts`.
  *
  * ⛔ CE N’EST PAS UN VRAI HÔTE. `packages/widget/demo/index.html` est NOTRE page
  *    hostile, écrite en imaginant ce qui pourrait casser — T-003 reste ouvert et
@@ -53,7 +57,21 @@ async function ouvrirLaRacine(page: Page): Promise<void> {
  */
 function surveillerLaConsole(page: Page): string[] {
   const erreurs: string[] = []
-  const attendue = /failed to load resource|503/i
+  /**
+   * ⛔ UNE CONJONCTION, PAS UNE ALTERNANCE. C’était
+   *    `/failed to load resource|503/i` : la première branche avalait
+   *    N’IMPORTE QUEL échec de chargement — un `/snapdom.js` en 404, un
+   *    `widget.js` en 500, un `ERR_CONNECTION_REFUSED` — et la seconde toute
+   *    ligne contenant « 503 » où que ce soit. Le commentaire promettait
+   *    « il n’en reste qu’UNE d’attendue » ; le filtre en laissait passer une
+   *    famille entière, dans un fichier dont le premier parcours n’assère aucun
+   *    code HTTP.
+   *
+   * ⚠️ Chrome écrit la ligne complète, l’URL vivant dans `location` et pas dans
+   *    le texte : « Failed to load resource: the server responded with a status
+   *    of 503 (Service Unavailable) ».
+   */
+  const attendue = /failed to load resource[\s\S]*status of 503(?![0-9])/i
 
   page.on('console', (message) => {
     if (message.type() !== 'error') return
@@ -79,13 +97,16 @@ test('le widget s’ouvre dans la page hostile, et rien de l’hôte ne le trave
   await expect(page.locator('.panneau')).toBeVisible()
 
   // ⛔ Le panneau doit rester lisible malgré le reset global et les `!important`
-  //    de l’hôte, et passer AU-DESSUS de sa modale à `z-index: 9999`.
+  //    de l’hôte.
   const rendu = await page.locator('.panneau').evaluate((panneau) => {
     const boite = panneau.getBoundingClientRect()
+    const style = getComputedStyle(panneau)
     return {
       large: boite.width,
       haut: boite.height,
-      police: getComputedStyle(panneau).fontFamily,
+      police: style.fontFamily,
+      casse: style.textTransform,
+      interlettre: style.letterSpacing,
     }
   })
 
@@ -94,6 +115,52 @@ test('le widget s’ouvre dans la page hostile, et rien de l’hôte ne le trave
   // ⚠️ L’hôte impose une police fantaisie à tout : si le panneau la portait, le
   //    shadow DOM aurait fui.
   expect(rendu.police.toLowerCase()).not.toContain('cursive')
+  // ⛔ ET LES TROIS AUTRES FUITES HÉRITABLES. `index.html` impose aussi
+  //    `text-transform: uppercase` et `letter-spacing: 0.14em` en `!important` ;
+  //    seule `font-family` était vérifiée, et l’héritage traverse la frontière
+  //    du shadow DOM — y compris fermé.
+  expect(rendu.casse).toBe('none')
+  expect(rendu.interlettre).toBe('normal')
+
+  expect(erreurs).toEqual([])
+})
+
+/**
+ * ⛔ LE Z-INDEX, QUI ÉTAIT PROMIS SANS ÊTRE VÉRIFIÉ.
+ *
+ * ⚠️ Le parcours ci-dessus annonçait « et passer AU-DESSUS de sa modale à
+ *    `z-index: 9999` », et aucune de ses assertions ne regardait l’empilement.
+ *    La modale de la page hostile est d’ailleurs en `display: none` tant que
+ *    `#ouvrir-modale` n’a pas été cliqué — ce que le parcours ne faisait jamais.
+ *
+ * ⛔ C’est l’une des trois classes de défauts qui n’existent QUE chez un hôte
+ *    (CLAUDE.md §Le widget ne se recette pas chez lui). Elle n’était pas testée.
+ */
+test('⛔ le widget passe au-dessus de la modale de l’hôte, et du bandeau ancré sous lui', async ({
+  page,
+}) => {
+  const erreurs = surveillerLaConsole(page)
+  await ouvrirLaRacine(page)
+  await poserLeWidget(page)
+
+  await page.locator('#ouvrir-modale').click()
+  await expect(page.locator('.modale')).toBeVisible()
+
+  // ⚠️ `elementFromPoint` retarge sur l’hôte du shadow DOM : ce qu’on lit est
+  //    donc `feedys-widget` si le widget gagne, `.modale` ou `.bandeau` sinon.
+  const dessus = await page.locator('.lanceur').evaluate((lanceur) => {
+    const boite = lanceur.getBoundingClientRect()
+    const cible = document.elementFromPoint(
+      boite.left + boite.width / 2,
+      boite.top + boite.height / 2,
+    )
+    if (cible === null) return 'rien'
+    return `${cible.tagName.toLowerCase()}${cible.className ? `.${String(cible.className)}` : ''}`
+  })
+
+  // ⛔ Une modale de l’hôte par-dessus le lanceur, et Feedys devient
+  //    inatteignable au moment précis où quelqu’un a quelque chose à dire.
+  expect(dessus).toBe('feedys-widget')
 
   expect(erreurs).toEqual([])
 })
