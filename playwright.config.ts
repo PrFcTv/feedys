@@ -35,7 +35,16 @@ export const BASE_E2E = 'feedys_e2e'
  *    quelqu’un d’autre — le reste des parcours ne voit que `/widget.js` en tant
  *    qu’actif HTTP. T-003 dit que ça ne remplace pas un hôte réel, et c’est vrai.
  */
-export const PORT_DEMO = 4321
+/**
+ * ⚠️ PAS 4321, ET C’EST LA MÊME PRÉCAUTION QUE POUR LE PORT 3100 CI-DESSUS.
+ *    4321 est le port par défaut de `packages/widget/demo/serveur.ts`. Avec
+ *    `reuseExistingServer`, un développeur qui a `pnpm widget:demo` ouvert à
+ *    côté — le geste que CLAUDE.md §Le widget ne se recette pas chez lui
+ *    encourage — voyait Playwright RÉUTILISER SON SERVEUR, lequel pointe sur
+ *    `http://localhost:3000` et donc sur la base de DÉVELOPPEMENT. Un parcours
+ *    y aurait écrit un retour, ce que l’en-tête de ce fichier interdit.
+ */
+export const PORT_DEMO = 4331
 export const ORIGINE_DEMO = `http://localhost:${PORT_DEMO}`
 
 /**
@@ -47,6 +56,22 @@ export const CLE_DEMO_E2E = 'fdy_pub_demo_e2e'
 
 /** ⛔ Inventé, et sans valeur hors de ce test. Le dépôt est public. */
 export const MOT_DE_PASSE_E2E = 'e2e-mot-de-passe-de-test'
+
+/** ⛔ Inventée, et sans valeur nulle part : aucune requête ne part avec. */
+export const CLE_MODELE_E2E = 'cle-de-parcours-jamais-envoyee'
+
+/**
+ * L’origine du modèle pendant les parcours.
+ *
+ * ⛔ LE PORT 9 EST SUR LA LISTE DES « BAD PORTS » DU WHATWG : `fetch` le refuse
+ *    d’emblée, sans ouvrir de socket. Aucun paquet ne quitte la machine, quoi
+ *    qu’il tourne dessus, sur n’importe quel système — c’est plus fort qu’un
+ *    port simplement libre, qui dépend de ce qui écoute.
+ *
+ * ⚠️ Le tour rend donc 503 par un échec LOCAL et identique partout : sur le
+ *    poste comme en CI, avec ou sans `.env.local`.
+ */
+export const ORIGINE_MODELE_MORTE = 'http://127.0.0.1:9'
 
 /**
  * ⛔ Aucun repli : `urlBaseDessai()` échoue franchement si `DATABASE_URL` est
@@ -97,10 +122,24 @@ export default defineConfig({
       DATABASE_URL: urlBaseE2E(),
       FEEDYS_BO_MOT_DE_PASSE: MOT_DE_PASSE_E2E,
       FEEDYS_URL_PUBLIQUE: ORIGINE,
-      // ⚠️ Exigée par la composition. ⛔ Ce n’est pas un identifiant de modèle
-      //    valide, et c’est VOULU : le tour d’entretien échoue donc en 503, ce
-      //    qui est exactement l’état dégradé que `widget-demo.spec.ts` recette.
+      // ⚠️ Exigée par la composition, et volontairement invalide : le tour
+      //    d’entretien échoue donc en 503, l’état dégradé que
+      //    `widget-demo.spec.ts` recette.
       FEEDYS_MODELE: 'bouchon-e2e',
+      // ⛔ ET L’ÉCHEC DOIT SE PRODUIRE SANS SORTIR DE LA MACHINE.
+      //
+      // ⚠️ « bouchon-e2e » laissait croire à une doublure locale. Il n’en est
+      //    rien : le fournisseur envoyait pour de bon une requête AUTHENTIFIÉE
+      //    à api.anthropic.com, avec la clé du poste lue dans `.env.local`, et
+      //    le 404 rapportait `anthropic-organization-id` et
+      //    `anthropic-workspace-id` dans les journaux du serveur.
+      //
+      // ⛔ PIRE QUE LA FUITE : le test passait par DEUX MÉCANISMES DIFFÉRENTS
+      //    selon la machine. Le job e2e de la CI n’a aucune `ANTHROPIC_API_KEY`
+      //    — l’échec y venait du SDK, jamais du réseau. Un parcours qui est vert
+      //    pour deux raisons différentes ne recette ni l’une ni l’autre.
+      ANTHROPIC_API_KEY: CLE_MODELE_E2E,
+      ANTHROPIC_BASE_URL: ORIGINE_MODELE_MORTE,
     },
     },
     {

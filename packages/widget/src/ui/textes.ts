@@ -92,13 +92,14 @@ export function inviteChamp(etat: {
   readonly aCarte: boolean
   readonly aQuestion: boolean
 }): { readonly ariaLabel: string; readonly placeholder: string } {
-  if (!etat.enEntretien) {
-    return {
-      ariaLabel: 'Votre retour',
-      placeholder: 'Ce qui vous a bloqué, ou l’idée qui vient de vous venir.',
-    }
-  }
-
+  // ⛔ CE QUI EST À L’ÉCRAN PASSE AVANT LA PHASE, et l’ordre de ces trois tests
+  //    EST le contrat. Il ne l’était pas : `!enEntretien` était testé en
+  //    premier, et `enEntretien` vaut `phase === 'entretien'` — donc `false` dès
+  //    qu’on clique « Envoyer maintenant », alors que la carte est
+  //    DÉLIBÉRÉMENT maintenue à l’écran le temps de la requête. Le champ
+  //    repassait à l’invite d’accueil, et l’`aria-label` de « Votre réponse » à
+  //    « Votre retour », sous une fiche toujours affichée — annoncé comme tel
+  //    par un lecteur d’écran.
   if (etat.aCarte) {
     return { ariaLabel: 'Votre réponse', placeholder: 'Répondez, ou corrigez la fiche au-dessus.' }
   }
@@ -107,6 +108,13 @@ export function inviteChamp(etat: {
   //    mais rien à corriger.
   if (etat.aQuestion) {
     return { ariaLabel: 'Votre réponse', placeholder: 'Répondez, ou ajoutez ce qui vous revient.' }
+  }
+
+  if (!etat.enEntretien) {
+    return {
+      ariaLabel: 'Votre retour',
+      placeholder: 'Ce qui vous a bloqué, ou l’idée qui vient de vous venir.',
+    }
   }
 
   // ⛔ Ni carte ni question. On n’explique pas pourquoi : on invite à continuer.

@@ -204,6 +204,13 @@ Un accusé sobre, deux secondes, puis fermeture automatique — et le focus revi
 ⛔ Pas de numéro de suivi, pas de « vous serez notifié », pas de lien vers un statut. On ne promet
 rien qu’on ne tiendra pas ([entretien.md] §règle 4).
 
+⛔ **La fermeture automatique remet le panneau à neuf** — fiche, question, avis, attente. Rouvrir la
+bulle pour signaler autre chose ne doit RIEN montrer de l’entretien précédent
+([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 010).
+
+⚠️ **Et un tour encore en vol quand l’entretien se termine n’écrit plus rien à l’écran.** Il revient
+parfois après la fermeture — il posait alors sa fiche et sa question sur l’écran d’accueil.
+
 ## Ce que le widget joint tout seul
 
 Sans jamais le demander, et **en le montrant** — la carte de compréhension affiche l’écran déduit,
@@ -292,6 +299,11 @@ jamais arrivée, et le champ invitait à corriger une fiche absente.
 ⚠️ **Quatre situations produisent « en entretien, sans carte »**, et une seule est un échec : le
 premier tour encore en vol — **sur le chemin nominal**, pendant la latence du modèle —, le tour en
 échec, le tour rendu sans compréhension, et le tour dont la question conclut.
+
+⛔ **Et « ce qui est à l’écran » l’emporte sur la phase, y compris PENDANT L’ENVOI.** La carte est
+délibérément maintenue, figée, le temps de la requête de fin : l’invite et l’`aria-label` doivent
+donc rester ceux d’une réponse. Les tester dans l’ordre inverse suffisait à casser la règle
+([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 011).
 
 ### Les autres états dégradés
 
