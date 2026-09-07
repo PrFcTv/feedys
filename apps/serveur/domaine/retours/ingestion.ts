@@ -38,6 +38,11 @@ export interface ProduitConnu {
    *    arriveront quand même.
    */
   readonly secret: string | null
+  /**
+   * Le vocabulaire métier et glossaire du logiciel hôte, saisi à la main.
+   * `null` quand le produit n’en a pas défini.
+   */
+  readonly contexteMetier: string | null
 }
 
 /** Le retour, prêt à écrire. Les trois lignes partent ensemble ou pas du tout. */
@@ -63,6 +68,7 @@ export interface RetourAEnregistrer {
     readonly captureChemin: string | null
     readonly fuseau: string | null
     readonly agentBrut: Record<string, unknown> | null
+    readonly situation: string | null
   }
 }
 
@@ -278,6 +284,7 @@ function composer(
       captureChemin,
       fuseau: ouNul(contexte.fuseau),
       agentBrut: contexte.agentBrut ?? null,
+      situation: ouNul(contexte.situation ?? contexte.contexteMetier),
     },
   }
 }

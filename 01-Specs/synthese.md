@@ -112,6 +112,21 @@ construction, et le test qui la vérifie teste notre code, pas la docilité d’
 ⚠️ Une citation jetée est **journalisée** : c’est le signal qu’un prompt dérive vers la
 reformulation, et on veut le voir avant les utilisateurs.
 
+### La qualification métier de la zone et de l’impact (P-02X)
+
+Le prompt système de la synthèse (`apps/serveur/domaine/synthese/prompts/synthese.md`) reçoit
+la marque `{{metier}}`, qui injecte le contexte métier du produit (`contexte_metier`) et
+la situation d’écran capturée (`situation`).
+
+Cette connaissance permet au modèle de :
+- qualifier la `zone` avec le vocabulaire exact du domaine (ex. « Comptabilité · Bordereaux de
+  règlement ») au lieu d’un simple chemin d’URL ou d’un sélecteur DOM brut ;
+- qualifier l’`impact` (`bloque`, `ralentit`, `agace`, `indetermine`) en comprenant l’opération
+  métier que le collaborateur tentait d’accomplir ;
+- **maintenir les citations en verbatim strict** : les termes métier employés par le collaborateur
+  sont préservés mot pour mot dans `citations`, la vérification automatique par `verbatim.ts`
+  rejetant toute tentative de reformulation ou de normalisation.
+
 ### Ce que le serveur ne laisse pas décider au modèle
 
 `confiance` est plafonnée à `basse` dans deux cas, parce qu’ils ne se lisent pas dans le fil

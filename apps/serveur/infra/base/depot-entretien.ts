@@ -29,9 +29,12 @@ const CHARGER = `
          r.auteur_role,
          r.cree_le,
          c.url, c.titre_page, c.ecran, c.selecteur_dom,
-         c.navigateur, c.systeme, c.viewport_l, c.viewport_h, c.fuseau
+         c.navigateur, c.systeme, c.viewport_l, c.viewport_h, c.fuseau,
+         c.situation,
+         p.contexte_metier
     from retours r
     left join contextes c on c.retour_id = r.id
+    left join produits p on p.id = r.produit_id
    where r.id = $1
      and r.produit_id = $2
    limit 1
@@ -101,6 +104,8 @@ export function creerDepotEntretien(bassin: Bassin): PortDepotEntretien {
             url: ouNul(ligne['url']),
             titrePage: ouNul(ligne['titre_page']),
             ecran: ouNul(ligne['ecran']),
+            situation: ouNul(ligne['situation']),
+            contexteMetier: ouNul(ligne['contexte_metier']),
             selecteurDom: ouNul(ligne['selecteur_dom']),
             navigateur: ouNul(ligne['navigateur']),
             systeme: ouNul(ligne['systeme']),

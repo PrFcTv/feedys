@@ -72,6 +72,19 @@ function doux<T>(lire: () => T): T | undefined {
 }
 
 /**
+ * ⚠️ Lecture douce de la situation d’écran déclarée par l’hôte (P-02X).
+ *    Lue depuis `body` ou `documentElement`, bornée à 120 caractères.
+ */
+export function lireSituation(doc: Document | undefined): string | undefined {
+  const valeur = doux(
+    () =>
+      doc?.body?.getAttribute('data-feedys-contexte') ??
+      doc?.documentElement?.getAttribute('data-feedys-contexte'),
+  )
+  return raccourcir(typeof valeur === 'string' ? valeur : undefined, BORNES.situation)
+}
+
+/**
  * La partie synchrone : tout sauf la capture.
  *
  * ⚠️ Elle est séparée parce qu’elle doit être prise à l’INSTANT de l’ouverture.
@@ -82,11 +95,13 @@ export function lireContexte(options: OptionsCollecte = {}): Contexte {
   const fenetre = options.fenetre ?? globalThis.window
   const doc = fenetre?.document
   const agent = doux(() => fenetre.navigator.userAgent) ?? ''
+  const situation = lireSituation(doc)
 
   return {
     url: nettoyerUrl(doux(() => fenetre.location.href) ?? ''),
     titrePage: raccourcir(doux(() => doc?.title), BORNES.titrePage),
     ecran: doux(() => deduireEcran(fenetre.location.href)),
+    ...(situation ? { situation } : {}),
     selecteurDom: doux(() => construireSelecteur(options.cible, doc)),
     navigateur: raccourcir(lireNavigateur(agent), BORNES.navigateur),
     systeme: raccourcir(lireSysteme(agent), BORNES.systeme),

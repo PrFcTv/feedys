@@ -671,3 +671,56 @@ déploiement. D’où `0003_privilege_registre.sql`.
 
 Un besoin de migrer sans démarrer le serveur — c’est déjà ce que D-016 nommait. Il faudrait alors
 le second empaquetage qu’on évite depuis P-013.
+
+---
+
+## D-020 — Contextualisation métier et situationnelle hybride de l’entretien
+
+**2026-09-07**
+
+Le bot de l’entretien doit comprendre le jargon spécifique du logiciel hôte (« bordereau »,
+« quittance », « liquidation ») et adapter ses relances à la situation immédiate de l’écran,
+sans transformer l’entretien en interrogatoire ni violer la règle d’or : ne jamais demander
+ce que le contexte donne déjà.
+
+### La décision
+
+La contextualisation repose sur un **mécanisme hybride** à deux niveaux :
+
+1. **Le volet manuel (le produit) — `produits.contexte_metier text`** :
+   Défini à l’enregistrement du produit (`pnpm produit:creer --metier "..."`), il explicite le
+   vocabulaire et le glossaire métier du logiciel hôte. Il est immuable à l’échelle du retour et
+   persiste en base.
+2. **Le volet automatique (l’écran) — `contextes.situation text`** :
+   L’application hôte peut déclarer une situation immédiate via un attribut HTML doux sur le
+   document : `data-feedys-contexte` sur `body` ou `documentElement` (borné à 120 caractères).
+   Le widget le lit passivement sans cookie, sans stockage persistant et sans dépendance npm.
+   La valeur est transmise au contrat d’ingestion (`situation`) et stockée avec le contexte.
+
+### Pourquoi cette approche et pas un RAG ou une base vectorielle
+
+⛔ **Aucune base vectorielle, aucun RAG lourd, aucune dépendance externe.**
+Un système RAG ajouterait des temps de latence imprévisibles, un coût d’infrastructure disproportionné,
+et un risque d’hallucination ou d’injection sur des morceaux de documentation non maîtrisés.
+Une injection textuelle directe via la marque `{{metier}}` dans le prompt système du bot et de la
+synthèse est immédiate, déterministe, testable unitairement et sans dépendance.
+
+### Le comportement en cas d’absence
+
+Si aucun contexte métier ni situation d’écran n’est renseigné, la marque `{{metier}}` se résout en
+chaîne vide et le prompt se replie proprement sur son comportement neutre par défaut, sans rupture.
+
+### Les invariants préservés
+
+- **Plafond de deux relances** : appliqué côté serveur, inchangé ([D-006](DECISIONS_LOG.md)).
+- **Une question au plus, deux phrases maximum**.
+- **Aucun diagnostic ni promesse**.
+- **Citations verbatim strictes** : le vocabulaire métier présent dans la parole est préservé mot pour
+  mot et vérifié par `verbatim.ts`.
+- **Frontière de licence** : `packages/widget` reste 100 % MIT, aucun type ni code AGPL ne remonte.
+
+### Ce qui la renverserait
+
+Un logiciel métier dont le glossaire dépasserait plusieurs dizaines de kilo-octets ou nécessiterait
+une arborescence multi-modules dynamique non résoluble au niveau de l’écran.
+

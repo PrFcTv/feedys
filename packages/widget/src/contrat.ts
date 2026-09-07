@@ -65,6 +65,8 @@ export const SchemaContexte = z
     url: z.string().min(1).max(BORNES.url),
     titrePage: z.string().max(BORNES.titrePage).optional(),
     ecran: z.string().max(BORNES.ecran).optional(),
+    situation: z.string().max(BORNES.situation).optional(),
+    contexteMetier: z.string().max(BORNES.situation).optional(),
     selecteurDom: z.string().max(BORNES.selecteurDom).optional(),
     navigateur: z.string().max(BORNES.navigateur).optional(),
     systeme: z.string().max(BORNES.systeme).optional(),

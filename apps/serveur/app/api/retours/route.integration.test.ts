@@ -190,7 +190,7 @@ describe('le cas nominal', () => {
 
     const { rows: contextes } = await client.query(
       `select url, titre_page, ecran, selecteur_dom, navigateur, systeme,
-              viewport_l, viewport_h, fuseau, agent_brut, capture_chemin
+              viewport_l, viewport_h, fuseau, agent_brut, capture_chemin, situation
          from contextes where retour_id = $1`,
       [corps.retour],
     )
@@ -206,7 +206,27 @@ describe('le cas nominal', () => {
       fuseau: 'Europe/Paris',
       agent_brut: { langue: 'fr-FR' },
       capture_chemin: null,
+      situation: null,
     })
+  })
+
+  it('persiste la situation déclarée par l’hôte dans contextes', async () => {
+    const avecSituation = {
+      ...CORPS,
+      contexte: {
+        ...CORPS.contexte,
+        situation: 'Validation d’un bordereau de remise de chèques',
+      },
+    }
+
+    const reponse = await route.POST(requete(avecSituation))
+    expect(reponse.status).toBe(201)
+
+    const corps = (await reponse.json()) as { retour: string }
+    const { rows } = await client.query('select situation from contextes where retour_id = $1', [
+      corps.retour,
+    ])
+    expect(rows[0]?.['situation']).toBe('Validation d’un bordereau de remise de chèques')
   })
 
   it('accepte un curl SANS Origin — CORS protège un onglet, pas l’API', async () => {

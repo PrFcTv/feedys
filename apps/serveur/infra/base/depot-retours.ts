@@ -29,7 +29,7 @@ export interface Bassin {
  *    qui décide qu’il vaut refus — le dépôt ne fait pas de politique.
  */
 const PAR_CLE = `
-  select id, domaine, actif, secret_chiffre
+  select id, domaine, actif, secret_chiffre, contexte_metier
     from produits
    where cle_publique = $1
    limit 1
@@ -50,9 +50,9 @@ const ECRIRE_MESSAGE = `
 const ECRIRE_CONTEXTE = `
   insert into contextes (
     id, retour_id, url, titre_page, ecran, selecteur_dom, navigateur, systeme,
-    viewport_l, viewport_h, capture_chemin, fuseau, agent_brut
+    viewport_l, viewport_h, capture_chemin, fuseau, agent_brut, situation
   )
-  values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
+  values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14)
 `
 
 export function creerDepotRetours(bassin: Bassin): PortDepotRetours {
@@ -66,6 +66,7 @@ export function creerDepotRetours(bassin: Bassin): PortDepotRetours {
         if (ligne === undefined) return null
 
         const chiffre = ligne['secret_chiffre']
+        const metier = ligne['contexte_metier']
 
         return {
           id: String(ligne['id']),
@@ -75,6 +76,7 @@ export function creerDepotRetours(bassin: Bassin): PortDepotRetours {
           //    enveloppe, ou sur une enveloppe illisible — l’identité ne sera
           //    pas vérifiée, et le retour arrivera quand même (P-012).
           secret: dechiffrer(typeof chiffre === 'string' ? chiffre : null, cleDeChiffrement()),
+          contexteMetier: typeof metier === 'string' && metier.trim() !== '' ? metier.trim() : null,
         }
       } finally {
         connexion.release()
@@ -126,6 +128,7 @@ export function creerDepotRetours(bassin: Bassin): PortDepotRetours {
           contexte.captureChemin,
           contexte.fuseau,
           contexte.agentBrut === null ? null : JSON.stringify(contexte.agentBrut),
+          contexte.situation,
         ])
 
         await connexion.query('commit')

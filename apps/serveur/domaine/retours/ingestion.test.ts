@@ -26,6 +26,7 @@ const PRODUIT: ProduitConnu = {
   domaine: 'victoria.exemple.fr',
   actif: true,
   secret: SECRET,
+  contexteMetier: null,
 }
 
 const CLE = 'fdy_pub_essai'
@@ -248,8 +249,24 @@ describe('ce qui est écrit', () => {
         captureChemin: null,
         fuseau: 'Europe/Paris',
         agentBrut: { langue: 'fr-FR' },
+        situation: null,
       },
     })
+  })
+
+  it('range la situation déclarée dans le contexte', async () => {
+    const { ports, ecrits } = banc()
+    const corpsBrut = JSON.stringify({
+      texte: 'le tri se remet à zéro',
+      contexte: {
+        url: 'https://victoria.exemple.fr/dossiers?tri=date',
+        situation: 'Validation d’un bordereau',
+      },
+    })
+
+    await ingerer(entree({ corpsBrut }), ports)
+
+    expect(ecrits[0]?.contexte.situation).toBe('Validation d’un bordereau')
   })
 
   it('déclare « voix » dès qu’il y a de l’audio, quoi que le widget prétende', async () => {

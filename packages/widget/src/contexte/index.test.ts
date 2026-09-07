@@ -118,6 +118,53 @@ describe('lireContexte', () => {
 
     expect(lireContexte({ fenetre }).titrePage).toBeUndefined()
   })
+
+  describe('situation d’écran (data-feedys-contexte)', () => {
+    it('lit l’attribut posé sur document.body', () => {
+      document.body.setAttribute('data-feedys-contexte', 'Validation de quittance')
+      const fenetre = fenetreFeinte()
+
+      const contexte = lireContexte({ fenetre })
+      expect(contexte.situation).toBe('Validation de quittance')
+      document.body.removeAttribute('data-feedys-contexte')
+    })
+
+    it('lit l’attribut posé sur documentElement si absent sur body', () => {
+      document.documentElement.setAttribute('data-feedys-contexte', 'Consultation bordereau')
+      const fenetre = fenetreFeinte()
+
+      const contexte = lireContexte({ fenetre })
+      expect(contexte.situation).toBe('Consultation bordereau')
+      document.documentElement.removeAttribute('data-feedys-contexte')
+    })
+
+    it('ignore l’attribut s’il est absent', () => {
+      const fenetre = fenetreFeinte()
+      const contexte = lireContexte({ fenetre })
+
+      expect(contexte.situation).toBeUndefined()
+    })
+
+    it('ignore l’attribut s’il ne contient que des espaces', () => {
+      document.body.setAttribute('data-feedys-contexte', '   ')
+      const fenetre = fenetreFeinte()
+
+      const contexte = lireContexte({ fenetre })
+      expect(contexte.situation).toBeUndefined()
+      document.body.removeAttribute('data-feedys-contexte')
+    })
+
+    it('borne la situation à 120 caractères', () => {
+      const long = 'A'.repeat(200)
+      document.body.setAttribute('data-feedys-contexte', long)
+      const fenetre = fenetreFeinte()
+
+      const contexte = lireContexte({ fenetre })
+      expect(contexte.situation).toHaveLength(120)
+      expect(contexte.situation).toBe('A'.repeat(120))
+      document.body.removeAttribute('data-feedys-contexte')
+    })
+  })
 })
 
 describe('collecter', () => {

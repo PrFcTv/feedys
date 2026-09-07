@@ -75,7 +75,15 @@ function portsAvec(base: Base, modele: PortsTour['modele']): PortsTour {
     produits: {
       produitParCle: (cle) =>
         Promise.resolve(
-          cle === CLE ? { id: PRODUIT, domaine: 'logiciel.exemple.fr', actif: true, secret: null } : null,
+          cle === CLE
+            ? {
+                id: PRODUIT,
+                domaine: 'logiciel.exemple.fr',
+                actif: true,
+                secret: null,
+                contexteMetier: null,
+              }
+            : null,
         ),
     },
     modele,

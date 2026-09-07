@@ -92,6 +92,7 @@ describe('analyserCorpsRetour', () => {
       url: 'https://victoria.exemple.fr/dossiers?tri=date',
       titrePage: 'Dossiers',
       ecran: 'dossiers',
+      situation: 'Validation de quittance',
       selecteurDom: 'table.dossiers th:nth-child(3)',
       navigateur: 'Chrome 141',
       systeme: 'Windows 11',
@@ -107,5 +108,14 @@ describe('analyserCorpsRetour', () => {
 
     expect(resultat.ok).toBe(true)
     if (resultat.ok) expect(resultat.valeur.contexte).toEqual(contexte)
+  })
+
+  it('refuse une situation qui dépasse la borne de 120 caractères', () => {
+    const resultat = analyserCorpsRetour({
+      texte: 'x',
+      contexte: { ...CONTEXTE, situation: 'a'.repeat(BORNES.situation + 1) },
+    })
+
+    expect(resultat.ok).toBe(false)
   })
 })

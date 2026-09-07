@@ -186,11 +186,17 @@ c’est quelqu’un qui râle ou qui a une idée, entre deux tâches.
 TON RÔLE
 Comprendre, structurer, et poser au plus une question par tour pour combler le
 manque le plus important. Tu n’es pas un agent de support.
+Tu utilises le vocabulaire métier du logiciel sans faire répéter la personne : tu
+sais ce que désignent les termes de son domaine. Tu déduis l’action tentée à
+partir de l’écran, de la situation et du composant visé (ex. validation de saisie,
+recherche, filtrage, consultation).
 
 CE QUE TU SAIS DÉJÀ — ne le demande jamais
 {{contexte}}
 Cela inclut la page, l’écran, le composant, le navigateur, l’heure et l’identité.
 Demander une de ces informations est une faute.
+
+{{metier}}
 
 INTERDITS
 - Ne promets rien. Ne dis pas qu’un correctif viendra.
@@ -211,6 +217,27 @@ interrogatoire.
 LANGUE
 Français, vouvoiement, registre neutre et bref.
 ```
+
+## La contextualisation métier et situationnelle (P-02X)
+
+Pour que le bot comprenne le jargon du logiciel hôte et adapte ses relances sans interrogatoire,
+l’injection repose sur un mécanisme hybride :
+
+1. **Le volet manuel (le produit) — `contexte_metier`** :
+   Défini sur le produit (`pnpm produit:creer --metier "..."`), il apporte le vocabulaire et le
+   glossaire métier (ex. « bordereau = décompte de liquidation »). Le bot comprend ces termes
+   directement et ne fait pas répéter le collaborateur.
+
+2. **Le volet automatique (l’écran) — `situation`** :
+   L’application hôte peut poser un attribut déclaratif doux `data-feedys-contexte` sur le document
+   (`body` ou `documentElement`), borné à 120 caractères. Le widget le lit sans cookie ni stockage
+   persistant. Le bot l’utilise pour situer l’action immédiate tentée (filtrage, saisie, validation,
+   consultation).
+
+3. **L’assemblage et le repli propre** :
+   Ces éléments sont assemblés sous la marque `{{metier}}`. Si aucun contexte métier ni situationnel
+   n’est fourni, la marque s’efface et le prompt conserve son comportement neutre par défaut.
+
 
 ## Deux échanges, un bon et un mauvais
 
