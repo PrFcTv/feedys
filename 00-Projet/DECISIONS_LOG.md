@@ -724,3 +724,104 @@ chaîne vide et le prompt se replie proprement sur son comportement neutre par d
 Un logiciel métier dont le glossaire dépasserait plusieurs dizaines de kilo-octets ou nécessiterait
 une arborescence multi-modules dynamique non résoluble au niveau de l’écran.
 
+---
+
+## D-022 — On sauvegarde le fil brut, pas la note — et sept jours suffisent
+
+**Prise le** : 2026-09-07
+**Statut** : appliquée
+
+### Le contexte
+
+`hebergement.md` promettait « un dump quotidien de Postgres, plus le volume de stockage, rétention
+30 jours ». ⛔ **Rien ne l’implémentait** : pas un `pg_dump` dans le dépôt, pas de script, pas de
+cron. Et l’étape 2 de la liste de mise en service exige de restaurer un dump **pour de vrai avant la
+pose**, ce qu’on ne pouvait donc pas faire.
+
+L’objection posée était juste, et mérite d’être écrite : **la note part déjà par email, sur Telegram,
+sur Slack — pourquoi sauvegarder ?**
+
+### La décision
+
+**On sauvegarde, mais l’argument est l’inverse de celui qu’on croit.**
+
+Ce qui part par email est la **synthèse** : le résumé, quelques citations. C’est-à-dire le
+**dérivé** — et précisément la seule chose qui se **régénère**, par
+`pnpm entretien:rejouer --synthese`.
+
+⛔ Ce qui n’existe nulle part ailleurs qu’en base est le **fil brut** : ce que la personne a dit,
+ses hésitations, le transcript avant correction. C’est la matière qui sert à régler le prompt, et la
+seule façon de vérifier qu’une note n’a pas déformé quelqu’un. Autrement dit : **l’email sauvegarde
+le régénérable et laisse tomber l’irremplaçable.**
+
+⚠️ Et la table `produits`. La perdre n’est pas relancer une commande : c’est retourner voir le
+développeur de chaque logiciel hôte pour qu’il change sa ligne de `<script>` et sa signature
+d’identité, dans **son** logiciel.
+
+**Sept jours, pas trente.** Quelques dizaines de retours par jour, une machine, un volume : ce
+qu’on couvre est la panne franche — disque, volume corrompu, `docker volume rm` malheureux. Une
+semaine y suffit largement, et trente jours n’achetaient qu’une cérémonie.
+
+**Le volume de stockage n’est pas sauvegardé**, et c’est explicite : la capture est un aide-mémoire
+et non une preuve, et le widget envoie aujourd’hui un transcript, pas de l’audio. ⛔ Ça change le
+jour où Whisper arrive ([ROADMAP](ROADMAP.md) ④) — l’audio devient alors la source, et cette ligne
+est à rouvrir.
+
+### Ce qui la renverserait
+
+Whisper en production, ou le premier hôte qui garde de l’audio : le volume devient aussi précieux
+que la base, et sept jours ne suffisent plus à couvrir une découverte tardive.
+
+---
+
+## D-023 — TLS devant, jamais dans le conteneur — et l’en-tête qui décide du débit
+
+**Prise le** : 2026-09-07
+**Statut** : appliquée
+
+### Le contexte
+
+`docker-compose.production.yml` publie sur `127.0.0.1:3000` avec, en commentaire, « c’est le proxy
+de la machine qui termine TLS ». ⛔ **Ce proxy n’existait nulle part** : ni fichier, ni exemple, ni
+un mot sur le certificat. Or sans HTTPS valide, la balise `<script src="https://…">` posée dans une
+page HTTPS est refusée par le navigateur : **le widget ne se charge pas du tout**.
+
+### La décision
+
+Le conteneur reste en **HTTP sur la boucle locale**, et ne sait rien de TLS. Deux montages
+supportés, selon ce que la machine a déjà :
+
+| Situation | Ce qu’on pose |
+|---|---|
+| La machine héberge déjà les logiciels métier — elle a donc un proxy | un vhost, `deploiement/nginx-feedys.conf.exemple` |
+| Feedys est seul sur sa machine | `docker-compose.tls.yml`, qui ajoute un Caddy |
+
+⚠️ **Caddy plutôt que nginx + certbot dans le second cas**, et c’est le seul argument qui compte :
+le renouvellement est automatique et n’a pas de chemin d’échec silencieux. Un certificat qui expire
+un dimanche est une panne totale du widget chez tous les hôtes en même temps.
+
+⛔ **Et jamais les deux.** Ils se battraient pour les ports 80 et 443.
+
+### ⛔ Les trois réglages qui décident, et qui ne sont pas du confort
+
+1. **`X-Forwarded-For`.** Feedys en tire l’IP pour limiter le débit, avec un repli sur
+   `« inconnue »`. Si le proxy ne pose pas l’en-tête, **tout le monde partage un seul seau** : dix
+   tours d’entretien par minute pour l’entreprise entière. Deux personnes qui parlent en même temps
+   suffisent à en bloquer une troisième, avec un message qui parle de débit dépassé. Caddy le fait
+   seul ; nginx demande deux lignes explicites.
+2. **`client_max_body_size 4m`.** L’API borne elle-même à 4 Mio et rend un 413 qui explique. nginx
+   plafonne à **1 Mio par défaut** : la coupure viendrait du proxy, muette, et le widget
+   l’afficherait comme une panne réseau.
+3. **Pas de compression au proxy.** Feedys compresse `widget.js` lui-même et pose un ETag **qui
+   dépend de l’encodage**. Un proxy qui re-compresse casse les `304`, et le budget de 60 Ko se
+   mesure sur le fichier tel qu’il est servi.
+
+⚠️ Les trois sont des **modes de défaillance différés** : rien ne casse au déploiement, tout casse
+la semaine suivante, sous une forme qui n’accuse jamais le proxy.
+
+### Ce qui la renverserait
+
+Un hébergement qui impose son propre terminateur TLS — un load balancer d’infrastructure, par
+exemple. Le conteneur n’a rien à changer : c’est exactement ce que
+[§La forme](../04-Architecture/hebergement.md) exige, aucun mécanisme du logiciel ne dépend du
+fournisseur.

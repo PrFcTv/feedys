@@ -247,6 +247,53 @@ sans `node_modules` complet. Elle tourne en `node`, pas en root.
 --env-file` fait exactement la même chose que le compose : ce fichier est une commodité, pas un
 mécanisme.
 
+## Le proxy et TLS
+
+Le conteneur écoute en **HTTP, sur la boucle locale** (`127.0.0.1:3000`). Ce qui termine TLS est
+devant, et ⛔ **ce n’est pas facultatif** : la balise `<script src="https://…">` est posée dans une
+page HTTPS, et un navigateur refuse purement et simplement de charger un script en clair depuis une
+page chiffrée. Sans certificat, **le widget ne se charge pas du tout**.
+
+### Deux cas, et le premier est le plus probable
+
+**La machine héberge déjà les logiciels métier.** Elle a donc déjà un proxy. ⛔ On n’en pose pas un
+second — les deux se battraient pour les ports 80 et 443. On ajoute un vhost :
+[`deploiement/nginx-feedys.conf.exemple`](../deploiement/nginx-feedys.conf.exemple).
+
+**Feedys est seul sur sa machine.** Alors le plus court est Caddy, en superposition :
+
+```bash
+docker compose -f docker-compose.production.yml -f docker-compose.tls.yml up -d
+```
+
+⚠️ Le certificat Let’s Encrypt est obtenu **et renouvelé** tout seul : pas de certbot, pas de cron,
+pas de « le site est tombé un dimanche parce qu’un renouvellement a échoué en silence ». C’est le
+seul mécanisme d’exploitation qu’on ne veut pas avoir à surveiller.
+
+Prérequis, dans l’ordre : un enregistrement DNS `feedys.<domaine>` → l’IP ; les ports **80 et** 443
+ouverts — ⛔ le 80 n’est pas facultatif, c’est par lui que passe la validation ; `FEEDYS_DOMAINE` et
+`ACME_EMAIL` dans `.env.production`.
+
+### ⛔ Les trois réglages qui décident, et qu’on oublie
+
+**1. L’en-tête d’IP.** Feedys lit `x-forwarded-for`, puis `x-real-ip`, puis retombe sur
+`« inconnue »` (`apps/serveur/app/api/retours/_reponses.ts`). ⛔ **Si le proxy ne les pose pas, tout
+le monde partage un seul seau de débit** : dix tours d’entretien par minute pour l’entreprise
+entière. Deux personnes qui parlent en même temps suffisent à en bloquer une troisième, avec un
+message qui parle de débit dépassé — une panne qu’on met une journée à comprendre.
+
+⚠️ Caddy le fait tout seul (`reverse_proxy`). nginx **non** : les deux `proxy_set_header` de
+l’exemple ne sont pas décoratives.
+
+**2. La taille du corps.** L’API borne à **4 Mio**, capture et audio compris, et rend un 413 qui
+explique. ⛔ nginx plafonne à **1 Mio par défaut** : la coupure viendrait du proxy, muette, et le
+widget l’afficherait comme une panne réseau. `client_max_body_size 4m;`. Caddy n’a pas de limite par
+défaut, il n’y a rien à y faire.
+
+**3. Pas de compression au proxy.** Feedys compresse `widget.js` lui-même et pose un **ETag qui
+dépend de l’encodage** (`apps/serveur/app/_actifs/servir.ts`). Un proxy qui re-compresse ou réécrit
+l’en-tête casse les `304` — et le budget de 60 Ko se mesure sur le fichier **tel qu’il est servi**.
+
 ## La pose chez un hôte — la liste de vérification
 
 ⚠️ **À jouer dans l’ordre.** Chaque ligne se coche pour de vrai, pas de tête. Ce qui a été vu
@@ -262,13 +309,24 @@ restent en `exemple.fr`. Le dépôt est public.
 - [ ] les journaux de démarrage portent la ligne du **rôle de connexion** — §Le rôle de connexion.
       ⚠️ Si elle dit « il est superutilisateur » ou « il est propriétaire », les GRANT ne mordent
       pas : c’est le moment de le corriger, pas après ;
-- [ ] `feedys.<domaine>/widget.js` se télécharge depuis l’extérieur, en **brotli ou gzip**.
+- [ ] `feedys.<domaine>/widget.js` se télécharge **depuis l’extérieur**, en HTTPS, en **brotli ou
+      gzip** — §Le proxy et TLS. ⛔ En clair, un navigateur refusera de le charger depuis une page
+      HTTPS, et la bulle n’apparaîtra jamais ;
+- [ ] le proxy transmet bien l’IP : `curl -s https://feedys.<domaine>/sante` depuis l’extérieur, puis
+      vérifier dans les journaux qu’aucune requête n’arrive avec l’IP du proxy. ⚠️ Sans ça, tout le
+      monde partage un seul seau de débit — §Le proxy et TLS.
 
 ### 2 · ⛔ La restauration, une fois, pour de vrai
 
 ⛔ **Avant la pose, pas après.** Une sauvegarde jamais restaurée n’existe pas (§La sauvegarde).
 
-- [ ] prendre un dump, le restaurer **dans une base jetable**, et compter les `messages` ;
+```bash
+./scripts/sauvegarde.sh
+./scripts/verifier-sauvegarde.sh
+```
+
+- [ ] la vérification imprime un compte de `messages` **non nul** — §La sauvegarde ;
+- [ ] la ligne de cron quotidienne est posée ;
 - [ ] noter dans `MISE_EN_SERVICE.md` **ce qui a été restauré et depuis quel dump**.
 
 ### 3 · Le produit et sa clé
@@ -397,11 +455,66 @@ et aucune sonde d’erreur ne le verra.
 
 ## La sauvegarde
 
-Un dump quotidien de Postgres, plus le volume de stockage. Rétention 30 jours.
+```bash
+./scripts/sauvegarde.sh            # un dump, une rotation. C’est tout.
+./scripts/verifier-sauvegarde.sh   # le restaure dans une base JETABLE, et compte
+```
 
-⚠️ **Ce qu’on protège, ce sont les `messages`** — la parole des gens, qui ne se reconstitue pas.
-Les synthèses se régénèrent depuis le fil ; les captures sont un confort. La restauration se teste
-une fois, à la mise en service, sinon elle n’existe pas.
+En cron, une fois par jour — ⚠️ **pas à une heure ronde**, tout le monde sauvegarde à 3 h 00 :
+
+```
+12 3 * * * cd /srv/feedys && ./scripts/sauvegarde.sh >> /var/log/feedys-sauvegarde.log 2>&1
+```
+
+**Un dump quotidien de Postgres, gardé 7 jours.** Rien d’autre.
+
+### ⚠️ « La note part déjà par email, donc c’est sauvegardé »
+
+C’est l’objection naturelle, et elle est **à moitié juste** — mais dans le mauvais sens.
+
+Ce qui part par email, c’est la **synthèse** : le résumé, l’attendu, le constaté, quelques
+citations. C’est-à-dire le **dérivé**, et précisément la seule chose qui se **régénère**
+(`pnpm entretien:rejouer --synthese`).
+
+⛔ Ce qui n’existe nulle part ailleurs qu’en base, c’est **le fil brut** : ce que la personne a
+réellement dit, ses hésitations, le transcript avant correction. C’est la matière qui sert à régler
+le prompt — « on change le prompt, on rejoue sur dix vrais retours, on compare » — et la seule
+façon de vérifier qu’une note n’a pas déformé ce que quelqu’un a dit. Le back-office affiche le fil
+sans repli exprès, pour ça.
+
+⚠️ **Et la table `produits`.** La perdre n’est pas relancer une commande : c’est retourner voir le
+développeur de chaque logiciel hôte pour qu’il change sa ligne de `<script>` et sa signature
+d’identité, **dans son logiciel à lui**.
+
+### Ce qui n’est pas sauvegardé, et pourquoi
+
+Le volume `feedys-stockage` — les captures, et l’audio le jour où il y en aura. La capture est un
+**aide-mémoire, pas une preuve** ([01-Specs/widget.md](../01-Specs/widget.md)), et aujourd’hui le
+widget envoie un transcript, pas de l’audio : le volume ne porte donc rien d’irremplaçable.
+
+⛔ **Ça change le jour où Whisper arrive** ([ROADMAP](../00-Projet/ROADMAP.md) ④) : l’audio devient
+alors la source, et le volume devient aussi précieux que la base. En attendant, si on veut le
+prendre quand même :
+
+```bash
+docker run --rm -v feedys-stockage:/s -v "$PWD/sauvegardes":/out alpine   tar czf /out/stockage-$(date +%Y%m%d).tgz -C /s .
+```
+
+### ⛔ Une sauvegarde jamais restaurée n’existe pas
+
+`sauvegarde.sh` vérifie tous les jours que le fichier **commence par `PGDMP`** — un dump interrompu
+ou un message d’erreur écrit à sa place ressemblent sinon à une sauvegarde valide dans la liste. Il
+écrit dans un fichier `.partiel` renommé à la fin, et ⛔ **il ne fait la rotation qu’après un dump
+valide** : supprimer d’abord est la façon classique de se retrouver sans rien le jour où la
+sauvegarde échoue, c’est-à-dire le seul jour qui compte.
+
+Mais ça ne prouve pas qu’on peut restaurer. `verifier-sauvegarde.sh` le fait pour de vrai : il crée
+une base jetable, y restaure le dernier dump, compte les lignes table par table, et détruit la base
+— ⛔ y compris si la restauration échoue au milieu. **Zéro message restauré est un échec**, parce
+que c’est exactement ce qu’un dump plausible et vide donnerait.
+
+⚠️ À jouer **une fois avant la première mise en service**, et le jour où l’on change quoi que ce
+soit à la sauvegarde. Ce qu’il imprime entre dans `03-Bugs/MISE_EN_SERVICE.md`.
 
 ## Ce qui n’est pas là, délibérément
 

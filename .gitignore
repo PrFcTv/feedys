@@ -29,6 +29,11 @@ playwright-report/
 .apercu-emails/
 .stockage/
 
+# ⛔ Les dumps de `scripts/sauvegarde.sh`. Ils contiennent la parole des gens :
+#    des noms de personnes, parfois d’immeubles ou de dossiers. Le dépôt est
+#    public — ils n’en approchent pas.
+sauvegardes/
+
 .DS_Store
 Thumbs.db
 *.log

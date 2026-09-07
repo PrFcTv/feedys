@@ -1,0 +1,36 @@
+# Le proxy de Feedys — trois lignes utiles, et deux choses à ne pas faire.
+#
+# Monté en lecture seule par docker-compose.tls.yml. Les deux variables viennent
+# de .env.production.
+
+{
+	# ⚠️ Let’s Encrypt écrit à cette adresse quand un renouvellement échoue.
+	#    C’est le seul avertissement qu’on recevra avant que le site tombe.
+	email {$ACME_EMAIL}
+}
+
+{$FEEDYS_DOMAINE} {
+	# ⛔ `reverse_proxy` pose X-Forwarded-For, X-Forwarded-Proto et
+	#    X-Forwarded-Host TOUT SEUL, et c’est vital : Feedys lit
+	#    `x-forwarded-for` pour limiter le débit PAR IP
+	#    (apps/serveur/app/api/retours/_reponses.ts).
+	#
+	# ⚠️ Sans cet en-tête, tout le monde retombe sur « inconnue » et PARTAGE UN
+	#    SEUL SEAU : dix tours d’entretien par minute pour l’entreprise entière.
+	#    Deux personnes qui parlent en même temps suffisent à en bloquer une
+	#    troisième, avec un message qui parle de débit dépassé. C’est le genre de
+	#    panne qu’on met une journée à comprendre.
+	reverse_proxy feedys:3000
+}
+
+# ⛔ CE QU’ON NE MET PAS ICI, ET POURQUOI.
+#
+# 1. Pas de `encode gzip`. Feedys compresse `widget.js` LUI-MÊME et pose un ETag
+#    QUI DÉPEND DE L’ENCODAGE (apps/serveur/app/_actifs/servir.ts). Laisser un
+#    proxy re-compresser ou réécrire l’en-tête casserait les 304 — et le budget
+#    de 60 Ko est mesuré sur le fichier tel qu’il est servi.
+#
+# 2. Pas de limite de taille de corps. L’API borne elle-même à 4 Mio, capture et
+#    audio compris, et rend un 413 qui EXPLIQUE (contrat de transport, BORNES).
+#    Un 413 posé par le proxy arriverait sans rien dire, et le widget
+#    l’afficherait comme une panne réseau.

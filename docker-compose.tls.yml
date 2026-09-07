@@ -1,0 +1,48 @@
+# TLS — à superposer au compose de production, si et seulement si la machine
+# n’a pas déjà un proxy.
+#
+#   docker compose -f docker-compose.production.yml -f docker-compose.tls.yml up -d
+#
+# ⚠️ SI LA MACHINE HÉBERGE DÉJÀ LES LOGICIELS MÉTIER, elle a déjà un proxy — on
+#    n’en pose pas un second, qui se battrait pour les ports 80 et 443. On ajoute
+#    un vhost : `deploiement/nginx-feedys.conf.exemple`. Ce fichier-ci est pour
+#    le cas où Feedys est seul sur sa machine.
+#
+# ⛔ POURQUOI CADDY. Le certificat Let’s Encrypt est obtenu et RENOUVELÉ tout
+#    seul : pas de certbot, pas de cron, pas de « le site est tombé un dimanche
+#    parce qu’un renouvellement a échoué en silence ». C’est le seul mécanisme
+#    d’exploitation qu’on ne veut pas avoir à surveiller.
+#
+# Prérequis, dans l’ordre :
+#   1. un enregistrement DNS A (ou AAAA) : feedys.<domaine> → l’IP de la machine ;
+#   2. les ports 80 ET 443 ouverts. ⛔ Le 80 n’est pas facultatif : c’est par lui
+#      que passe la validation du certificat ;
+#   3. FEEDYS_DOMAINE et ACME_EMAIL dans .env.production.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - feedys
+    ports:
+      - '80:80'
+      - '443:443'
+      # ⚠️ HTTP/3. Facultatif, et sans risque : un navigateur qui ne le parle pas
+      #    reste en HTTP/2 sur le 443/tcp ci-dessus.
+      - '443:443/udp'
+    environment:
+      FEEDYS_DOMAINE: ${FEEDYS_DOMAINE:?FEEDYS_DOMAINE est obligatoire — le nom d’hôte servi, ex. feedys.exemple.fr}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL est obligatoire — Let’s Encrypt y écrit si un renouvellement échoue}
+    volumes:
+      - ./deploiement/Caddyfile:/etc/caddy/Caddyfile:ro
+      # ⛔ Les certificats vivent dans un VOLUME. Sans lui, chaque
+      #    `docker compose up` en redemande un — et Let’s Encrypt limite à cinq
+      #    certificats par domaine et par semaine. On se ferme la porte au
+      #    troisième déploiement du mardi.
+      - caddy-donnees:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-donnees:
+  caddy-config:
