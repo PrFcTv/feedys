@@ -28,6 +28,10 @@ export interface ContexteEntretien {
   readonly url?: string | null
   readonly titrePage?: string | null
   readonly ecran?: string | null
+  /** La situation d’écran déclarée par l’hôte (data-feedys-contexte). */
+  readonly situation?: string | null
+  /** Le vocabulaire métier et glossaire du logiciel hôte. */
+  readonly contexteMetier?: string | null
   readonly selecteurDom?: string | null
   readonly navigateur?: string | null
   readonly systeme?: string | null
@@ -58,6 +62,7 @@ export interface MessageModele {
 }
 
 const MARQUE_CONTEXTE = '{{contexte}}'
+const MARQUE_METIER = '{{metier}}'
 const MARQUE_RELANCES = '{{relances}}'
 const MARQUE_FIN = '{{fin}}'
 
@@ -70,9 +75,12 @@ const MARQUE_FIN = '{{fin}}'
  *    pas une phrase qu’on a dictée.
  */
 export function assemblerSysteme(gabarit: string, demande: DemandeTour): string {
+  const metier = rendreMetier(demande.contexte)
   return gabarit
     .replace(MARQUE_CONTEXTE, rendreContexte(demande.contexte))
+    .replace(MARQUE_METIER, metier)
     .replace(MARQUE_RELANCES, consigneRelances(demande.relancesRestantes))
+    .replace(/\n{3,}/g, '\n\n')
 }
 
 /**
@@ -109,6 +117,29 @@ export function rendreContexte(contexte: ContexteEntretien): string {
   return lignes.length === 0
     ? '- (le navigateur n’a rien pu joindre)'
     : lignes.join('\n')
+}
+
+/**
+ * Le contexte métier du produit et la situation d’écran (P-02X).
+ *
+ * ⚠️ Si aucun contexte métier n’est défini, rend une chaîne vide pour que le
+ *    prompt se replie proprement sur son comportement neutre actuel.
+ */
+export function rendreMetier(contexte: ContexteEntretien): string {
+  const metier = contexte.contexteMetier?.trim()
+  const situation = contexte.situation?.trim()
+
+  const lignes: string[] = []
+  if (metier) {
+    lignes.push(`- Métier du logiciel : ${metier}`)
+  }
+  if (situation) {
+    lignes.push(`- Situation immédiate de l’écran : ${situation}`)
+  }
+
+  if (lignes.length === 0) return ''
+
+  return ['CONTEXTE MÉTIER ET SITUATION', ...lignes].join('\n')
 }
 
 /** La consigne d’arrêt, dans les mots du modèle. Le verrou, lui, est dans `tour.ts`. */
@@ -181,9 +212,12 @@ export interface DemandeSynthese {
  *    Elle passe par `messagesDuFil`, en messages `user`.
  */
 export function assemblerSyntheseSysteme(gabarit: string, demande: DemandeSynthese): string {
+  const metier = rendreMetier(demande.contexte)
   return gabarit
     .replace(MARQUE_CONTEXTE, rendreContexte(demande.contexte))
+    .replace(MARQUE_METIER, metier)
     .replace(MARQUE_FIN, consigneFin(demande.fin))
+    .replace(/\n{3,}/g, '\n\n')
 }
 
 /**

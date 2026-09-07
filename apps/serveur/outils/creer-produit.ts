@@ -26,12 +26,12 @@ try {
 }
 
 const ECRIRE = `
-  insert into produits (id, nom, domaine, cle_publique, secret_hash, secret_chiffre)
-  values ($1, $2, $3, $4, $5, $6)
+  insert into produits (id, nom, domaine, cle_publique, secret_hash, secret_chiffre, contexte_metier)
+  values ($1, $2, $3, $4, $5, $6, $7)
 `
 
 async function principal(): Promise<void> {
-  const { nom, domaine } = lireArgumentsProduit(process.argv.slice(2))
+  const { nom, domaine, metier } = lireArgumentsProduit(process.argv.slice(2))
 
   const url = process.env['DATABASE_URL']
   if (!url) {
@@ -72,6 +72,7 @@ async function principal(): Promise<void> {
       cle,
       await hacherSecret(secret),
       chiffrer(secret, clef),
+      metier ?? null,
     ])
   } finally {
     await client.end()
@@ -83,7 +84,7 @@ async function principal(): Promise<void> {
 Produit créé · ${nom} — ${domaine}
 
   Clé publique   ${cle}
-  Secret         ${secret}
+  Secret         ${secret}${metier ? `\n  Métier         ${metier}` : ''}
 
 À coller dans le logiciel hôte :
 

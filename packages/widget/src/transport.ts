@@ -54,6 +54,8 @@ export const BORNES = {
   url: 2_048,
   titrePage: 300,
   ecran: 120,
+  /** La situation d’écran déclarée par l’hôte (data-feedys-contexte). */
+  situation: 120,
   selecteurDom: 300,
   navigateur: 200,
   systeme: 200,

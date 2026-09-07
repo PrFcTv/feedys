@@ -8,7 +8,7 @@
 import { parseArgs } from 'node:util'
 
 export const USAGE_PRODUIT =
-  'Usage : pnpm produit:creer -- --nom "VictorIA" --domaine victoria.exemple.fr'
+  'Usage : pnpm produit:creer -- --nom "VictorIA" --domaine victoria.exemple.fr [--metier "Contexte métier"]'
 
 export const USAGE_REJOUER =
   'Usage : pnpm entretien:rejouer -- --retour <id> [--modele <id>] [--prompt] [--synthese]'
@@ -18,7 +18,11 @@ export const USAGE_REJOUER =
  *    `parseArgs` le prend pour un argument positionnel. On le retire d’abord —
  *    la forme documentée dans 05-Prompts/MVP.md doit marcher telle quelle.
  */
-export function lireArgumentsProduit(argv: readonly string[]): { nom: string; domaine: string } {
+export function lireArgumentsProduit(argv: readonly string[]): {
+  nom: string
+  domaine: string
+  metier?: string
+} {
   const args = [...argv]
   while (args[0] === '--') args.shift()
 
@@ -27,15 +31,17 @@ export function lireArgumentsProduit(argv: readonly string[]): { nom: string; do
     options: {
       nom: { type: 'string' },
       domaine: { type: 'string' },
+      metier: { type: 'string' },
     },
   })
 
   const nom = values.nom?.trim()
   const domaine = values.domaine?.trim()
+  const metier = values.metier?.trim() || undefined
 
   if (!nom || !domaine) throw new Error(USAGE_PRODUIT)
 
-  return { nom, domaine }
+  return { nom, domaine, ...(metier ? { metier } : {}) }
 }
 
 /**

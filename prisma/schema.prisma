@@ -90,6 +90,8 @@ model Produit {
   /// Le secret chiffré (AES-256-GCM) — la clé qui vérifie l’identité signée par
   /// l’hôte. ⛔ Jamais en clair. NULL = ce produit ne vérifie aucune identité.
   secretChiffre String?  @map("secret_chiffre")
+  /// Le vocabulaire métier et glossaire du logiciel hôte, saisi à la main.
+  contexteMetier String? @map("contexte_metier")
   actif         Boolean  @default(true)
   creeLe        DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe         DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
@@ -166,6 +168,7 @@ model Contexte {
   captureChemin String?  @map("capture_chemin")
   fuseau        String?
   agentBrut     Json?    @map("agent_brut")
+  situation     String?
   creeLe        DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe         DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 

@@ -30,6 +30,54 @@ describe('lireArgumentsProduit', () => {
     })
   })
 
+  it('lit l’option optionnelle --metier', () => {
+    expect(
+      lireArgumentsProduit([
+        '--nom',
+        'VictorIA',
+        '--domaine',
+        'victoria.exemple.fr',
+        '--metier',
+        'Logiciel sinistres',
+      ]),
+    ).toEqual({
+      nom: 'VictorIA',
+      domaine: 'victoria.exemple.fr',
+      metier: 'Logiciel sinistres',
+    })
+  })
+
+  it('rogne les espaces de --metier et ignore s’il est vide', () => {
+    expect(
+      lireArgumentsProduit([
+        '--nom',
+        'VictorIA',
+        '--domaine',
+        'victoria.exemple.fr',
+        '--metier',
+        '  Quittance et bordereau  ',
+      ]),
+    ).toEqual({
+      nom: 'VictorIA',
+      domaine: 'victoria.exemple.fr',
+      metier: 'Quittance et bordereau',
+    })
+
+    expect(
+      lireArgumentsProduit([
+        '--nom',
+        'VictorIA',
+        '--domaine',
+        'victoria.exemple.fr',
+        '--metier',
+        '   ',
+      ]),
+    ).toEqual({
+      nom: 'VictorIA',
+      domaine: 'victoria.exemple.fr',
+    })
+  })
+
   it.each([
     [[]],
     [['--nom', 'VictorIA']],

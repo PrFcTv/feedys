@@ -17,7 +17,7 @@
  */
 import { BORNES, PREFIXE_CLE_PUBLIQUE } from '../../../../packages/widget/src/contrat'
 import type { PortDebit } from '../retours/debit'
-import type { PortDepotRetours } from '../retours/ingestion'
+import type { PortDepotRetours, ProduitConnu } from '../retours/ingestion'
 import { origineAutorisee } from '../retours/origine'
 
 import type { Comprehension, Modele, TourEntretien } from './modele'
@@ -169,7 +169,7 @@ function refus(motif: MotifRefusTour): { ok: false; motif: MotifRefusTour; messa
 async function autoriser(
   entree: AccesEntretien,
   ports: PortsTour,
-): Promise<{ ok: true; produitId: string } | { ok: false; motif: MotifRefusTour; message: string }> {
+): Promise<{ ok: true; produit: ProduitConnu } | { ok: false; motif: MotifRefusTour; message: string }> {
   const cle = entree.cle?.trim() ?? ''
   if (cle === '' || !cle.startsWith(PREFIXE_CLE_PUBLIQUE)) return refus('cle_absente')
 
@@ -187,7 +187,7 @@ async function autoriser(
 
   if (!origineAutorisee(entree.origine, produit.domaine)) return refus('origine_refusee')
 
-  return { ok: true, produitId: produit.id }
+  return { ok: true, produit }
 }
 
 /** Le nombre de relances déjà posées : une ligne `bot` = une question posée. */
@@ -206,7 +206,7 @@ export async function jouerTour(entree: EntreeTour, ports: PortsTour): Promise<R
   const acces = await autoriser(entree, ports)
   if (!acces.ok) return acces
 
-  const entretien = await ports.depot.charger(entree.retourId, acces.produitId)
+  const entretien = await ports.depot.charger(entree.retourId, acces.produit.id)
   if (entretien === null) return refus('retour_inconnu')
 
   // ⛔ LA PAROLE S’ÉCRIT AVANT LA GARDE DE STATUT, ET C’EST L’ORDRE QUI COMPTE.
@@ -258,7 +258,14 @@ export async function jouerTour(entree: EntreeTour, ports: PortsTour): Promise<R
 
   let brut: TourEntretien
   try {
-    brut = await ports.modele.tour({ contexte: entretien.contexte, fil, relancesRestantes: restantes })
+    brut = await ports.modele.tour({
+      contexte: {
+        ...entretien.contexte,
+        contexteMetier: entretien.contexte.contexteMetier ?? acces.produit.contexteMetier,
+      },
+      fil,
+      relancesRestantes: restantes,
+    })
   } catch (erreur) {
     // ⛔ Le modèle muet ne perd rien : la carte n’apparaît pas, le champ texte
     //    reste, « Envoyer » fonctionne, et le retour brut part quand même.
@@ -290,7 +297,7 @@ export async function terminerEntretien(entree: EntreeFin, ports: PortsTour): Pr
   const acces = await autoriser(entree, ports)
   if (!acces.ok) return acces
 
-  const entretien = await ports.depot.charger(entree.retourId, acces.produitId)
+  const entretien = await ports.depot.charger(entree.retourId, acces.produit.id)
   if (entretien === null) return refus('retour_inconnu')
 
   const statut = entree.raison === 'abandon' ? 'abandonne' : 'envoye'

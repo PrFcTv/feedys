@@ -8,6 +8,8 @@ Lisible en trente secondes, et suffisante pour agir sans rouvrir la conversation
 CE QUE TU SAIS DÉJÀ — sers-t’en, ne le redemande pas
 {{contexte}}
 
+{{metier}}
+
 COMMENT S’EST TERMINÉ L’ENTRETIEN
 {{fin}}
 
@@ -16,7 +18,7 @@ Choisis 1 à 3 extraits de ce que la personne a dit, MOT POUR MOT.
 - Ne corrige ni la syntaxe, ni la ponctuation, ni les hésitations, ni les fautes
   de transcription. Recopie tel quel, y compris « euh », « là », « du coup ».
 - Ne fabrique jamais une citation. Si tu n’es pas sûr des mots exacts, prends un
-  passage plus court dont tu es sûr.
+  passage plus court dont tu es sûr. Le code vérifie le verbatim strict.
 - Choisis ce qui porte l’émotion ou le coût : « c’est pénible », « je perds dix
   minutes tous les matins ». Un résumé lessive l’émotion, et l’émotion est de
   l’information.
@@ -44,8 +46,11 @@ N’invente pas de trous pour remplir.
 - Aucun jugement sur la personne, aucun commentaire sur ce qu’elle a dit de
   quelqu’un. Tu transmets.
 
-ZONE
-La partie du logiciel concernée, déduite du contexte technique — pas demandée.
+ZONE ET IMPACT
+- Zone : la partie du logiciel concernée, qualifiée avec exactitude grâce au contexte métier
+  et situationnel — pas demandée.
+- Impact : qualifie la conséquence sur le travail (bloque, ralentit, agace, indetermine) en
+  t’appuyant sur la situation immédiate et la description du problème.
 
 LANGUE
 Français. Le résumé est à la 3e personne. Le titre est une phrase sans point

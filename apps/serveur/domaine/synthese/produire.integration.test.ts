@@ -72,14 +72,24 @@ function portsTour(aval?: (retourId: string) => Promise<void>): PortsTour {
     depot: creerDepotEntretien(bassin),
     produits: {
       produitParCle: async (cle) => {
-        const { rows } = await bassin.query<{ id: string; domaine: string; actif: boolean }>(
-          'select id, domaine, actif from produits where cle_publique = $1',
-          [cle],
-        )
+        const { rows } = await bassin.query<{
+          id: string
+          domaine: string
+          actif: boolean
+          contexte_metier: string | null
+        }>('select id, domaine, actif, contexte_metier from produits where cle_publique = $1', [cle])
         const ligne = rows[0]
         // ⚠️ L’entretien ne vérifie aucune identité : elle est attachée à
         //    l’ingestion, une fois pour toutes (P-012).
-        return ligne === undefined ? null : { ...ligne, secret: null }
+        return ligne === undefined
+          ? null
+          : {
+              id: ligne.id,
+              domaine: ligne.domaine,
+              actif: ligne.actif,
+              secret: null,
+              contexteMetier: ligne.contexte_metier ?? null,
+            }
       },
     },
     modele: modeleBouchon({ synthese: SYNTHESE }),

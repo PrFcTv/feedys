@@ -21,6 +21,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { appliquerMigrations } from '../../infra/base/migrations'
 import { creerDepotEntretien } from '../../infra/base/depot-entretien'
+import { creerDepotRetours } from '../../infra/base/depot-retours'
 import { identifiant } from '../../infra/identifiants'
 
 import type { TourEntretien } from './modele'
@@ -65,14 +66,24 @@ function ports(modele: PortsTour['modele']): PortsTour {
     depot: creerDepotEntretien(bassin),
     produits: {
       produitParCle: async (cle) => {
-        const { rows } = await bassin.query<{ id: string; domaine: string; actif: boolean }>(
-          'select id, domaine, actif from produits where cle_publique = $1',
-          [cle],
-        )
+        const { rows } = await bassin.query<{
+          id: string
+          domaine: string
+          actif: boolean
+          contexte_metier: string | null
+        }>('select id, domaine, actif, contexte_metier from produits where cle_publique = $1', [cle])
         const ligne = rows[0]
         // ⚠️ L’entretien ne vérifie aucune identité : elle est attachée à
         //    l’ingestion, une fois pour toutes (P-012).
-        return ligne === undefined ? null : { ...ligne, secret: null }
+        return ligne === undefined
+          ? null
+          : {
+              id: ligne.id,
+              domaine: ligne.domaine,
+              actif: ligne.actif,
+              secret: null,
+              contexteMetier: ligne.contexte_metier ?? null,
+            }
       },
     },
     modele,
@@ -212,6 +223,56 @@ describe('le contexte technique arrive jusqu’au modèle', () => {
     await jouerTour(acces(), ports(modele))
 
     expect(modele.recues[0]?.fil).toEqual([{ role: 'collaborateur', texte: PAROLE }])
+  })
+
+  it('charge bien le contexte métier du produit et la situation d’écran', async () => {
+    const cleMetier = 'fdy_pub_essai_metier'
+    const produitId = 'prod_metier'
+    await client.query(
+      `insert into produits (id, nom, domaine, cle_publique, secret_hash, contexte_metier)
+       values ($1, 'Logiciel Métier', $2, $3, 'argon2-bidon', $4)`,
+      [produitId, DOMAINE, cleMetier, 'Logiciel d’assurance maladie (bordereau = décompte de prestations)'],
+    )
+
+    // Vérification de la lecture du produit via le dépôt de retours
+    const depotRetours = creerDepotRetours(bassin)
+    const produitLu = await depotRetours.produitParCle(cleMetier)
+    expect(produitLu?.contexteMetier).toBe(
+      'Logiciel d’assurance maladie (bordereau = décompte de prestations)',
+    )
+
+    const retourMetierId = identifiant()
+    await client.query(
+      `insert into retours (id, produit_id, source, auteur_nom, auteur_role)
+       values ($1, $2, 'voix', 'Alexandre Dubois', 'liquidateur')`,
+      [retourMetierId, produitId],
+    )
+    await client.query(
+      `insert into messages (id, retour_id, ordre, role, texte)
+       values ($1, $2, 0, 'collaborateur', $3)`,
+      [identifiant(), retourMetierId, 'le bordereau ne charge pas'],
+    )
+    await client.query(
+      `insert into contextes (id, retour_id, url, ecran, situation)
+       values ($1, $2, 'https://victoria.exemple.fr/bordereaux/42', 'decompte', $3)`,
+      [identifiant(), retourMetierId, 'Validation d’un décompte de prestations'],
+    )
+
+    const modele = modeleBouchon({ tours: [tourAvec(null)] })
+    const accesMetier = {
+      retourId: retourMetierId,
+      cle: cleMetier,
+      origine: `https://${DOMAINE}`,
+      ip: '203.0.113.8',
+    }
+
+    await jouerTour(accesMetier, ports(modele))
+
+    const recu = modele.recues[0]?.contexte
+    expect(recu?.contexteMetier).toBe(
+      'Logiciel d’assurance maladie (bordereau = décompte de prestations)',
+    )
+    expect(recu?.situation).toBe('Validation d’un décompte de prestations')
   })
 })
 
