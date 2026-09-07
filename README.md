@@ -147,7 +147,31 @@ curl -fsS http://localhost:3000/sante                # {"etat":"ok","migrations"
 
 Au démarrage, dans l’ordre : les variables obligatoires, la base, les migrations, l’empreinte de
 celles déjà appliquées, la présence et le poids de `widget.js`, puis l’écoute. ⛔ **Un échec à
-n’importe laquelle de ces étapes empêche de servir**, et le message dit laquelle. Le détail :
+n’importe laquelle de ces étapes empêche de servir**, et le message dit laquelle.
+
+Le conteneur écoute en **HTTP sur la boucle locale** : ce qui termine TLS est devant. ⛔ Ce n’est
+pas facultatif — un navigateur refuse de charger un `<script src="http://…">` depuis une page
+HTTPS, et la bulle n’apparaîtrait jamais.
+
+```bash
+# Feedys est seul sur sa machine → un Caddy, certificat automatique
+docker compose -f docker-compose.production.yml -f docker-compose.tls.yml up -d
+
+# la machine a déjà un proxy → un vhost, et surtout PAS un second proxy
+#   deploiement/nginx-feedys.conf.exemple
+```
+
+Puis la sauvegarde — un dump quotidien, gardé 7 jours :
+
+```bash
+./scripts/sauvegarde.sh            # en cron, une fois par jour
+./scripts/verifier-sauvegarde.sh   # ⛔ une sauvegarde jamais restaurée n’existe pas
+```
+
+⚠️ **Ce qu’on protège n’est pas la note** — elle part par email et se régénère depuis le fil. C’est
+le **fil brut** : ce qui a été dit, qui ne se reconstitue pas ([D-022](00-Projet/DECISIONS_LOG.md)).
+
+Le détail, et les trois réglages de proxy qui décident :
 [04-Architecture/hebergement.md](04-Architecture/hebergement.md).
 
 ---

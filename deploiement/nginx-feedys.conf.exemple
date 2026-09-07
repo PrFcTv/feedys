@@ -1,0 +1,69 @@
+# Feedys derrière un nginx QUI EXISTE DÉJÀ.
+#
+# ⚠️ C’est le cas le plus probable : Feedys se pose à côté des logiciels métier,
+#    souvent sur la même machine, qui a donc déjà un proxy. On ajoute un vhost —
+#    ⛔ on ne pose PAS le Caddy de docker-compose.tls.yml en plus, les deux se
+#    battraient pour les ports 80 et 443.
+#
+# Le certificat est celui de la machine (certbot, ou ce qui est déjà en place).
+# Feedys n’en fournit pas et n’en gère pas : ⛔ aucun mécanisme du logiciel ne
+# dépend de l’hébergement (04-Architecture/hebergement.md §La forme).
+#
+# ⛔ Les valeurs sont des EXEMPLES. `exemple.fr` reste `exemple.fr` : le dépôt
+#    est public.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name feedys.exemple.fr;
+
+    # ⚠️ Le 80 reste ouvert pour la validation du certificat, et redirige le reste.
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name feedys.exemple.fr;
+
+    ssl_certificate     /etc/letsencrypt/live/feedys.exemple.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/feedys.exemple.fr/privkey.pem;
+
+    # ⛔ 4 Mio, ET C’EST LA LIGNE QU’ON OUBLIE. nginx plafonne à 1 Mio par
+    #    défaut : un retour avec une capture d’écran, ou de l’audio le jour où
+    #    Whisper arrive, se ferait couper PAR LE PROXY, avec un 413 muet que le
+    #    widget afficherait comme une panne réseau. L’API borne déjà à 4 Mio
+    #    elle-même, et son 413 à elle explique (contrat de transport, BORNES).
+    client_max_body_size 4m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # ⛔ LES DEUX LIGNES QUI DÉCIDENT DU DÉBIT. Feedys lit `x-forwarded-for`
+        #    puis `x-real-ip` pour limiter PAR IP
+        #    (apps/serveur/app/api/retours/_reponses.ts). Sans elles, tout le
+        #    monde retombe sur « inconnue » et PARTAGE UN SEUL SEAU : dix tours
+        #    d’entretien par minute pour l’entreprise entière. Deux personnes qui
+        #    parlent en même temps suffisent à en bloquer une troisième.
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+
+        # ⚠️ La synthèse peut prendre une minute (60 s de délai modèle, deux
+        #    nouvelles tentatives). Le défaut de nginx est 60 s : un entretien
+        #    qui conclut se ferait couper à la seconde près.
+        proxy_read_timeout 180s;
+    }
+
+    # ⛔ NE PAS ACTIVER gzip SUR CE VHOST. Feedys compresse `widget.js` lui-même
+    #    et pose un ETag QUI DÉPEND DE L’ENCODAGE
+    #    (apps/serveur/app/_actifs/servir.ts) : un proxy qui re-compresse ou
+    #    réécrit l’en-tête casse les 304, et le budget de 60 Ko est mesuré sur le
+    #    fichier tel qu’il est servi.
+    gzip off;
+}
