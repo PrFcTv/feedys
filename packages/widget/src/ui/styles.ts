@@ -454,6 +454,61 @@ button, textarea {
 
 :host([data-position="bas-gauche"]) .panneau { transform-origin: bottom left }
 
+/* ── NOTIFICATION — accusé de retour traité (P-020) ────────────────────────
+   ⛔ Notification sobre et à sens unique : pas de fil de chat, pas de relance. */
+
+.notification {
+  display: flex;
+  flex-direction: column;
+  gap: var(--w-2);
+  padding: var(--w-3);
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon-s);
+  background: var(--w-fond-2);
+  color: var(--w-encre);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.notification__titre {
+  margin: 0;
+  font-weight: 600;
+  color: var(--w-encre);
+}
+
+.notification__texte {
+  margin: 0;
+  color: var(--w-encre-2);
+}
+
+.notification__bouton {
+  align-self: flex-end;
+  padding: 4px var(--w-3);
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon-s);
+  background: var(--w-fond);
+  color: var(--w-encre);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.notification__bouton:hover {
+  background: var(--w-fond-2);
+  border-color: var(--w-encre-3);
+}
+
+.lanceur__pastille {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--w-accent);
+  border: 2px solid var(--w-fond);
+}
+
 /* ── ⛔ prefers-reduced-motion ─────────────────────────────────────────────── */
 
 /* ⛔ prefers-reduced-motion supprime tout SAUF l’onde — qui est de

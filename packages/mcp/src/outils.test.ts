@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 
 import { creerClient, ErreurFeedys } from './client.js'
 import { CHEMIN_MCP, STATUTS_MARQUABLES } from './contrat.js'
+import { poserLesOutils } from './outils.js'
 
 interface Appel {
   readonly url: string
@@ -99,6 +100,46 @@ describe('marquer_retour', () => {
     expect(appels[0]?.url).toBe(`https://feedys.exemple.fr${CHEMIN_MCP}/ret_1/statut`)
     // ⛔ Le corps ne porte QUE le statut : pas de titre, pas de résumé, pas de fil.
     expect(JSON.parse(appels[0]?.corps ?? '{}')).toEqual({ statut: 'traite' })
+  })
+
+  it('accepte une réponse optionnelle pour le collaborateur', async () => {
+    const { client, appels } = bouchon({ id: 'ret_1', statut: 'traite' })
+
+    await client.marquer('ret_1', {
+      statut: 'traite',
+      reponse: 'Corrigé dans la version déployée ce matin',
+    })
+
+    expect(appels[0]?.methode).toBe('POST')
+    expect(JSON.parse(appels[0]?.corps ?? '{}')).toEqual({
+      statut: 'traite',
+      reponse: 'Corrigé dans la version déployée ce matin',
+    })
+  })
+
+  it('l’outil marquer_retour transmet la réponse facultative', async () => {
+    const { client, appels } = bouchon({ id: 'ret_1', statut: 'traite' })
+    type Handler = (args: Record<string, unknown>) => Promise<unknown>
+    const enregistrements: Record<string, Handler> = {}
+    const fauxServeur = {
+      registerTool: (nom: string, _schema: unknown, handler: Handler) => {
+        enregistrements[nom] = handler
+      },
+    }
+    poserLesOutils(fauxServeur as unknown as Parameters<typeof poserLesOutils>[0], client)
+    expect(enregistrements['marquer_retour']).toBeDefined()
+
+    const retourOutil = await enregistrements['marquer_retour']!({
+      id: 'ret_1',
+      statut: 'traite',
+      reponse: 'Corrigé',
+    })
+
+    expect(retourOutil.isError).toBeUndefined()
+    expect(JSON.parse(appels[0]?.corps ?? '{}')).toEqual({
+      statut: 'traite',
+      reponse: 'Corrigé',
+    })
   })
 
   it('⛔ ne connaît que lu, traite et ecarte', () => {

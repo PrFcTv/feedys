@@ -113,7 +113,12 @@ export type ReponseRetour = z.infer<typeof ReponseRetour>
 
 // ── marquer_retour ──────────────────────────────────────────────────────────
 
-export const RequeteStatut = z.object({ statut: z.enum(STATUTS_MARQUABLES) }).strict()
+export const RequeteStatut = z
+  .object({
+    statut: z.enum(STATUTS_MARQUABLES),
+    reponse: z.string().max(500).optional(),
+  })
+  .strict()
 export type RequeteStatut = z.infer<typeof RequeteStatut>
 
 export const ReponseStatut = z.object({ id: z.string(), statut: z.enum(STATUTS_MARQUABLES) })

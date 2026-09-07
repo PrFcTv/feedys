@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 
-import type { Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour, TourRendu } from '../contrat'
+import type { Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour, ReponseCollaborateur, TourRendu } from '../contrat'
 import { dicteeDisponible } from '../dictee/reconnaissance'
 import type { Resultat } from '../envoi'
 import type { ResultatTour } from '../entretien'
@@ -29,7 +29,7 @@ import { Carte } from './Carte'
 import { Ecoute } from './Ecoute'
 import { piegerFocus } from './focus'
 import { Micro } from './Micro'
-import { TEXTES, TOUR_SANS_SUITE, inviteChamp } from './textes'
+import { TEXTES, TOUR_SANS_SUITE, inviteChamp, titreNotification } from './textes'
 import type { PortsDictee } from './useDictee'
 import { useDictee } from './useDictee'
 
@@ -70,6 +70,10 @@ export interface Ports {
   readonly dicteeDisponible?: () => boolean
   /** Les ports de l’écoute. Injectables pour la recette sans micro. */
   readonly dictee?: PortsDictee
+  /** Relève des réponses aux retours traités pour le collaborateur. */
+  readonly releverReponses?: () => Promise<readonly ReponseCollaborateur[]>
+  /** Accuse réception d’une réponse consultée par le collaborateur. */
+  readonly accuserReception?: (retourId: string) => Promise<boolean>
 }
 
 /** L’accusé reste deux secondes. Assez pour être lu, trop peu pour gêner. */
@@ -103,6 +107,8 @@ export function Widget(ports: Ports) {
   /** ⚠️ Ce que le bot avait compris. C’est la RÉFÉRENCE du diff, pas un doublon. */
   const [carteOrigine, setCarteOrigine] = useState<Comprehension | null>(null)
   const [attente, setAttente] = useState(false)
+  /** Les réponses non lues pour ce collaborateur (P-020). */
+  const [reponses, setReponses] = useState<readonly ReponseCollaborateur[]>([])
 
   const lanceur = useRef<HTMLButtonElement | null>(null)
   const panneau = useRef<HTMLDivElement | null>(null)
@@ -113,6 +119,30 @@ export function Widget(ports: Ports) {
   /** ⚠️ Le focus ne revient au lanceur que si c’est NOUS qui avons fermé. */
   const rendreLeFocus = useRef(false)
 
+  const verifierReponses = useCallback(async () => {
+    if (!ports.releverReponses) return
+    try {
+      const liste = await ports.releverReponses()
+      setReponses(liste)
+    } catch {
+      // ⚠️ Échec silencieux : une panne réseau ne doit jamais gêner le collaborateur.
+    }
+  }, [ports])
+
+  useEffect(() => {
+    void verifierReponses()
+  }, [verifierReponses])
+
+  const acquitter = useCallback(
+    async (id: string): Promise<void> => {
+      setReponses((deja) => deja.filter((r) => r.id !== id))
+      if (ports.accuserReception) {
+        await ports.accuserReception(id)
+      }
+    },
+    [ports],
+  )
+
   const ouvrir = useCallback(() => {
     // ⚠️ Ceinture et bretelles : un panneau qu’on ouvre n’a rien à dire encore.
     //    Aucun chemin connu ne laisse d’avis ici, et c’est précisément le genre
@@ -121,10 +151,13 @@ export function Widget(ports: Ports) {
     setOuvert((deja) => {
       // ⚠️ La collecte démarre au premier mot du geste, pas au rendu : l’URL
       //    d’une application à routeur peut changer sous nos pieds.
-      if (!deja) contexte.current = ports.collecter()
+      if (!deja) {
+        contexte.current = ports.collecter()
+        void verifierReponses()
+      }
       return true
     })
-  }, [ports])
+  }, [ports, verifierReponses])
 
   /**
    * ⛔ La disponibilité est décidée UNE fois. Elle ne peut pas changer en cours
@@ -444,6 +477,22 @@ export function Widget(ports: Ports) {
           ) : (
             <>
               <div class="corps">
+                {/* ⛔ Notifications de retour au collaborateur (P-020) : à sens unique */}
+                {phase === 'repos' &&
+                  reponses.map((rep) => (
+                    <div key={rep.id} class="notification" role="status">
+                      <div class="notification__titre">{titreNotification(rep.titre)}</div>
+                      {rep.reponseTexte && <p class="notification__texte">{rep.reponseTexte}</p>}
+                      <button
+                        class="notification__action"
+                        type="button"
+                        onClick={() => void acquitter(rep.id)}
+                      >
+                        {TEXTES.notification.action}
+                      </button>
+                    </div>
+                  ))}
+
                 {/* ⛔ La carte d’abord, la question DESSOUS — jamais dedans
                        (01-Specs/widget.md §En entretien). */}
                 {carte !== null && (
@@ -559,6 +608,7 @@ export function Widget(ports: Ports) {
         onClick={() => (ouvert ? fermer() : ouvrir())}
       >
         {ouvert ? <Croix /> : <Bulle />}
+        {!ouvert && reponses.length > 0 && <span class="lanceur__pastille" aria-hidden="true" />}
         <span class="lanceur__libelle">{ouvert ? TEXTES.fermer : TEXTES.lanceur}</span>
       </button>
     </>

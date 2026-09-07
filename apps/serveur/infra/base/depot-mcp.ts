@@ -70,6 +70,16 @@ const POSER_STATUT = `
   update retours set statut = $2::statut_retour, maj_le = now() where id = $1
 `
 
+const POSER_STATUT_AVEC_REPONSE = `
+  update retours
+     set statut = $2::statut_retour,
+         reponse_texte = $3,
+         reponse_envoyee_le = now(),
+         reponse_lue_le = null,
+         maj_le = now()
+   where id = $1
+`
+
 const JOURNALISER = `
   insert into audit (id, retour_id, acteur, action, detail)
   values ($1, $2, 'developpeur', 'statut', $3::jsonb)
@@ -194,7 +204,15 @@ export function creerDepotMcp(bassin: Bassin): DepotMcp {
           return false
         }
 
-        await connexion.query(POSER_STATUT, [retourId, changement.statut])
+        const avecReponse = changement.statut === 'traite' || changement.statut === 'ecarte'
+        const reponsePropre = changement.reponse?.trim() || null
+
+        if (avecReponse) {
+          await connexion.query(POSER_STATUT_AVEC_REPONSE, [retourId, changement.statut, reponsePropre])
+        } else {
+          await connexion.query(POSER_STATUT, [retourId, changement.statut])
+        }
+
         await connexion.query(JOURNALISER, [
           identifiant(),
           retourId,
@@ -204,6 +222,7 @@ export function creerDepotMcp(bassin: Bassin): DepotMcp {
             // ⚠️ Par où c’est passé : une trace qui ne dit pas « par MCP » oblige
             //    à deviner, six mois plus tard, qui a marqué quoi.
             par: 'mcp',
+            ...(avecReponse && reponsePropre ? { reponse: reponsePropre } : {}),
           }),
         ])
 

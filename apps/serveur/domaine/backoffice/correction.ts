@@ -29,9 +29,13 @@ export const STATUTS_A_LA_MAIN = ['lu', 'traite', 'ecarte'] as const
 export type StatutALaMain = (typeof STATUTS_A_LA_MAIN)[number]
 
 const LONGUEUR_ZONE = 200
+const LONGUEUR_REPONSE = 500
 
 const SchemaStatut = z
-  .object({ statut: z.enum(STATUTS_A_LA_MAIN) })
+  .object({
+    statut: z.enum(STATUTS_A_LA_MAIN),
+    reponse: z.string().max(LONGUEUR_REPONSE).optional(),
+  })
   .strict()
 
 const SchemaEtiquettes = z
@@ -44,6 +48,7 @@ const SchemaEtiquettes = z
 
 export interface ChangementStatut {
   readonly statut: StatutALaMain
+  readonly reponse?: string
 }
 
 export interface ChangementEtiquettes {
@@ -76,7 +81,7 @@ function lire<T>(schema: z.ZodType<T>, brut: unknown, connus: readonly string[])
 }
 
 export function lireChangementStatut(brut: unknown): Lu<ChangementStatut> {
-  return lire(SchemaStatut, brut, ['statut'])
+  return lire(SchemaStatut, brut, ['statut', 'reponse'])
 }
 
 export function lireChangementEtiquettes(brut: unknown): Lu<ChangementEtiquettes> {
@@ -89,8 +94,11 @@ export interface LigneAudit {
   readonly detail: Record<string, unknown>
 }
 
-export function auditStatut(avant: Statut, apres: StatutALaMain): LigneAudit {
-  return { action: 'statut', detail: { avant, apres } }
+export function auditStatut(avant: Statut, apres: StatutALaMain, reponse?: string): LigneAudit {
+  return {
+    action: 'statut',
+    detail: { avant, apres, ...(reponse ? { reponse } : {}) },
+  }
 }
 
 export function auditEtiquettes(

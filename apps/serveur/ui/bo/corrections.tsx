@@ -38,9 +38,11 @@ function Refus({ issue }: { issue: Issue | null }) {
 export function FormulaireStatut({
   action,
   statut,
+  reponseInitiale,
 }: {
   action: Action
   statut: string
+  reponseInitiale?: string | null
 }) {
   const [issue, envoyer, enCours] = useActionState<Issue | null, FormData>(action, null)
 
@@ -60,6 +62,18 @@ export function FormulaireStatut({
           libelle: LIBELLES_STATUT[valeur],
         }))}
       />
+      <label className="flex flex-col gap-1">
+        <span className="text-[12px] font-medium tracking-wide text-encre-3 uppercase">
+          Mot au collaborateur (traité / écarté)
+        </span>
+        <input
+          name="reponse"
+          defaultValue={reponseInitiale ?? ''}
+          maxLength={500}
+          placeholder="Ex. Corrigé dans la version déployée ce matin"
+          className="h-9 w-80 rounded-[var(--radius-bo)] border border-bord-fort bg-surface px-2.5 text-sm text-encre"
+        />
+      </label>
       <Bouton type="submit" ton="contour" disabled={enCours}>
         Changer le statut
       </Bouton>

@@ -726,6 +726,72 @@ une arborescence multi-modules dynamique non résoluble au niveau de l’écran.
 
 ---
 
+## D-021 — Le retour au collaborateur in-widget et à sens unique
+
+**2026-09-07**
+
+### Le problème
+
+Sans retour vers celui qui parle, Feedys est un **puits sans fond** : le collaborateur signale des
+frictions mais ne sait jamais si elles sont lues ou corrigées. Au bout de deux semaines de silence,
+le geste de signalement s’éteint.
+
+Or, Feedys n’a **ni compte utilisateur, ni adresse email de collaborateur** : il ne dispose que du
+`{ ref, nom, role }` signé par l’hôte avec le secret du produit ([D-005](DECISIONS_LOG.md)). De plus,
+Feedys exclut formellement le support client en direct, les files de discussion et les systèmes de
+tickets ([VISION.md](VISION.md), [ROADMAP.md](ROADMAP.md) §Ce qui n’arrivera pas).
+
+### Les alternatives écartées
+
+1. **L’envoi d’un email direct au collaborateur** :
+   ⛔ **Rejeté.** Feedys ne possède pas l’adresse email du collaborateur et refuse d’en collecter.
+   Exiger l’adresse email détruirait l’anonymat structurel de l’outil, créerait une gestion de données
+   personnelles (RGPD) disproportionnée et transformerait Feedys en outil de ticketing externe.
+2. **Le webhook vers l’application hôte** :
+   ⛔ **Rejeté comme mécanisme principal.** Un webhook déléguerait la notification à l’application hôte.
+   Or, la quasi-totalité des logiciels métier hôtes ne disposent pas d’un centre de notifications interne
+   prêt à l’emploi pour ce type de message. Cela imposerait des semaines de développement aux équipes
+   hôtes avant que la moindre boucle de rétroaction ne fonctionne.
+
+### La décision
+
+La notification s’effectue **directement dans le widget**, de façon discrète, sécurisée et
+**strictement à sens unique** :
+
+1. **Adossée à l’identité signée (`auteur_ref`)** :
+   Le widget relève les retours traités dont l’accusé attend via `GET /api/retours/collaborateur`,
+   authentifié par l’en-tête `x-feedys-identite` signé en HMAC-SHA256 par l’hôte ([D-005](DECISIONS_LOG.md)).
+   Si l’identité est absente ou anonyme, la relève rend `[]` silencieusement : rien ne casse.
+2. **Une restitution discrète** :
+   - Sur le lanceur fermé : une pastille discrète dans le coin supérieur signale une information en
+     attente, sans pop-up intempestif ni animation agressive.
+   - À l’ouverture du panneau : une carte sobre affiche le titre du retour, le mot court facultatif
+     du développeur (ex. « Corrigé dans la version déployée ce matin »), et un bouton unique :
+     **« J’ai vu »**.
+3. **Un accusé de lecture idempotent** :
+   Cliquer sur « J’ai vu » appelle `POST /api/retours/:id/accuse` (qui pose `reponse_lue_le = now()`)
+   et retire immédiatement la carte.
+4. ⛔ **Strictement à sens unique** :
+   Aucun champ texte pour répondre, aucun fil de discussion, aucun bouton de relance. Feedys ne devient
+   pas un chat de support. La boucle d’information est fermée : le collaborateur sait que sa parole a
+   été entendue et traitée, et le widget reste prêt pour un nouveau signalement.
+
+### Les invariants préservés
+
+- **Frontière de licence** : les contrats de transport sont 100 % MIT (`packages/widget`),
+  aucune dépendance AGPL ne remonte.
+- **Budget de 60 Ko gzip tenu** : aucun import lourd ni dépendance externe dans `widget.js`.
+- **Zéro compte, zéro email**.
+- **Vocabulaire** : le mot « ticket » reste banni de l’ensemble du code, du schéma et des tables.
+
+### Ce qui la renverserait
+
+Un logiciel hôte doté de son propre centre de notifications unifié demandant un webhook complémentaire
+pour intégrer ces accusés à son flux natif. Si ce besoin émergeait, le webhook serait un complément,
+jamais un substitut à la notification native dans le widget.
+
+---
+
 ## D-022 — On sauvegarde le fil brut, pas la note — et sept jours suffisent
 
 **Prise le** : 2026-09-07

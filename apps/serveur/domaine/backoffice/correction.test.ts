@@ -19,6 +19,22 @@ describe('le changement de statut', () => {
     }
   })
 
+  it('accepte un mot court optionnel pour le collaborateur', () => {
+    expect(
+      lireChangementStatut({ statut: 'traite', reponse: 'Corrigé dans la version de ce matin' }),
+    ).toEqual({
+      ok: true,
+      valeur: { statut: 'traite', reponse: 'Corrigé dans la version de ce matin' },
+    })
+  })
+
+  it('refuse une réponse qui dépasse 500 caractères', () => {
+    expect(lireChangementStatut({ statut: 'traite', reponse: 'a'.repeat(501) })).toEqual({
+      ok: false,
+      motif: 'valeur_refusee',
+    })
+  })
+
   it('⛔ refuse les statuts que le SERVEUR écrit — réécrire l’histoire du retour', () => {
     for (const statut of ['en_cours', 'abandonne', 'envoye']) {
       expect(lireChangementStatut({ statut })).toEqual({ ok: false, motif: 'valeur_refusee' })
@@ -84,6 +100,11 @@ describe('les lignes d’audit', () => {
     expect(auditStatut('envoye', 'traite')).toEqual({
       action: 'statut',
       detail: { avant: 'envoye', apres: 'traite' },
+    })
+
+    expect(auditStatut('envoye', 'traite', 'Corrigé')).toEqual({
+      action: 'statut',
+      detail: { avant: 'envoye', apres: 'traite', reponse: 'Corrigé' },
     })
 
     expect(auditEtiquettes({ type: null, zone: null }, { type: 'bug', zone: 'Liste' })).toEqual({

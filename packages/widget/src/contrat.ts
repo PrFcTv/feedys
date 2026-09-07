@@ -26,6 +26,7 @@ import { BORNES, TYPES_AUDIO, TYPES_CAPTURE } from './transport'
  */
 export {
   BORNES,
+  CHEMIN_COLLABORATEUR,
   CHEMIN_RETOURS,
   EN_TETE_CLE,
   EN_TETE_IDENTITE,
@@ -33,6 +34,7 @@ export {
   PREFIXE_SECRET,
   TYPES_AUDIO,
   TYPES_CAPTURE,
+  cheminAccuse,
   cheminFin,
   cheminTour,
 } from './transport'
@@ -334,6 +336,37 @@ export function analyserCorpsTour(valeur: unknown): Analyse<CorpsTour> {
 /** Analyse le corps d’une fin d’entretien. */
 export function analyserCorpsFin(valeur: unknown): Analyse<CorpsFin> {
   return analyser(SchemaCorpsFin, valeur)
+}
+
+/**
+ * La réponse du développeur à un retour du collaborateur.
+ *
+ * ⛔ Une notification à sens unique : aucun fil, aucun champ de réponse,
+ *    aucun support client direct (01-Specs/retour-au-collaborateur.md).
+ */
+export const SchemaReponseCollaborateur = z
+  .object({
+    id: z.string().min(1),
+    titre: z.string().max(BORNES.titre).nullable(),
+    statut: z.string().min(1),
+    reponseTexte: z.string().max(BORNES.reponseTexte).nullable(),
+    reponseEnvoyeeLe: z.string().min(1),
+  })
+  .strict()
+
+export type ReponseCollaborateur = z.infer<typeof SchemaReponseCollaborateur>
+
+export const SchemaListeReponsesCollaborateur = z
+  .object({
+    retours: z.array(SchemaReponseCollaborateur),
+  })
+  .strict()
+
+export type ListeReponsesCollaborateur = z.infer<typeof SchemaListeReponsesCollaborateur>
+
+/** Analyse la liste de réponses rendue au collaborateur. */
+export function analyserReponsesCollaborateur(valeur: unknown): Analyse<ListeReponsesCollaborateur> {
+  return analyser(SchemaListeReponsesCollaborateur, valeur)
 }
 
 function analyser<T>(schema: z.ZodType<T>, valeur: unknown): Analyse<T> {

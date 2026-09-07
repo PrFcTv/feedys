@@ -81,6 +81,11 @@ premier coup d’œil ce que la personne a dit et ce que le modèle en a fait.
 | `type` | le modèle se trompe, et une note mal classée est une note perdue |
 | `zone` | idem |
 
+⚠️ **Le mot court au collaborateur** : lors du passage à `traite` ou `ecarte`, le développeur peut
+renseigner une réponse optionnelle (500 caractères au plus, voir [retour-au-collaborateur.md](retour-au-collaborateur.md)).
+Le serveur pose `reponse_texte` et horodate `reponse_envoyee_le`. La fiche affiche ensuite l’état de
+l’accusé (`reponse_lue_le`) dès que le collaborateur a cliqué « J’ai vu » dans son widget.
+
 ⛔ **Ni le résumé, ni les citations, ni le fil.** Le texte d’un `message` ne se modifie jamais et ne
 se supprime jamais, ni par le back-office, ni par le MCP, ni pour corriger une typo
 ([conventions-db.md](../04-Architecture/conventions-db.md)).

@@ -8,6 +8,7 @@
  *
  * ⚠️ Tout le reste est construit à la demande : rien ne se connecte à l’import.
  */
+import type { PortsCollaborateur } from '../domaine/retours/collaborateur'
 import type { PortsBalayage } from '../domaine/entretien/balayage'
 import type { PortsNotification } from '../domaine/notification/envoyer'
 import { envoyerNote } from '../domaine/notification/envoyer'
@@ -21,6 +22,7 @@ import { modeleClaude } from '../domaine/entretien/modele'
 
 import { pool } from './base/connexion'
 import { creerDepotBalayage } from './base/depot-balayage'
+import { creerDepotCollaborateur } from './base/depot-collaborateur'
 import { creerDepotEntretien } from './base/depot-entretien'
 import { creerDepotNotifications } from './base/depot-notifications'
 import { creerDepotRetours } from './base/depot-retours'
@@ -51,6 +53,13 @@ export function portsIngestion(): PortsIngestion {
     // ⛔ `aval` reste vide : l’entretien n’est pas déclenché par l’ingestion, il
     //    est demandé par le widget, tour par tour. La place reste réservée pour
     //    ce qui devrait suivre la persistance sans pouvoir la défaire.
+  }
+}
+
+export function portsCollaborateur(): PortsCollaborateur {
+  return {
+    produits: creerDepotRetours(pool()),
+    depot: creerDepotCollaborateur(pool()),
   }
 }
 

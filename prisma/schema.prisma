@@ -116,6 +116,9 @@ model Retour {
   zone             String?
   source           SourceRetour
   envoyeLe         DateTime?    @map("envoye_le") @db.Timestamptz(6)
+  reponseTexte     String?      @map("reponse_texte")
+  reponseEnvoyeeLe DateTime?    @map("reponse_envoyee_le") @db.Timestamptz(6)
+  reponseLueLe     DateTime?    @map("reponse_lue_le") @db.Timestamptz(6)
   creeLe           DateTime     @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe            DateTime     @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 

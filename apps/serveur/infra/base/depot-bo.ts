@@ -74,6 +74,9 @@ export interface Fiche {
   readonly produitNom: string
   readonly creeLe: Date
   readonly envoyeLe: Date | null
+  readonly reponseTexte: string | null
+  readonly reponseEnvoyeeLe: Date | null
+  readonly reponseLueLe: Date | null
   readonly synthese: Synthese | null
   readonly modele: string | null
   readonly fil: readonly TourFiche[]
@@ -100,6 +103,7 @@ const LISTE = `
 const FICHE = `
   select r.id, r.statut, r.type, r.titre, r.zone, r.source,
          r.auteur_nom, r.auteur_role, r.identite_verifiee, r.cree_le, r.envoye_le,
+         r.reponse_texte, r.reponse_envoyee_le, r.reponse_lue_le,
          p.nom as produit_nom,
          s.contenu, s.modele,
          c.url, c.titre_page, c.ecran, c.selecteur_dom, c.navigateur, c.systeme,
@@ -132,8 +136,18 @@ const ZONES = `
 
 const LIRE_AVANT = 'select statut, type, zone from retours where id = $1 for update'
 
-const POSER_STATUT = `
+const POSER_STATUT_SIMPLE = `
   update retours set statut = $2::statut_retour, maj_le = now() where id = $1
+`
+
+const POSER_STATUT_AVEC_REPONSE = `
+  update retours
+     set statut = $2::statut_retour,
+         reponse_texte = $3,
+         reponse_envoyee_le = now(),
+         reponse_lue_le = null,
+         maj_le = now()
+   where id = $1
 `
 
 const POSER_ETIQUETTES = `
@@ -296,6 +310,9 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
           produitNom: String(ligne['produit_nom']),
           creeLe: ligne['cree_le'] as Date,
           envoyeLe: (ligne['envoye_le'] as Date | null) ?? null,
+          reponseTexte: ouNul(ligne['reponse_texte']),
+          reponseEnvoyeeLe: (ligne['reponse_envoyee_le'] as Date | null) ?? null,
+          reponseLueLe: (ligne['reponse_lue_le'] as Date | null) ?? null,
           synthese: analyserSynthese(ligne['contenu']) ?? null,
           modele: ouNul(ligne['modele']),
           fil: messages.rows.map((tour) => ({
@@ -316,12 +333,21 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
     },
 
     async changerStatut(retourId, changement): Promise<boolean> {
+      const avecReponse = changement.statut === 'traite' || changement.statut === 'ecarte'
+      const reponsePropre = changement.reponse?.trim() || null
+
       return corriger(
         retourId,
-        { sql: POSER_STATUT, parametres: [changement.statut] },
+        avecReponse
+          ? { sql: POSER_STATUT_AVEC_REPONSE, parametres: [changement.statut, reponsePropre] }
+          : { sql: POSER_STATUT_SIMPLE, parametres: [changement.statut] },
         (avant) => ({
           action: 'statut',
-          detail: { avant: avant.statut, apres: changement.statut },
+          detail: {
+            avant: avant.statut,
+            apres: changement.statut,
+            ...(avecReponse && reponsePropre ? { reponse: reponsePropre } : {}),
+          },
         }),
       )
     },
