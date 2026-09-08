@@ -169,9 +169,15 @@ test('⛔ tour coupé : l’invite du champ ne parle pas d’une fiche absente',
   const erreurs = surveillerLaConsole(page)
   await ouvrirLaRacine(page)
 
+  // ⚠️ La MÉTHODE avec le code, et pas le code seul. Depuis P-020, la première
+  //    requête vers `/api/retours` n’est plus l’ingestion : c’est la relève des
+  //    notifications, qui part au montage du widget. Un `appels[0]` décrivait
+  //    donc un ordre, pas une intention — et c’est l’intention qu’on teste.
   const appels: string[] = []
   page.on('response', (reponse) => {
-    if (reponse.url().includes('/api/retours')) appels.push(`${reponse.status()}`)
+    if (reponse.url().includes('/api/retours')) {
+      appels.push(`${reponse.request().method()} ${reponse.status()}`)
+    }
   })
 
   await poserLeWidget(page)
@@ -184,8 +190,11 @@ test('⛔ tour coupé : l’invite du champ ne parle pas d’une fiche absente',
   //    dans l’état « en entretien, sans carte ».
   await expect(page.locator('.avis')).not.toBeEmpty({ timeout: 20_000 })
 
-  expect(appels[0]).toBe('201')
-  expect(appels).toContain('503')
+  expect(appels).toContain('POST 201')
+  expect(appels).toContain('POST 503')
+
+  // ⚠️ Et la relève est bien partie, sans déranger le parcours d’envoi.
+  expect(appels).toContain('GET 200')
 
   const champ = page.locator('.champ')
 

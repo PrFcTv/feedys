@@ -170,14 +170,24 @@ describe('le cycle de retour au collaborateur (Postgres réel)', () => {
     const repBob = await routeCollab.GET(requeteGet({ [EN_TETE_IDENTITE]: jetonBob }))
     expect(await repBob.json()).toEqual({ retours: [] })
 
-    // 6. Bob tente d’accuser réception du retour d'Alice -> 403 refusé
+    // 6. Bob tente d’accuser réception du retour d’Alice — il obtient le MÊME
+    //    refus qu’un identifiant inexistant : 404, motif `retour_inconnu`.
+    //    ⛔ Sinon l’API dirait à Bob que ce retour existe (oracle d’existence).
     const repAccuseBob = await routeAccuse.POST(
       requetePostAccuse(idRetour, { [EN_TETE_IDENTITE]: jetonBob }),
       { params: Promise.resolve({ id: idRetour }) },
     )
-    expect(repAccuseBob.status).toBe(403)
+    expect(repAccuseBob.status).toBe(404)
     const jsonAccuseBob = await repAccuseBob.json()
-    expect(jsonAccuseBob.motif).toBe('auteur_refuse')
+    expect(jsonAccuseBob.motif).toBe('retour_inconnu')
+
+    // 6 bis. Un identifiant qui n’existe pas rend une réponse INDISCERNABLE.
+    const repAccuseFantome = await routeAccuse.POST(
+      requetePostAccuse('ret_inexistant', { [EN_TETE_IDENTITE]: jetonBob }),
+      { params: Promise.resolve({ id: 'ret_inexistant' }) },
+    )
+    expect(repAccuseFantome.status).toBe(404)
+    expect(await repAccuseFantome.json()).toEqual(jsonAccuseBob)
 
     // 7. Alice accuse réception -> 200 OK
     const repAccuseAlice = await routeAccuse.POST(
@@ -216,5 +226,69 @@ describe('le cycle de retour au collaborateur (Postgres réel)', () => {
       params: Promise.resolve({ id: 'ret_collab_1' }),
     })
     expect(rep.status).toBe(401)
+  })
+
+  /**
+   * ⛔ Le défaut que ce scénario ferme, et pourquoi il était invisible.
+   *
+   * La première version posait `reponse_envoyee_le = now()` et
+   * `reponse_lue_le = null` à CHAQUE passage à `traite`. Le développeur qui
+   * corrigeait une étiquette, ou l’agent MCP qui rejouait son marquage,
+   * ressortait la carte à quelqu’un qui avait déjà cliqué « J’ai vu » — et,
+   * sans mot fourni, effaçait au passage celui qui était parti.
+   *
+   * ⚠️ Feedys promet la sobriété. Une notification qui revient toute seule est
+   *    exactement ce que le produit refuse d’être.
+   */
+  it('⛔ re-marquer un retour déjà traité ne renotifie pas et n’efface pas le mot', async () => {
+    const idRetour = 'ret_collab_2'
+    const refAuteur = 'usr_bruno'
+    const jetonBruno = jeton(refAuteur)
+    const depot = depotBoModule.creerDepotBackOffice(connexionModule.pool())
+
+    await client.query(
+      `insert into retours (id, produit_id, source, statut, auteur_ref, auteur_nom, auteur_role, identite_verifiee, titre)
+       values ($1, 'prd_collab', 'texte', 'en_cours', $2, 'Bruno', 'Gestionnaire', true, 'Export illisible')`,
+      [idRetour, refAuteur],
+    )
+
+    // 1. Traité avec un mot : la notification part.
+    expect(await depot.changerStatut(idRetour, { statut: 'traite', reponse: 'Corrigé ce matin.' })).toBe(true)
+
+    const repAttente = await routeCollab.GET(requeteGet({ [EN_TETE_IDENTITE]: jetonBruno }))
+    const jsonAttente = await repAttente.json()
+    expect(jsonAttente.retours).toHaveLength(1)
+    expect(jsonAttente.retours[0].reponseTexte).toBe('Corrigé ce matin.')
+
+    // 2. Bruno lit.
+    await routeAccuse.POST(requetePostAccuse(idRetour, { [EN_TETE_IDENTITE]: jetonBruno }), {
+      params: Promise.resolve({ id: idRetour }),
+    })
+    expect((await (await routeCollab.GET(requeteGet({ [EN_TETE_IDENTITE]: jetonBruno }))).json()).retours).toEqual([])
+
+    // 3. Le développeur repose le MÊME statut, SANS mot — le geste ordinaire du
+    //    MCP qui rejoue, ou du back-office qui corrige autre chose.
+    expect(await depot.changerStatut(idRetour, { statut: 'traite' })).toBe(true)
+
+    const { rows } = await client.query(
+      'select reponse_texte, reponse_lue_le from retours where id = $1',
+      [idRetour],
+    )
+    // ⛔ Le mot est toujours là…
+    expect(rows[0].reponse_texte).toBe('Corrigé ce matin.')
+    // ⛔ …et l’accusé de lecture n’a pas été rouvert.
+    expect(rows[0].reponse_lue_le).not.toBeNull()
+
+    // 4. Bruno ne revoit donc RIEN.
+    const repApres = await routeCollab.GET(requeteGet({ [EN_TETE_IDENTITE]: jetonBruno }))
+    expect((await repApres.json()).retours).toEqual([])
+
+    // 5. En revanche, un mot VRAIMENT nouveau redonne la parole au produit.
+    expect(await depot.changerStatut(idRetour, { statut: 'traite', reponse: 'Et re-corrigé depuis.' })).toBe(true)
+
+    const repRelance = await routeCollab.GET(requeteGet({ [EN_TETE_IDENTITE]: jetonBruno }))
+    const jsonRelance = await repRelance.json()
+    expect(jsonRelance.retours).toHaveLength(1)
+    expect(jsonRelance.retours[0].reponseTexte).toBe('Et re-corrigé depuis.')
   })
 })

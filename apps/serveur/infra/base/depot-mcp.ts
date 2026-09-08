@@ -22,6 +22,7 @@ import { analyserSynthese } from '../../domaine/synthese/schema'
 import { identifiant } from '../identifiants'
 
 import type { Bassin } from './depot-retours'
+import { ecritureStatut } from './sql-statut'
 
 /** ⚠️ Un agent qui liste veut une page, pas un export. */
 const LIMITE_PAR_DEFAUT = 25
@@ -65,20 +66,6 @@ const FIL = `
 `
 
 const LIRE_AVANT = 'select statut from retours where id = $1 for update'
-
-const POSER_STATUT = `
-  update retours set statut = $2::statut_retour, maj_le = now() where id = $1
-`
-
-const POSER_STATUT_AVEC_REPONSE = `
-  update retours
-     set statut = $2::statut_retour,
-         reponse_texte = $3,
-         reponse_envoyee_le = now(),
-         reponse_lue_le = null,
-         maj_le = now()
-   where id = $1
-`
 
 const JOURNALISER = `
   insert into audit (id, retour_id, acteur, action, detail)
@@ -204,14 +191,10 @@ export function creerDepotMcp(bassin: Bassin): DepotMcp {
           return false
         }
 
-        const avecReponse = changement.statut === 'traite' || changement.statut === 'ecarte'
-        const reponsePropre = changement.reponse?.trim() || null
-
-        if (avecReponse) {
-          await connexion.query(POSER_STATUT_AVEC_REPONSE, [retourId, changement.statut, reponsePropre])
-        } else {
-          await connexion.query(POSER_STATUT, [retourId, changement.statut])
-        }
+        // ⚠️ Le MÊME SQL que le back-office (`sql-statut.ts`) : marquer par MCP
+        //    ou à la main doit produire exactement le même état.
+        const ecriture = ecritureStatut(changement.statut, changement.reponse)
+        await connexion.query(ecriture.sql, [retourId, ...ecriture.parametres])
 
         await connexion.query(JOURNALISER, [
           identifiant(),
@@ -222,7 +205,7 @@ export function creerDepotMcp(bassin: Bassin): DepotMcp {
             // ⚠️ Par où c’est passé : une trace qui ne dit pas « par MCP » oblige
             //    à deviner, six mois plus tard, qui a marqué quoi.
             par: 'mcp',
-            ...(avecReponse && reponsePropre ? { reponse: reponsePropre } : {}),
+            ...(ecriture.mot ? { reponse: ecriture.mot } : {}),
           }),
         ])
 

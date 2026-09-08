@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Configuration } from '../configuration'
 import type { ReponseCollaborateur } from '../contrat'
 import { monter } from '../montage'
+import { FEUILLE } from './styles'
 
 const CONFIGURATION: Configuration = {
   cle: 'fdy_pub_a1b2c3',
@@ -218,4 +219,25 @@ describe('Restitution du retour au collaborateur dans le widget', () => {
 
     montage.demonter()
   })
+})
+
+/**
+ * ⛔ Le défaut que ces trois assertions ferment, et pourquoi il est passif.
+ *
+ * La première version de P-020 déclarait `.notification__bouton` dans la
+ * feuille et rendait `class="notification__action"` dans le JSX. Le bouton
+ * « J’ai vu » partait donc AVEC LE STYLE PAR DÉFAUT DU NAVIGATEUR, dans le
+ * shadow DOM de quelqu’un d’autre — et tous les tests passaient, parce qu’ils
+ * interrogeaient la classe du JSX, jamais celle de la feuille.
+ *
+ * ⚠️ C’est la classe de défauts que `pnpm widget:demo` existe pour attraper
+ *    (CLAUDE.md §Le widget ne se recette pas chez lui) — mais rien n’oblige à
+ *    l’ouvrir. Ceci si.
+ */
+describe('⛔ les classes rendues sont celles que la feuille déclare', () => {
+  for (const classe of ['notification', 'notification__titre', 'notification__texte', 'notification__action', 'lanceur__pastille']) {
+    it(`.${classe} est stylée`, () => {
+      expect(FEUILLE).toContain(`.${classe} {`)
+    })
+  }
 })

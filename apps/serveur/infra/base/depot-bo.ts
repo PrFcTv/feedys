@@ -16,6 +16,7 @@ import type {
   ChangementStatut,
   LigneAudit,
 } from '../../domaine/backoffice/correction'
+import { auditStatut } from '../../domaine/backoffice/correction'
 import type { Filtres, Statut, TypeRetour } from '../../domaine/backoffice/filtres'
 import { depuisDe } from '../../domaine/backoffice/filtres'
 import type { Synthese } from '../../domaine/synthese/schema'
@@ -23,6 +24,7 @@ import { analyserSynthese } from '../../domaine/synthese/schema'
 import { identifiant } from '../identifiants'
 
 import type { Bassin } from './depot-retours'
+import { ecritureStatut } from './sql-statut'
 
 /** ⚠️ Deux visites par jour, dix personnes : la liste n’a pas besoin de pagination. */
 const PLAFOND_LISTE = 200
@@ -135,20 +137,6 @@ const ZONES = `
 `
 
 const LIRE_AVANT = 'select statut, type, zone from retours where id = $1 for update'
-
-const POSER_STATUT_SIMPLE = `
-  update retours set statut = $2::statut_retour, maj_le = now() where id = $1
-`
-
-const POSER_STATUT_AVEC_REPONSE = `
-  update retours
-     set statut = $2::statut_retour,
-         reponse_texte = $3,
-         reponse_envoyee_le = now(),
-         reponse_lue_le = null,
-         maj_le = now()
-   where id = $1
-`
 
 const POSER_ETIQUETTES = `
   update retours set type = $2::type_retour, zone = $3, maj_le = now() where id = $1
@@ -333,22 +321,14 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
     },
 
     async changerStatut(retourId, changement): Promise<boolean> {
-      const avecReponse = changement.statut === 'traite' || changement.statut === 'ecarte'
-      const reponsePropre = changement.reponse?.trim() || null
+      const ecriture = ecritureStatut(changement.statut, changement.reponse)
 
       return corriger(
         retourId,
-        avecReponse
-          ? { sql: POSER_STATUT_AVEC_REPONSE, parametres: [changement.statut, reponsePropre] }
-          : { sql: POSER_STATUT_SIMPLE, parametres: [changement.statut] },
-        (avant) => ({
-          action: 'statut',
-          detail: {
-            avant: avant.statut,
-            apres: changement.statut,
-            ...(avecReponse && reponsePropre ? { reponse: reponsePropre } : {}),
-          },
-        }),
+        ecriture,
+        // ⚠️ La ligne d’audit se construit dans `domaine/backoffice/correction.ts`
+        //    et nulle part ailleurs : la journalisation est une règle, pas du SQL.
+        (avant) => auditStatut(avant.statut, changement.statut, ecriture.mot ?? undefined),
       )
     },
 

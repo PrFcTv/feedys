@@ -38,11 +38,12 @@ function Refus({ issue }: { issue: Issue | null }) {
 export function FormulaireStatut({
   action,
   statut,
-  reponseInitiale,
+  reponseEnvoyee = false,
 }: {
   action: Action
   statut: string
-  reponseInitiale?: string | null
+  /** Un mot est-il déjà parti ? Change l’invite, jamais la valeur du champ. */
+  reponseEnvoyee?: boolean
 }) {
   const [issue, envoyer, enCours] = useActionState<Issue | null, FormData>(action, null)
 
@@ -62,15 +63,21 @@ export function FormulaireStatut({
           libelle: LIBELLES_STATUT[valeur],
         }))}
       />
+      {/* ⚠️ Le champ reste VIDE, même quand un mot est déjà parti : ici, vide veut
+             dire « je n’y touche pas ». Le pré-remplir ferait renvoyer le même
+             message à chaque changement d’étiquette, et interdirait de passer à
+             « lu » sans vider la case à la main. Ce qui est déjà parti se lit
+             sous le formulaire. */}
       <label className="flex flex-col gap-1">
         <span className="text-[12px] font-medium tracking-wide text-encre-3 uppercase">
           Mot au collaborateur (traité / écarté)
         </span>
         <input
           name="reponse"
-          defaultValue={reponseInitiale ?? ''}
           maxLength={500}
-          placeholder="Ex. Corrigé dans la version déployée ce matin"
+          placeholder={
+            reponseEnvoyee ? 'Laisser vide pour garder le mot déjà envoyé' : 'Ex. Corrigé dans la version déployée ce matin'
+          }
           className="h-9 w-80 rounded-[var(--radius-bo)] border border-bord-fort bg-surface px-2.5 text-sm text-encre"
         />
       </label>

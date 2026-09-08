@@ -67,8 +67,14 @@ Le widget est un invité. Cinq obligations :
 
 Une pastille discrète, ancrée en bas à droite par défaut, déplaçable par configuration.
 
-- Elle ne pulse pas, ne rebondit pas, n’affiche pas de badge intrusif. Une pastille discrète
-  apparaît dans le coin supérieur si une réponse à un retour précédent attend d’être lue ([retour-au-collaborateur.md](retour-au-collaborateur.md)).
+- Elle ne pulse pas et ne rebondit pas. Rien ne réclame l’attention.
+- ⚠️ **Une exception, et une seule** : une pastille apparaît dans le coin supérieur du lanceur
+  si une réponse à un retour précédent attend d’être lue
+  ([retour-au-collaborateur.md](retour-au-collaborateur.md)). C’est un badge de non-lus, et la
+  spécification l’interdisait jusqu’à P-020 : le renversement est assumé et argumenté en
+  [D-021](../00-Projet/DECISIONS_LOG.md). ⛔ Elle ne compte pas, ne s’anime pas, n’apparaît que
+  sur un geste du développeur, et disparaît définitivement au premier regard. Si l’une de ces
+  quatre conditions tombe, c’est D-021 qu’il faut rouvrir.
 - Au survol, elle s’élargit et révèle son libellé : **« Un retour »**.
 - ⛔ Pas de bulle d’accueil automatique. Jamais de « Besoin d’aide ? » qui s’ouvre tout seul.
 

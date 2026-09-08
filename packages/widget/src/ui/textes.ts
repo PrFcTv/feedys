@@ -60,6 +60,8 @@ export const TEXTES = {
 
   notification: {
     action: 'J’ai vu',
+    /** ⚠️ Le nom accessible du lanceur quand la pastille est là. Jamais affiché. */
+    attente: 'une réponse vous attend',
   },
 } as const
 
@@ -71,7 +73,6 @@ export function titreNotification(titre?: string | null): string {
   }
   return 'Votre retour a été pris en compte.'
 }
-
 
 /**
  * Ce qu’on dit quand l’onde ne viendra pas.

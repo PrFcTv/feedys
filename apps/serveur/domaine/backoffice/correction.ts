@@ -31,12 +31,30 @@ export type StatutALaMain = (typeof STATUTS_A_LA_MAIN)[number]
 const LONGUEUR_ZONE = 200
 const LONGUEUR_REPONSE = 500
 
+/**
+ * ⛔ Un mot au collaborateur avec le statut `lu` est REFUSÉ, pas ignoré.
+ *    `lu` ne notifie personne : accepter le champ puis le jeter en silence
+ *    afficherait « enregistré » à quelqu’un qui vient d’écrire un message que
+ *    personne ne lira jamais.
+ */
 const SchemaStatut = z
   .object({
     statut: z.enum(STATUTS_A_LA_MAIN),
     reponse: z.string().max(LONGUEUR_REPONSE).optional(),
   })
   .strict()
+  .refine((valeur) => valeur.statut !== 'lu' || (valeur.reponse ?? '').trim() === '', {
+    path: ['reponse'],
+    message: 'Un mot au collaborateur ne part qu’avec « traité » ou « écarté ».',
+  })
+  // ⛔ Un champ VIDE ne veut pas dire « efface le mot précédent », il veut dire
+  //    « je n’y touche pas ». Le formulaire poste toujours `reponse`, même
+  //    intact ; sans cette normalisation, reposer un statut effacerait le
+  //    message déjà parti au collaborateur.
+  .transform((valeur): ChangementStatut => {
+    const propre = valeur.reponse?.trim()
+    return propre ? { statut: valeur.statut, reponse: propre } : { statut: valeur.statut }
+  })
 
 const SchemaEtiquettes = z
   .object({

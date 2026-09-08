@@ -67,12 +67,36 @@ Trois colonnes sur la table `retours` ([0005_retour_collaborateur.sql](../db/mig
 - L’envoi met à jour `reponse_texte` et pose `reponse_envoyee_le = now()`.
 - La fiche du retour affiche l’état de la notification : date d’envoi et date de lecture par
   le collaborateur.
+- ⛔ **Le champ reste VIDE, même quand un mot est déjà parti.** Ici, vide veut dire « je n’y
+  touche pas », pas « efface ». Le pré-remplir ferait renvoyer le même message à chaque
+  correction d’étiquette. Ce qui est déjà parti se lit sous le formulaire.
+- ⛔ **Un mot avec le statut `lu` est refusé, pas ignoré.** `lu` ne notifie personne :
+  accepter le champ puis le jeter afficherait « enregistré » à quelqu’un qui vient d’écrire
+  un message que personne ne lira.
 
 ### Dans le serveur MCP (`packages/mcp`)
 - L’outil `marquer_retour` accepte une propriété optionnelle `reponse?: string` (bornée à 500
   caractères).
 - L’agent Claude Code peut ainsi marquer un retour traité tout en formulant la phrase de
   résolution dans la même instruction de code.
+- ⛔ **`marquer_retour` reste idempotent** (`idempotentHint: true`) : rejouer le même marquage
+  n’efface pas le mot déjà parti et ne rouvre pas un accusé déjà donné. Voir §2 bis.
+
+### 2 bis. ⛔ Une réponse ne se re-notifie pas, et ne s’efface pas toute seule
+
+Les deux chemins — back-office et MCP — écrivent par le **même** module
+([`infra/base/sql-statut.ts`](../apps/serveur/infra/base/sql-statut.ts)), et ils tiennent trois
+règles :
+
+| Le geste | Ce qui arrive au collaborateur |
+|---|---|
+| Marquer `traite` avec un mot **nouveau** | La notification part (ou repart) |
+| Reposer le **même** statut avec le **même** mot | Rien. Il ne revoit pas la carte |
+| Marquer `traite` **sans** fournir de mot | Rien n’est effacé ; il n’est notifié que s’il ne l’avait jamais été |
+
+⚠️ Ce n’est pas du confort. Sans ces règles, corriger une étiquette six semaines plus tard
+ressortait la carte à quelqu’un qui avait déjà tourné la page — exactement le harcèlement
+poli que Feedys refuse d’être.
 
 ---
 
@@ -80,6 +104,15 @@ Trois colonnes sur la table `retours` ([0005_retour_collaborateur.sql](../db/mig
 
 ### `GET /api/retours/collaborateur`
 - Reçoit `x-feedys-cle` et `x-feedys-identite`.
+- ⛔ **Le widget n’appelle PAS sans jeton d’identité.** Le serveur rendrait `[]` de toute
+  façon : l’appel n’apprendrait rien et partirait pourtant à chaque chargement de page de
+  l’hôte, visiteur de passage compris.
+- ⛔ **`cache-control: no-store, private`** et `vary` sur l’en-tête d’identité. Cette liste
+  est celle d’UNE personne, sur une URL fixe, sans cookie : un proxy d’entreprise — et Feedys
+  vit derrière des proxys d’entreprise — servirait sinon la liste d’Alice à Bob.
+- Limitation de débit **large et délibérément large** (`DEBIT_COLLABORATEUR`) : les
+  collaborateurs d’un même bureau sortent par la même IP publique. Elle arrête une boucle de
+  rendu partie en vrille, pas un étage un mardi matin.
 - Vérifie la signature HMAC-SHA256 du jeton d’identité avec le secret du produit.
 - **Principe de tolérance pour l’anonymat** : si l’en-tête d’identité est absent ou invalide,
   la route répond `200` avec un tableau vide `[]`. Aucun collaborateur anonyme ne reçoit de
@@ -103,8 +136,11 @@ Trois colonnes sur la table `retours` ([0005_retour_collaborateur.sql](../db/mig
 - Reçoit `x-feedys-cle` et `x-feedys-identite`.
 - Vérifie l’authenticité du jeton d’identité.
 - Vérifie que le retour ciblé appartient bien au même produit et au même `auteur_ref` que
-  l’identité signée. En cas de non-concordance, répond `404` (ne divulgue pas l’existence
-  d’un retour tiers).
+  l’identité signée. En cas de non-concordance, répond `404`.
+- ⛔ **Le retour d’autrui est INDISCERNABLE du retour inexistant** : même statut, même motif
+  (`retour_inconnu`), même message. Un `403` distinct, ou un motif `auteur_refuse`, ferait de
+  cette route un oracle où n’importe quel collaborateur du produit énumère les identifiants de
+  ses collègues.
 - Pose `reponse_lue_le = now()` de façon idempotente (répond `200` même si déjà lu).
 
 ---
@@ -128,6 +164,9 @@ Le widget applique strictement les règles d’intégration et d’ergonomie du 
 3. **L’accusé de lecture** :
    - Cliquer sur « J’ai vu » envoie la requête `POST /api/retours/:id/accuse` et fait disparaître
      immédiatement la carte et la pastille.
+   - ⚠️ Le widget retient ce qui vient d’être acquitté pour la durée de la page. Sans cela,
+     une relève encore en vol — celle de l’ouverture du panneau — se résout après le clic,
+     avec la liste d’AVANT, et remet la carte.
 
 4. ⛔ **Les interdits absolus dans le widget** :
    - ⛔ **Aucun champ de saisie de réponse**.

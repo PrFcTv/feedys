@@ -119,11 +119,21 @@ export function Widget(ports: Ports) {
   /** ⚠️ Le focus ne revient au lanceur que si c’est NOUS qui avons fermé. */
   const rendreLeFocus = useRef(false)
 
+  /**
+   * ⛔ Ce que le collaborateur a déjà écarté d’un « J’ai vu », pour cette page.
+   *
+   * ⚠️ Sans lui, la carte REVIENT : l’accusé retire la carte tout de suite,
+   *    mais une relève encore en vol — celle de l’ouverture du panneau — se
+   *    résout après coup avec la liste d’AVANT le clic et la remet. Le serveur,
+   *    lui, a raison au tour suivant ; c’est l’instant d’après qui ment.
+   */
+  const acquittes = useRef(new Set<string>())
+
   const verifierReponses = useCallback(async () => {
     if (!ports.releverReponses) return
     try {
       const liste = await ports.releverReponses()
-      setReponses(liste)
+      setReponses(liste.filter((r) => !acquittes.current.has(r.id)))
     } catch {
       // ⚠️ Échec silencieux : une panne réseau ne doit jamais gêner le collaborateur.
     }
@@ -135,6 +145,7 @@ export function Widget(ports: Ports) {
 
   const acquitter = useCallback(
     async (id: string): Promise<void> => {
+      acquittes.current.add(id)
       setReponses((deja) => deja.filter((r) => r.id !== id))
       if (ports.accuserReception) {
         await ports.accuserReception(id)
@@ -605,6 +616,11 @@ export function Widget(ports: Ports) {
         ref={lanceur}
         aria-expanded={ouvert}
         aria-haspopup="dialog"
+        {...(!ouvert && reponses.length > 0
+          ? // ⚠️ La pastille est un pixel : elle ne dit rien à un lecteur d’écran.
+            //    Sans ce nom, l’information n’existe QUE pour ceux qui voient.
+            { 'aria-label': `${TEXTES.lanceur} — ${TEXTES.notification.attente}` }
+          : {})}
         onClick={() => (ouvert ? fermer() : ouvrir())}
       >
         {ouvert ? <Croix /> : <Bulle />}

@@ -121,3 +121,33 @@ export function creerDebitEntretien(): {
     ip: new Limiteur(DEBIT_ENTRETIEN.parIp.max, DEBIT_ENTRETIEN.parIp.fenetreMs),
   }
 }
+
+/**
+ * Les compteurs de la relève et de l’accusé (P-020).
+ *
+ * ⛔ LARGES, ET C’EST LE POINT. Feedys s’adresse à « une dizaine de
+ *    collaborateurs qui travaillent dans le même bureau » (CLAUDE.md) : ils
+ *    sortent tous par la MÊME IP publique. Des chiffres calibrés comme ceux de
+ *    l’ingestion couperaient la notification à tout un étage un mardi matin,
+ *    pour protéger deux SELECT indexés.
+ *
+ * ⚠️ Ce qu’ils arrêtent n’est donc pas une attaque : c’est une boucle de rendu
+ *    partie en vrille chez un hôte, et un script qui pioche la clé publique dans
+ *    le HTML pour marteler. Le reste — l’anonyme qui charge une page — ne
+ *    passe même pas par ici : le widget n’appelle pas sans jeton d’identité.
+ */
+export const DEBIT_COLLABORATEUR = {
+  parCle: { max: 600, fenetreMs: 60_000 },
+  parIp: { max: 300, fenetreMs: 60_000 },
+} as const
+
+/** Les deux limiteurs de la relève, tenus ensemble. */
+export function creerDebitCollaborateur(): {
+  cle: PortDebit
+  ip: PortDebit
+} {
+  return {
+    cle: new Limiteur(DEBIT_COLLABORATEUR.parCle.max, DEBIT_COLLABORATEUR.parCle.fenetreMs),
+    ip: new Limiteur(DEBIT_COLLABORATEUR.parIp.max, DEBIT_COLLABORATEUR.parIp.fenetreMs),
+  }
+}

@@ -7,8 +7,14 @@
  * ⚠️ Le lanceur et le panneau se DÉCALQUENT sur Intercom Messenger
  *    (04-Architecture/references-visuelles.md) : dimensions, ancrage, transition
  *    d’ouverture, le lanceur qui devient une croix. Ce qu’on lui laisse : la
- *    bulle d’accueil automatique, les avatars, le badge de non-lus. Feedys ne
- *    réclame jamais l’attention.
+ *    bulle d’accueil automatique et les avatars. Feedys ne réclame jamais
+ *    l’attention.
+ *
+ * ⚠️ Le badge de non-lus était sur cette liste jusqu’à P-020, et il n’y est
+ *    plus : `.lanceur__pastille` en est un. Le renversement est assumé et écrit
+ *    (D-021), avec ses quatre conditions — elle ne compte pas, ne s’anime pas,
+ *    n’apparaît que sur un geste du développeur, et disparaît définitivement au
+ *    premier regard. Si l’une tombe, c’est D-021 qu’on rouvre.
  */
 import { TOKENS } from './tokens'
 
@@ -33,8 +39,11 @@ button, textarea {
 }
 
 /* ── FERMÉ — le lanceur ─────────────────────────────────────────────────────
-   ⛔ Il ne pulse pas, ne rebondit pas, n’affiche pas de badge. Au survol, il
-      s’élargit et révèle son libellé. Rien ne réclame l’attention. */
+   ⛔ Il ne pulse pas et ne rebondit pas. Au survol, il s’élargit et révèle son
+      libellé. Rien ne réclame l’attention.
+
+   ⚠️ Une seule chose s’y affiche : la pastille de réponse en attente, et
+      elle est une EXCEPTION écrite (D-021), pas la fin de la règle. */
 
 .lanceur {
   position: absolute;
@@ -481,7 +490,7 @@ button, textarea {
   color: var(--w-encre-2);
 }
 
-.notification__bouton {
+.notification__action {
   align-self: flex-end;
   padding: 4px var(--w-3);
   border: 1px solid var(--w-bord);
@@ -493,20 +502,34 @@ button, textarea {
   cursor: pointer;
 }
 
-.notification__bouton:hover {
+.notification__action:hover {
   background: var(--w-fond-2);
   border-color: var(--w-encre-3);
 }
 
+/* ⚠️ Le reste du widget rend son focus visible ; sans cette règle, le seul
+      bouton de la carte était le seul élément où le clavier se perdait. */
+.notification__action:focus-visible {
+  outline: 2px solid var(--w-accent);
+  outline-offset: 2px;
+}
+
+/* ⚠️ top: -2px / right: -2px la posait dans le VIDE : le lanceur est un galet
+      de 48 px à border-radius 999px, et le coin de sa boîte n’est pas dessiné.
+      À 6 px, le disque entier tombe à l’intérieur de l’arc — son centre est à
+      18,4 px du centre de l’arc, plus 5 px de rayon, contre 24 px — et il
+      affleure l’icône de 20 px sans la mordre.
+
+   ⚠️ Peinte en encre d’accent, pas en accent : la pastille est POSÉE SUR le
+      galet, pas à côté. En accent, elle serait invisible. */
 .lanceur__pastille {
   position: absolute;
-  top: -2px;
-  right: -2px;
+  top: 6px;
+  right: 6px;
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: var(--w-accent);
-  border: 2px solid var(--w-fond);
+  background: var(--w-accent-encre);
 }
 
 /* ── ⛔ prefers-reduced-motion ─────────────────────────────────────────────── */

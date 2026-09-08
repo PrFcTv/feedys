@@ -2,13 +2,13 @@
  * `POST /api/retours/:id/accuse` — l’accusé de réception du collaborateur.
  *
  * ⛔ Du routage, et rien d’autre.
- *    La logique et l'autorisation sont dans `domaine/retours/collaborateur.ts`.
+ *    La logique et l’autorisation sont dans `domaine/retours/collaborateur.ts`.
  */
 import { EN_TETE_CLE, EN_TETE_IDENTITE } from '../../../../../../../packages/widget/src/contrat'
 import type { MotifRefusAccuse } from '../../../../../domaine/retours/collaborateur'
 import { accuserReceptionCollaborateur } from '../../../../../domaine/retours/collaborateur'
 import { portsCollaborateur } from '../../../../../infra/composition'
-import { json, preflight } from '../../_reponses'
+import { ipDe, json, preflight } from '../../_reponses'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -19,7 +19,7 @@ const STATUT: Readonly<Record<MotifRefusAccuse, number>> = {
   origine_refusee: 403,
   identite_invalide: 401,
   retour_inconnu: 404,
-  auteur_refuse: 403,
+  debit_depasse: 429,
 }
 
 export function OPTIONS(requete: Request): Response {
@@ -39,6 +39,7 @@ export async function POST(
       cle: requete.headers.get(EN_TETE_CLE),
       identite: requete.headers.get(EN_TETE_IDENTITE),
       origine,
+      ip: ipDe(requete),
       maintenant: Date.now(),
     },
     portsCollaborateur(),

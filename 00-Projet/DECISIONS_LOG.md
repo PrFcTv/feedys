@@ -771,10 +771,37 @@ La notification s’effectue **directement dans le widget**, de façon discrète
 3. **Un accusé de lecture idempotent** :
    Cliquer sur « J’ai vu » appelle `POST /api/retours/:id/accuse` (qui pose `reponse_lue_le = now()`)
    et retire immédiatement la carte.
+   ⛔ **Et l’écriture côté développeur l’est aussi.** Reposer le même statut avec le même mot
+   ne réveille personne, et marquer sans fournir de mot n’efface pas celui qui était parti
+   ([`sql-statut.ts`](../apps/serveur/infra/base/sql-statut.ts)). Sans cette règle, corriger
+   une étiquette six semaines plus tard ressortait la carte à quelqu’un qui avait tourné la
+   page — le harcèlement poli que le produit refuse d’être.
 4. ⛔ **Strictement à sens unique** :
    Aucun champ texte pour répondre, aucun fil de discussion, aucun bouton de relance. Feedys ne devient
    pas un chat de support. La boucle d’information est fermée : le collaborateur sait que sa parole a
    été entendue et traitée, et le widget reste prêt pour un nouveau signalement.
+
+5. ⛔ **Le retour d’autrui est indiscernable du retour inexistant** :
+   `POST /api/retours/:id/accuse` rend le même `404` et le même motif dans les deux cas. Un refus
+   distinct ferait de cette route un oracle où n’importe quel collaborateur du produit énumère
+   les identifiants de ses collègues — dans un outil dont l’argument est justement qu’on y
+   parle librement.
+
+### ⚠️ Ce que cette décision RENVERSE, et qu’il faut dire
+
+`01-Specs/widget.md` écrivait, du lanceur : « elle ne pulse pas, ne rebondit pas, **n’affiche
+pas de badge** ». `ui/styles.ts` va plus loin et nomme le badge de non-lus parmi les trois
+choses qu’on laisse délibérément à Intercom, avec la bulle d’accueil automatique et les
+avatars.
+
+La pastille de réponse en attente **est** un badge de non-lus. C’est donc un renversement, pas
+une précision — et le dire coûte moins cher que de réécrire l’ancienne règle en « pas de
+badge *intrusif* » pour qu’elle cesse de gêner.
+
+Ce qui la sépare de celle d’Intercom : elle ne compte pas, elle ne s’anime pas, elle
+n’apparaît que sur un geste du développeur, et elle disparaît définitivement au premier
+regard. ⚠️ Si l’une de ces quatre conditions tombe, c’est cette décision qu’il faut rouvrir,
+pas la pastille qu’il faut ajuster.
 
 ### Les invariants préservés
 

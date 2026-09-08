@@ -113,3 +113,31 @@ describe('les lignes d’audit', () => {
     })
   })
 })
+
+describe('le mot au collaborateur', () => {
+  it('⛔ refuse un mot avec le statut « lu » plutôt que de le jeter en silence', () => {
+    const lu = lireChangementStatut({ statut: 'lu', reponse: 'Corrigé ce matin' })
+
+    expect(lu.ok).toBe(false)
+  })
+
+  it('accepte « lu » quand le champ est vide — le formulaire le poste toujours', () => {
+    const lu = lireChangementStatut({ statut: 'lu', reponse: '' })
+
+    expect(lu).toEqual({ ok: true, valeur: { statut: 'lu' } })
+  })
+
+  it('⛔ un champ VIDE ne dit pas « efface », il dit « je n’y touche pas »', () => {
+    const lu = lireChangementStatut({ statut: 'traite', reponse: '   ' })
+
+    // ⚠️ `reponse` ABSENTE, et pas `reponse: null` : c’est cette absence que
+    //    `ecritureStatut` lit pour ne PAS réécrire la colonne.
+    expect(lu).toEqual({ ok: true, valeur: { statut: 'traite' } })
+  })
+
+  it('garde le mot, débarrassé de ses blancs', () => {
+    const lu = lireChangementStatut({ statut: 'traite', reponse: '  Corrigé ce matin  ' })
+
+    expect(lu).toEqual({ ok: true, valeur: { statut: 'traite', reponse: 'Corrigé ce matin' } })
+  })
+})

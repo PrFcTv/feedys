@@ -356,18 +356,13 @@ export const SchemaReponseCollaborateur = z
 
 export type ReponseCollaborateur = z.infer<typeof SchemaReponseCollaborateur>
 
-export const SchemaListeReponsesCollaborateur = z
-  .object({
-    retours: z.array(SchemaReponseCollaborateur),
-  })
-  .strict()
-
-export type ListeReponsesCollaborateur = z.infer<typeof SchemaListeReponsesCollaborateur>
-
-/** Analyse la liste de réponses rendue au collaborateur. */
-export function analyserReponsesCollaborateur(valeur: unknown): Analyse<ListeReponsesCollaborateur> {
-  return analyser(SchemaListeReponsesCollaborateur, valeur)
-}
+/**
+ * ⚠️ Il n’y a PAS d’`analyserReponsesCollaborateur` ici, et c’est délibéré : le
+ *    seul lecteur de cette liste est le widget, et le widget ne peut pas
+ *    importer une valeur de ce fichier sans embarquer zod (voir `budget.test.ts`).
+ *    Sa validation vit dans `releve.ts`, à la main. Un analyseur zod ici
+ *    n’aurait eu aucun appelant — il en avait zéro quand P-020 l’a écrit.
+ */
 
 function analyser<T>(schema: z.ZodType<T>, valeur: unknown): Analyse<T> {
   const resultat = schema.safeParse(valeur)

@@ -28,10 +28,14 @@ const PRODUIT_VALIDE = {
   contexteMetier: null,
 }
 
+const IP = '203.0.113.7'
+
 function creerBouchon(options: {
   reponses?: readonly ReponseCollaborateur[]
   auteurRef?: string | null
   produit?: typeof PRODUIT_VALIDE | null
+  /** ⚠️ Par défaut les compteurs laissent tout passer : ils ont leur propre test. */
+  debitOk?: boolean
 } = {}): PortsCollaborateur {
   const depot: PortDepotCollaborateur = {
     releverReponses: vi.fn().mockResolvedValue(options.reponses ?? []),
@@ -43,7 +47,13 @@ function creerBouchon(options: {
     produitParCle: vi.fn().mockResolvedValue(options.produit !== undefined ? options.produit : PRODUIT_VALIDE),
   }
 
-  return { produits, depot }
+  const passe = options.debitOk ?? true
+  const debit = {
+    cle: { autoriser: vi.fn().mockReturnValue(passe) },
+    ip: { autoriser: vi.fn().mockReturnValue(passe) },
+  }
+
+  return { produits, depot, debit }
 }
 
 function jetonValide(ref = 'usr_42', expSecondes = Math.floor(MAINTENANT / 1_000) + 3_600): string {
@@ -54,7 +64,7 @@ describe('releverReponsesCollaborateur', () => {
   it('refuse si la clé publique est absente', async () => {
     const ports = creerBouchon()
     const resultat = await releverReponsesCollaborateur(
-      { cle: null, identite: null, origine: 'https://app.exemple.fr', maintenant: MAINTENANT },
+      { cle: null, identite: null, origine: 'https://app.exemple.fr', ip: IP, maintenant: MAINTENANT },
       ports,
     )
 
@@ -68,7 +78,7 @@ describe('releverReponsesCollaborateur', () => {
   it('refuse si le produit est inconnu ou inactif', async () => {
     const ports = creerBouchon({ produit: null })
     const resultat = await releverReponsesCollaborateur(
-      { cle: 'fdy_pub_inconnue', identite: null, origine: 'https://app.exemple.fr', maintenant: MAINTENANT },
+      { cle: 'fdy_pub_inconnue', identite: null, origine: 'https://app.exemple.fr', ip: IP, maintenant: MAINTENANT },
       ports,
     )
 
@@ -79,7 +89,7 @@ describe('releverReponsesCollaborateur', () => {
   it('refuse si l’origine n’est pas autorisée', async () => {
     const ports = creerBouchon()
     const resultat = await releverReponsesCollaborateur(
-      { cle: 'fdy_pub_test', identite: null, origine: 'https://pirate.exemple.com', maintenant: MAINTENANT },
+      { cle: 'fdy_pub_test', identite: null, origine: 'https://pirate.exemple.com', ip: IP, maintenant: MAINTENANT },
       ports,
     )
 
@@ -100,7 +110,7 @@ describe('releverReponsesCollaborateur', () => {
       ],
     })
     const resultat = await releverReponsesCollaborateur(
-      { cle: 'fdy_pub_test', identite: null, origine: 'https://app.exemple.fr', maintenant: MAINTENANT },
+      { cle: 'fdy_pub_test', identite: null, origine: 'https://app.exemple.fr', ip: IP, maintenant: MAINTENANT },
       ports,
     )
 
@@ -112,7 +122,7 @@ describe('releverReponsesCollaborateur', () => {
     const ports = creerBouchon()
     const jetonExpire = jetonValide('usr_42', Math.floor(MAINTENANT / 1_000) - 60)
     const resultatExpire = await releverReponsesCollaborateur(
-      { cle: 'fdy_pub_test', identite: jetonExpire, origine: 'https://app.exemple.fr', maintenant: MAINTENANT },
+      { cle: 'fdy_pub_test', identite: jetonExpire, origine: 'https://app.exemple.fr', ip: IP, maintenant: MAINTENANT },
       ports,
     )
 
@@ -120,7 +130,7 @@ describe('releverReponsesCollaborateur', () => {
 
     const jetonFaux = `${jetonValide('usr_42')}_altere`
     const resultatFaux = await releverReponsesCollaborateur(
-      { cle: 'fdy_pub_test', identite: jetonFaux, origine: 'https://app.exemple.fr', maintenant: MAINTENANT },
+      { cle: 'fdy_pub_test', identite: jetonFaux, origine: 'https://app.exemple.fr', ip: IP, maintenant: MAINTENANT },
       ports,
     )
 
@@ -139,7 +149,7 @@ describe('releverReponsesCollaborateur', () => {
     ]
     const ports = creerBouchon({ reponses: reponsesAttendues })
     const resultat = await releverReponsesCollaborateur(
-      { cle: 'fdy_pub_test', identite: jetonValide('usr_42'), origine: 'https://app.exemple.fr', maintenant: MAINTENANT },
+      { cle: 'fdy_pub_test', identite: jetonValide('usr_42'), origine: 'https://app.exemple.fr', ip: IP, maintenant: MAINTENANT },
       ports,
     )
 
@@ -152,7 +162,7 @@ describe('accuserReceptionCollaborateur', () => {
   it('refuse si l’identité est absente ou invalide', async () => {
     const ports = creerBouchon()
     const resultat = await accuserReceptionCollaborateur(
-      { retourId: 'ret_1', cle: 'fdy_pub_test', identite: null, origine: 'https://app.exemple.fr', maintenant: MAINTENANT },
+      { retourId: 'ret_1', cle: 'fdy_pub_test', identite: null, origine: 'https://app.exemple.fr', ip: IP, maintenant: MAINTENANT },
       ports,
     )
 
@@ -171,6 +181,7 @@ describe('accuserReceptionCollaborateur', () => {
         cle: 'fdy_pub_test',
         identite: jetonValide('usr_42'),
         origine: 'https://app.exemple.fr',
+        ip: IP,
         maintenant: MAINTENANT,
       },
       ports,
@@ -183,7 +194,7 @@ describe('accuserReceptionCollaborateur', () => {
     })
   })
 
-  it('⛔ refuse si l’auteur du retour n’est pas le titulaire de l’identité signée', async () => {
+  it('⛔ rend le MÊME refus qu’un retour inexistant quand le retour est à quelqu’un d’autre', async () => {
     const ports = creerBouchon({ auteurRef: 'usr_victime' })
     const resultat = await accuserReceptionCollaborateur(
       {
@@ -191,6 +202,7 @@ describe('accuserReceptionCollaborateur', () => {
         cle: 'fdy_pub_test',
         identite: jetonValide('usr_imposteur'),
         origine: 'https://app.exemple.fr',
+        ip: IP,
         maintenant: MAINTENANT,
       },
       ports,
@@ -198,8 +210,8 @@ describe('accuserReceptionCollaborateur', () => {
 
     expect(resultat).toEqual({
       ok: false,
-      motif: 'auteur_refuse',
-      message: 'Vous n’êtes pas l’auteur de ce retour.',
+      motif: 'retour_inconnu',
+      message: 'Ce retour n’existe pas pour ce produit.',
     })
     expect(ports.depot.accuserReception).not.toHaveBeenCalled()
   })
@@ -212,6 +224,7 @@ describe('accuserReceptionCollaborateur', () => {
         cle: 'fdy_pub_test',
         identite: jetonValide('usr_42'),
         origine: 'https://app.exemple.fr',
+        ip: IP,
         maintenant: MAINTENANT,
       },
       ports,
@@ -228,6 +241,7 @@ describe('accuserReceptionCollaborateur', () => {
       cle: 'fdy_pub_test',
       identite: jetonValide('usr_42'),
       origine: 'https://app.exemple.fr',
+      ip: IP,
       maintenant: MAINTENANT,
     }
 

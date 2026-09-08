@@ -108,7 +108,11 @@ export default async function FicheRetour({ params }: { params: Promise<{ id: st
         note="⛔ des étiquettes, pas de la parole — ni le résumé, ni les citations, ni le fil"
       >
         <div className="flex flex-col gap-4">
-          <FormulaireStatut action={poserStatut} statut={fiche.statut} reponseInitiale={fiche.reponseTexte} />
+          <FormulaireStatut
+            action={poserStatut}
+            statut={fiche.statut}
+            reponseEnvoyee={fiche.reponseTexte !== null}
+          />
           {fiche.reponseEnvoyeeLe ? (
             <p className="text-[13px] text-encre-3">
               Réponse envoyée le {dateComplete(fiche.reponseEnvoyeeLe, fiche.contexte?.fuseau)}

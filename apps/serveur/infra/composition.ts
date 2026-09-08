@@ -16,7 +16,7 @@ import type { PortsIngestion } from '../domaine/retours/ingestion'
 import type { PortsSynthese } from '../domaine/synthese/produire'
 import type { PortsTour } from '../domaine/entretien/tour'
 import { MAX_RELANCES } from '../domaine/entretien/tour'
-import { creerDebitEntretien, creerDebitIngestion } from '../domaine/retours/debit'
+import { creerDebitCollaborateur, creerDebitEntretien, creerDebitIngestion } from '../domaine/retours/debit'
 import { etiquettesDe, produireSynthese } from '../domaine/synthese/produire'
 import { modeleClaude } from '../domaine/entretien/modele'
 
@@ -56,10 +56,18 @@ export function portsIngestion(): PortsIngestion {
   }
 }
 
+/**
+ * ⚠️ Les limiteurs sont créés UNE fois au chargement du module, pas à chaque
+ *    appel : des compteurs reconstruits à chaque requête ne compteraient rien.
+ *    Même raison que `debit` et `debitEntretien` plus haut.
+ */
+const debitCollaborateur = creerDebitCollaborateur()
+
 export function portsCollaborateur(): PortsCollaborateur {
   return {
     produits: creerDepotRetours(pool()),
     depot: creerDepotCollaborateur(pool()),
+    debit: debitCollaborateur,
   }
 }
 
