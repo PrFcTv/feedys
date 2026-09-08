@@ -45,6 +45,11 @@ export const BORNES = {
   zone: 200,
   /** ⚠️ Un agent qui liste veut une page, pas un export. */
   limite: 100,
+  /** Le mot au collaborateur — même borne qu’au back-office et qu’en base. */
+  reponse: 500,
+  /** ⚠️ Un SHA fait 40 caractères ; une URL de PR dépasse rarement 200. */
+  correctifRef: 200,
+  correctifNote: 500,
 } as const
 
 // ── lister_retours ──────────────────────────────────────────────────────────
@@ -93,6 +98,37 @@ export const TourFil = z.object({
 
 export type TourFil = z.infer<typeof TourFil>
 
+/**
+ * Ce qui est déjà parti au collaborateur, et s’il l’a vu.
+ *
+ * ⚠️ Sans ça, un agent qui rouvre un retour six semaines plus tard réécrit le
+ *    même mot à quelqu’un qui l’a déjà lu. Il ne le savait pas : le serveur
+ *    tenait l’idempotence tout seul, et n’en disait rien.
+ */
+export const EtatReponse = z.object({
+  texte: z.string().nullable(),
+  envoyee_le: z.string().nullable(),
+  lue_le: z.string().nullable(),
+})
+
+export type EtatReponse = z.infer<typeof EtatReponse>
+
+/**
+ * Ce qui a déjà corrigé ce retour.
+ *
+ * ⚠️ `url` est composée par le serveur à partir de `url_forge` du produit — un
+ *    SHA nu n’est cliquable nulle part. `null` quand le produit n’a pas de
+ *    dépôt déclaré.
+ */
+export const EtatCorrectif = z.object({
+  ref: z.string().nullable(),
+  note: z.string().nullable(),
+  le: z.string().nullable(),
+  url: z.string().nullable(),
+})
+
+export type EtatCorrectif = z.infer<typeof EtatCorrectif>
+
 export const ReponseRetour = z.object({
   id: z.string(),
   statut: z.enum(STATUTS),
@@ -107,18 +143,111 @@ export const ReponseRetour = z.object({
   modele: z.string().nullable(),
   fil: z.array(TourFil),
   contexte: z.record(z.string(), z.unknown()).nullable(),
+  /** ⚠️ `null` tant que personne n’a rien dit au collaborateur. */
+  reponse: EtatReponse.nullable(),
+  /** ⚠️ `null` tant que rien n’a corrigé ce retour. */
+  correctif: EtatCorrectif.nullable(),
 })
 
 export type ReponseRetour = z.infer<typeof ReponseRetour>
 
 // ── marquer_retour ──────────────────────────────────────────────────────────
 
+/**
+ * ⛔ **UN SHA HEXADÉCIMAL, OU UNE URL HTTPS. RIEN D’AUTRE.** Sans forme
+ *    imposée, un agent écrit « corrigé » dans le champ prévu pour le commit, et
+ *    la traçabilité ne trace plus rien.
+ *
+ * ⛔ ET LE SERVEUR NE VÉRIFIE JAMAIS QUE CE COMMIT EXISTE. Aller le demander à
+ *    GitHub ferait entrer dans Feedys un jeton de forge, une dépendance réseau
+ *    et un périmètre qui n’est pas le sien. La forme est vérifiée, le fond est
+ *    cru sur parole — et c’est écrit pour que personne ne s’y trompe
+ *    (00-Projet/DECISIONS_LOG.md, D-024).
+ */
+export const FORME_CORRECTIF_REF = /^(?:[0-9a-f]{7,40}|https:\/\/[^\s]{3,190})$/
+
+/** ⚠️ Un correctif tout blanc vaut un correctif absent : deux espaces ne tracent rien. */
+function vide(correctif: { ref?: string | undefined; note?: string | undefined }): boolean {
+  return (correctif.ref ?? '').trim() === '' && (correctif.note ?? '').trim() === ''
+}
+
+/**
+ * Ce qui a corrigé le retour.
+ *
+ * ⛔ `note` s’adresse à un DÉVELOPPEUR, `reponse` s’adresse au COLLABORATEUR.
+ *    Les deux voyagent dans le même appel et ne se recopient jamais l’une dans
+ *    l’autre : « corrigé dans useTableState » n’a aucun sens pour quelqu’un qui
+ *    a dit « le tri se remet à zéro ».
+ *
+ * ⚠️ `ref` OU `note` — au moins l’un des deux. Un correctif vide serait une
+ *    case cochée, pas une trace.
+ */
+export const Correctif = z
+  .object({
+    ref: z.string().max(BORNES.correctifRef).regex(FORME_CORRECTIF_REF).optional(),
+    note: z.string().max(BORNES.correctifNote).optional(),
+  })
+  .strict()
+  .refine((valeur) => vide(valeur) === false, {
+    message: 'Un correctif porte au moins une `ref` ou une `note`.',
+  })
+
+export type Correctif = z.infer<typeof Correctif>
+
+/**
+ * Ce qui interdit un marquage, dit en une phrase — ou `null` s’il passe.
+ *
+ * ⚠️ Une seule source pour ces mots : l’outil MCP les rend à l’agent tels
+ *    quels, et le serveur s’en sert pour refuser. Les écrire deux fois, c’était
+ *    garantir qu’un jour l’agent lise une règle que le serveur n’applique plus.
+ */
+export function refusDuMarquage(valeur: {
+  readonly statut: string
+  readonly reponse?: string | undefined
+  readonly correctif?: { ref?: string | undefined; note?: string | undefined } | undefined
+}): string | null {
+  const correctif = valeur.correctif === undefined || vide(valeur.correctif) ? undefined : valeur.correctif
+
+  // ⛔ `lu` ne dit rien à personne : ni un mot au collaborateur, ni un
+  //    correctif. Accepter puis jeter en silence afficherait « enregistré » à
+  //    qui vient d’écrire un message que personne ne lira jamais.
+  if (valeur.statut === 'lu') {
+    if ((valeur.reponse ?? '').trim() !== '') {
+      return 'Un mot au collaborateur ne part qu’avec « traite » ou « ecarte ». Avec « lu », personne n’est notifié.'
+    }
+    if (correctif !== undefined) {
+      return 'Un correctif se consigne avec « traite ». « lu » veut dire « j’ai lu », pas « j’ai corrigé ».'
+    }
+  }
+
+  // ⛔ Le point du dispositif : « traité » cesse d’être une affirmation et
+  //    devient une trace vérifiable. `note` est l’échappatoire honnête quand
+  //    le correctif n’est pas un commit — une configuration, un déploiement.
+  if (valeur.statut === 'traite' && correctif === undefined) {
+    return (
+      'Marquer « traite » exige un `correctif` : `{ ref }` avec le SHA du commit ou l’URL de la PR, ' +
+      'et/ou `{ note }` décrivant ce qui a été changé quand le correctif n’est pas un commit. ' +
+      'Rien à corriger ? C’est « ecarte ».'
+    )
+  }
+
+  return null
+}
+
 export const RequeteStatut = z
   .object({
     statut: z.enum(STATUTS_MARQUABLES),
-    reponse: z.string().max(500).optional(),
+    reponse: z.string().max(BORNES.reponse).optional(),
+    correctif: Correctif.optional(),
   })
   .strict()
+  // ⚠️ Message générique volontairement : la route rend `requete_refusee` et
+  //    n’expose aucun détail. Les mots qui aident, c’est l’outil MCP qui les
+  //    dit, avec `refusDuMarquage`, AVANT de partir sur le réseau.
+  .refine((valeur) => refusDuMarquage(valeur) === null, {
+    message: 'Ce marquage ne respecte pas les règles de `refusDuMarquage`.',
+  })
+
 export type RequeteStatut = z.infer<typeof RequeteStatut>
 
 export const ReponseStatut = z.object({ id: z.string(), statut: z.enum(STATUTS_MARQUABLES) })

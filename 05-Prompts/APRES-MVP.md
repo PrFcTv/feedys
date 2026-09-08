@@ -23,6 +23,13 @@ ce qu’on imagine.
 | P-021 · le rejeu des trente secondes | [ROADMAP] ② | 🔒 après P-019 |
 | P-022 · l’audio réécoutable | [ROADMAP] ③ | 🔒 après P-019 |
 | P-023 · l’écran de gestion des produits | [ROADMAP] ⑤ | 🔒 après P-019 |
+| P-024 · la traçabilité du correctif | prolonge P-020 côté MCP | ✅ fait — **hors séquence** |
+
+⚠️ **P-024 n’a pas de section de prompt ci-dessous, et c’est normal** : il est né d’une relecture
+de P-020, pas de la planification. Ce qu’il fait tient dans
+[tracabilite-du-correctif.md](../01-Specs/tracabilite-du-correctif.md) et
+[D-024](../00-Projet/DECISIONS_LOG.md) — « traité » n’est plus une affirmation, il porte ce qui a
+corrigé. Les numéros ne se réattribuent pas : P-021 à P-023 restent ce qu’ils étaient.
 
 [MVP.md]: MVP.md
 [ROADMAP]: ../00-Projet/ROADMAP.md

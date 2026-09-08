@@ -14,6 +14,7 @@ import { notFound } from 'next/navigation'
 import { dateComplete } from '../../../../../domaine/backoffice/dates'
 import { exigerSession } from '../../../../../infra/backoffice/garde'
 import { pool } from '../../../../../infra/base/connexion'
+import type { Fiche } from '../../../../../infra/base/depot-bo'
 import { creerDepotBackOffice } from '../../../../../infra/base/depot-bo'
 import { Fil } from '../../../../../ui/bo/fil'
 import { BlocContexte } from '../../../../../ui/bo/contexte'
@@ -43,6 +44,52 @@ function Section({
       </div>
       {children}
     </section>
+  )
+}
+
+/**
+ * Ce qui a corrigé ce retour.
+ *
+ * ⛔ EN LECTURE SEULE, et c’est délibéré : le correctif se consigne par
+ *    `marquer_retour`, là où l’agent a le dépôt sous la main. Un champ de plus
+ *    ici élargirait la surface modifiable à la main, que cette fiche garde
+ *    étroite exprès (01-Specs/back-office.md).
+ *
+ * ⚠️ Sans cet affichage, la trace n’existerait que pour la machine — et
+ *    personne ne remarquerait qu’elle est vide.
+ */
+function BlocCorrectif({
+  correctif,
+  fuseau,
+}: {
+  correctif: Fiche['correctif']
+  fuseau: string | null | undefined
+}) {
+  if (correctif === null) return null
+
+  return (
+    <p className="text-[13px] text-encre-3">
+      Corrigé{correctif.le ? ` le ${dateComplete(correctif.le, fuseau)}` : ''}
+      {correctif.ref ? ' · ' : ''}
+      {correctif.ref ? (
+        correctif.url ? (
+          // ⚠️ `noreferrer` : la forge n’a pas à savoir d’où vient le clic.
+          <a
+            href={correctif.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono underline underline-offset-2 hover:text-encre"
+          >
+            {correctif.ref}
+          </a>
+        ) : (
+          // ⚠️ Pas de dépôt déclaré sur le produit : la référence reste
+          //    lisible, elle n’est simplement pas cliquable.
+          <span className="font-mono">{correctif.ref}</span>
+        )
+      ) : null}
+      {correctif.note ? ` — « ${correctif.note} »` : ''}
+    </p>
   )
 }
 
@@ -122,6 +169,7 @@ export default async function FicheRetour({ params }: { params: Promise<{ id: st
                 : ' · en attente de lecture'}
             </p>
           ) : null}
+          <BlocCorrectif correctif={fiche.correctif} fuseau={fiche.contexte?.fuseau} />
           <FormulaireEtiquettes action={poserEtiquettes} type={fiche.type} zone={fiche.zone} />
         </div>
       </Section>

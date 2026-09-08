@@ -8,7 +8,18 @@
 import { parseArgs } from 'node:util'
 
 export const USAGE_PRODUIT =
-  'Usage : pnpm produit:creer -- --nom "VictorIA" --domaine victoria.exemple.fr [--metier "Contexte métier"]'
+  'Usage : pnpm produit:creer -- --nom "VictorIA" --domaine victoria.exemple.fr ' +
+  '[--metier "Contexte métier"] [--forge https://github.com/org/depot]'
+
+/**
+ * ⛔ `--forge` doit être une URL https, et on le dit MAINTENANT plutôt que de
+ *    l’accepter puis de ne jamais composer le moindre lien : un correctif dont
+ *    le SHA n’est pas cliquable a l’air d’un défaut d’affichage, et on
+ *    chercherait le bug ailleurs.
+ */
+export const USAGE_FORGE =
+  '--forge attend l’URL https du dépôt, par exemple https://github.com/org/depot. ' +
+  'Elle ne sert qu’à rendre un SHA de correctif cliquable — Feedys ne l’appelle jamais.'
 
 export const USAGE_REJOUER =
   'Usage : pnpm entretien:rejouer -- --retour <id> [--modele <id>] [--prompt] [--synthese]'
@@ -22,6 +33,7 @@ export function lireArgumentsProduit(argv: readonly string[]): {
   nom: string
   domaine: string
   metier?: string
+  forge?: string
 } {
   const args = [...argv]
   while (args[0] === '--') args.shift()
@@ -32,16 +44,19 @@ export function lireArgumentsProduit(argv: readonly string[]): {
       nom: { type: 'string' },
       domaine: { type: 'string' },
       metier: { type: 'string' },
+      forge: { type: 'string' },
     },
   })
 
   const nom = values.nom?.trim()
   const domaine = values.domaine?.trim()
   const metier = values.metier?.trim() || undefined
+  const forge = values.forge?.trim() || undefined
 
   if (!nom || !domaine) throw new Error(USAGE_PRODUIT)
+  if (forge !== undefined && !forge.startsWith('https://')) throw new Error(USAGE_FORGE)
 
-  return { nom, domaine, ...(metier ? { metier } : {}) }
+  return { nom, domaine, ...(metier ? { metier } : {}), ...(forge ? { forge } : {}) }
 }
 
 /**

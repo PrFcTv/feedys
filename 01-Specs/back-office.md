@@ -86,6 +86,13 @@ renseigner une réponse optionnelle (500 caractères au plus, voir [retour-au-co
 Le serveur pose `reponse_texte` et horodate `reponse_envoyee_le`. La fiche affiche ensuite l’état de
 l’accusé (`reponse_lue_le`) dès que le collaborateur a cliqué « J’ai vu » dans son widget.
 
+⚠️ **Le correctif est AFFICHÉ, jamais saisi.** Sous le formulaire de statut, la fiche montre ce qui
+a réparé le retour — « Corrigé le 8 septembre 2026 · `a1b2c3d4` — “reset du tri corrigé dans
+useTableState” » —, le SHA cliquable quand le produit a une `url_forge`.
+⛔ **Il ne se consigne que par `marquer_retour`**, là où l’agent a le dépôt sous la main : un champ
+de plus ici élargirait la surface modifiable à la main, qu’on garde étroite exprès
+([tracabilite-du-correctif.md](tracabilite-du-correctif.md) §6).
+
 ⛔ **Ni le résumé, ni les citations, ni le fil.** Le texte d’un `message` ne se modifie jamais et ne
 se supprime jamais, ni par le back-office, ni par le MCP, ni pour corriger une typo
 ([conventions-db.md](../04-Architecture/conventions-db.md)).

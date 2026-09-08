@@ -102,9 +102,12 @@ beforeAll(async () => {
   process.env['DATABASE_URL'] = url.toString()
   process.env['FEEDYS_MCP_JETON'] = JETON
 
+  // ⚠️ `url_forge` est posée ici : c’est elle qui rend un SHA cliquable, et son
+  //    absence était indiscernable d’un bug d’affichage (P-024).
   await client.query(
-    `insert into produits (id, nom, domaine, cle_publique, secret_hash)
-     values ('prod_1', 'Pistache', 'pistache.exemple.fr', 'fdy_pub_essai_mcp', 'argon2-bidon')`,
+    `insert into produits (id, nom, domaine, cle_publique, secret_hash, url_forge)
+     values ('prod_1', 'Pistache', 'pistache.exemple.fr', 'fdy_pub_essai_mcp', 'argon2-bidon',
+             'https://github.com/exemple/pistache')`,
   )
 }, 60_000)
 
@@ -219,11 +222,12 @@ describe('lire_retour', () => {
 
 describe('marquer_retour', () => {
   it('change le statut et journalise', async () => {
-    expect(await outils().marquer(bugId, { statut: 'traite' })).toEqual({
+    // ⚠️ `lu` : le seul marquage qui n’exige rien, parce qu’il n’affirme rien.
+    expect(await outils().marquer(bugId, { statut: 'lu' })).toEqual({
       id: bugId,
-      statut: 'traite',
+      statut: 'lu',
     })
-    expect(await statutEnBase(bugId)).toBe('traite')
+    expect(await statutEnBase(bugId)).toBe('lu')
 
     const { rows } = await client.query(
       'select acteur, action, detail from audit where retour_id = $1',
@@ -232,7 +236,7 @@ describe('marquer_retour', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]?.['acteur']).toBe('developpeur')
     // ⚠️ Par où c’est passé : sans ça, on devine six mois plus tard.
-    expect(rows[0]?.['detail']).toEqual({ avant: 'envoye', apres: 'traite', par: 'mcp' })
+    expect(rows[0]?.['detail']).toEqual({ avant: 'envoye', apres: 'lu', par: 'mcp' })
   })
 
   it('⛔ refuse un statut que le SERVEUR écrit', async () => {
@@ -274,6 +278,136 @@ describe('marquer_retour', () => {
 
     const { rows } = await client.query('select count(*)::int as n from audit')
     expect(rows[0]?.['n']).toBe(0)
+  })
+})
+
+/**
+ * ⛔ Ce qui se joue ici : « traité » cesse d’être une affirmation et devient une
+ *    trace vérifiable — et cette trace ne s’efface jamais toute seule
+ *    (01-Specs/tracabilite-du-correctif.md).
+ */
+describe('marquer_retour · le correctif', () => {
+  const SHA = 'a1b2c3d4e5f6'
+
+  async function correctifEnBase(id: string) {
+    const { rows } = await client.query(
+      'select correctif_ref, correctif_note, correctif_le from retours where id = $1',
+      [id],
+    )
+    return rows[0] as {
+      correctif_ref: string | null
+      correctif_note: string | null
+      correctif_le: Date | null
+    }
+  }
+
+  it('consigne la référence et la note, et les journalise', async () => {
+    await outils().marquer(bugId, {
+      statut: 'traite',
+      correctif: { ref: SHA, note: 'reset du tri corrigé dans useTableState' },
+    })
+
+    const trace = await correctifEnBase(bugId)
+    expect(trace.correctif_ref).toBe(SHA)
+    expect(trace.correctif_note).toBe('reset du tri corrigé dans useTableState')
+    expect(trace.correctif_le).toBeInstanceOf(Date)
+
+    const { rows } = await client.query('select detail from audit where retour_id = $1', [bugId])
+    expect(rows[0]?.['detail']).toMatchObject({
+      apres: 'traite',
+      par: 'mcp',
+      correctif: { ref: SHA, note: 'reset du tri corrigé dans useTableState' },
+    })
+  })
+
+  it('⛔ rejouer le MÊME marquage ne fait pas croire à une seconde correction', async () => {
+    await outils().marquer(bugId, { statut: 'traite', correctif: { ref: SHA } })
+    const premier = await correctifEnBase(bugId)
+
+    await outils().marquer(bugId, { statut: 'traite', correctif: { ref: SHA } })
+    const second = await correctifEnBase(bugId)
+
+    // ⛔ L’ÉTAT est identique — c’est ça, `idempotentHint: true`.
+    expect(second.correctif_le?.getTime()).toBe(premier.correctif_le?.getTime())
+
+    // ⚠️ L’HISTORIQUE, lui, s’empile : deux marquages, deux lignes d’audit.
+    const { rows } = await client.query(
+      'select count(*)::int as n from audit where retour_id = $1',
+      [bugId],
+    )
+    expect(rows[0]?.['n']).toBe(2)
+  })
+
+  it('un correctif RÉELLEMENT nouveau repose l’horodatage', async () => {
+    await outils().marquer(bugId, { statut: 'traite', correctif: { ref: SHA } })
+    const premier = await correctifEnBase(bugId)
+
+    await outils().marquer(bugId, { statut: 'traite', correctif: { ref: 'f6e5d4c3b2a1' } })
+    const second = await correctifEnBase(bugId)
+
+    expect(second.correctif_ref).toBe('f6e5d4c3b2a1')
+    expect(second.correctif_le!.getTime()).toBeGreaterThanOrEqual(premier.correctif_le!.getTime())
+  })
+
+  it('⛔ un marquage ultérieur SANS correctif n’efface pas celui qui était là', async () => {
+    await outils().marquer(bugId, { statut: 'traite', correctif: { ref: SHA } })
+    await outils().marquer(bugId, { statut: 'ecarte' })
+
+    // ⛔ Le défaut évité : reclasser un retour six semaines plus tard ferait
+    //    disparaître le commit qui l’avait réparé.
+    expect((await correctifEnBase(bugId)).correctif_ref).toBe(SHA)
+  })
+
+  it('⛔ le SERVEUR refuse « traite » sans correctif — pas seulement l’outil', async () => {
+    const reponse = await aller(`${ORIGINE}/api/mcp/retours/${bugId}/statut`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${JETON}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ statut: 'traite' }),
+    })
+
+    expect(reponse.status).toBe(400)
+    expect(await statutEnBase(bugId)).toBe('envoye')
+  })
+
+  it('⛔ le serveur refuse une référence qui n’est ni un SHA ni une URL', async () => {
+    const reponse = await aller(`${ORIGINE}/api/mcp/retours/${bugId}/statut`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${JETON}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ statut: 'traite', correctif: { ref: 'corrigé hier' } }),
+    })
+
+    expect(reponse.status).toBe(400)
+    expect(await statutEnBase(bugId)).toBe('envoye')
+  })
+
+  it('lire_retour rend le mot au collaborateur ET le correctif, lien composé', async () => {
+    await outils().marquer(bugId, {
+      statut: 'traite',
+      reponse: 'Le tri garde son ordre maintenant.',
+      correctif: { ref: SHA, note: 'useTableState' },
+    })
+
+    const retour = await outils().lire(bugId)
+
+    // ⚠️ Sans ça, un agent qui rouvre le retour réécrit le même mot à quelqu’un
+    //    qui l’a déjà lu : le serveur tenait l’idempotence sans en rien dire.
+    expect(retour.reponse).toMatchObject({
+      texte: 'Le tri garde son ordre maintenant.',
+      lue_le: null,
+    })
+    expect(retour.correctif).toMatchObject({
+      ref: SHA,
+      note: 'useTableState',
+      // ⛔ Composé à partir de `url_forge`, JAMAIS appelé (D-024).
+      url: `https://github.com/exemple/pistache/commit/${SHA}`,
+    })
+  })
+
+  it('rend null des deux côtés tant que rien n’est arrivé', async () => {
+    const retour = await outils().lire(bugId)
+
+    expect(retour.reponse).toBeNull()
+    expect(retour.correctif).toBeNull()
   })
 })
 

@@ -18,11 +18,12 @@ import type {
   ReponseRetour,
   RequeteStatut,
 } from '../../../../packages/mcp/src/contrat'
+import { lienCorrectif } from '../../domaine/retours/correctif'
 import { analyserSynthese } from '../../domaine/synthese/schema'
 import { identifiant } from '../identifiants'
 
 import type { Bassin } from './depot-retours'
-import { ecritureStatut } from './sql-statut'
+import { ecritureCorrectif, ecritureStatut } from './sql-statut'
 
 /** ⚠️ Un agent qui liste veut une page, pas un export. */
 const LIMITE_PAR_DEFAUT = 25
@@ -45,7 +46,9 @@ const LISTE = `
 const RETOUR = `
   select r.id, r.statut, r.source, r.auteur_nom, r.auteur_role,
          r.identite_verifiee, r.cree_le,
-         p.nom as produit,
+         r.reponse_texte, r.reponse_envoyee_le, r.reponse_lue_le,
+         r.correctif_ref, r.correctif_note, r.correctif_le,
+         p.nom as produit, p.url_forge,
          s.contenu, s.modele,
          c.url, c.titre_page, c.ecran, c.selecteur_dom, c.navigateur, c.systeme,
          c.viewport_l, c.viewport_h, c.fuseau
@@ -103,6 +106,40 @@ function contexteDe(ligne: Record<string, unknown>): Record<string, unknown> | n
   )
 
   return Object.keys(garde).length === 0 ? null : garde
+}
+
+function isoOuNul(valeur: unknown): string | null {
+  return valeur instanceof Date ? valeur.toISOString() : null
+}
+
+/**
+ * ⚠️ `null` tant que personne n’a rien dit au collaborateur. Sans ce bloc, un
+ *    agent qui rouvre un retour six semaines plus tard réécrit le même mot à
+ *    quelqu’un qui l’a déjà lu : le serveur tenait l’idempotence tout seul, et
+ *    n’en disait rien à personne.
+ */
+function reponseDe(ligne: Record<string, unknown>): ReponseRetour['reponse'] {
+  const texte = ouNul(ligne['reponse_texte'])
+  const envoyeeLe = isoOuNul(ligne['reponse_envoyee_le'])
+
+  if (texte === null && envoyeeLe === null) return null
+
+  return { texte, envoyee_le: envoyeeLe, lue_le: isoOuNul(ligne['reponse_lue_le']) }
+}
+
+/** ⚠️ `url` est composée ici, jamais appelée : Feedys ne parle pas à la forge (D-024). */
+function correctifDe(ligne: Record<string, unknown>): ReponseRetour['correctif'] {
+  const ref = ouNul(ligne['correctif_ref'])
+  const note = ouNul(ligne['correctif_note'])
+
+  if (ref === null && note === null) return null
+
+  return {
+    ref,
+    note,
+    le: isoOuNul(ligne['correctif_le']),
+    url: lienCorrectif(ouNul(ligne['url_forge']), ref),
+  }
 }
 
 export interface DepotMcp {
@@ -170,6 +207,8 @@ export function creerDepotMcp(bassin: Bassin): DepotMcp {
             texte: String(tour['texte'] ?? ''),
           })),
           contexte: contexteDe(ligne),
+          reponse: reponseDe(ligne),
+          correctif: correctifDe(ligne),
         }
       } finally {
         connexion.release()
@@ -196,6 +235,11 @@ export function creerDepotMcp(bassin: Bassin): DepotMcp {
         const ecriture = ecritureStatut(changement.statut, changement.reponse)
         await connexion.query(ecriture.sql, [retourId, ...ecriture.parametres])
 
+        // ⛔ Le correctif REMPLACE. Ce qui s’empile, c’est la ligne d’audit
+        //    juste en dessous — et elle, rien ne l’efface.
+        const trace = ecritureCorrectif(changement.correctif)
+        if (trace !== null) await connexion.query(trace.sql, [retourId, ...trace.parametres])
+
         await connexion.query(JOURNALISER, [
           identifiant(),
           retourId,
@@ -206,6 +250,17 @@ export function creerDepotMcp(bassin: Bassin): DepotMcp {
             //    à deviner, six mois plus tard, qui a marqué quoi.
             par: 'mcp',
             ...(ecriture.mot ? { reponse: ecriture.mot } : {}),
+            // ⚠️ Le correctif est journalisé À CHAQUE marquage, même identique :
+            //    c’est ce qui rend l’historique lisible quand un même retour a
+            //    été corrigé deux fois, ou corrigé puis re-cassé.
+            ...(trace === null
+              ? {}
+              : {
+                  correctif: {
+                    ...(trace.ref === null ? {} : { ref: trace.ref }),
+                    ...(trace.note === null ? {} : { note: trace.note }),
+                  },
+                }),
           }),
         ])
 

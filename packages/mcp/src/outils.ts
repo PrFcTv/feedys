@@ -1,10 +1,12 @@
 /**
  * Les trois outils — `lister_retours`, `lire_retour`, `marquer_retour`.
  *
- * ⛔ **AUCUN OUTIL NE MODIFIE NI NE SUPPRIME LE CONTENU D’UN RETOUR.** Le statut
- *    est la seule chose qui change. Ce que quelqu’un a dit ne se réécrit pas
- *    (01-Specs/synthese.md §Le rendu MCP). Il n’y a donc pas de quatrième outil,
- *    et il n’y en aura pas.
+ * ⛔ **AUCUN OUTIL NE MODIFIE NI NE SUPPRIME LE CONTENU D’UN RETOUR.** Ce que
+ *    quelqu’un a dit ne se réécrit pas (01-Specs/synthese.md §Le rendu MCP). Ce
+ *    que `marquer_retour` écrit s’AJOUTE au retour sans jamais le récrire : son
+ *    statut, un mot pour le collaborateur, la trace du correctif. Il n’y a donc
+ *    pas de quatrième outil, et il n’y en aura pas — la traçabilité voyage sur
+ *    `marquer_retour`, parce qu’elle est le même geste que « c’est traité ».
  *
  * ⛔ RAPPEL DE LICENCE : ce paquet est MIT. On emprunte à Quackback (AGPL) la
  *    FORME de ses outils — trois verbes, lister / lire / marquer — et **aucune
@@ -20,7 +22,14 @@ import { z } from 'zod'
 
 import type { ClientFeedys } from './client.js'
 import { ErreurFeedys } from './client.js'
-import { BORNES, STATUTS, STATUTS_MARQUABLES, TYPES } from './contrat.js'
+import {
+  BORNES,
+  FORME_CORRECTIF_REF,
+  refusDuMarquage,
+  STATUTS,
+  STATUTS_MARQUABLES,
+  TYPES,
+} from './contrat.js'
 
 /** ⚠️ Une réponse MCP est du texte. Le JSON indenté est ce qu’un agent relit le mieux. */
 function texte(valeur: unknown) {
@@ -98,22 +107,77 @@ export function poserLesOutils(serveur: McpServer, client: ClientFeedys): void {
     {
       title: 'Marquer un retour',
       description:
-        'Change le statut d’un retour : lu, traite ou ecarte. ⛔ C’est la SEULE chose qu’un ' +
-        'outil peut modifier. Ni le résumé, ni les citations, ni le fil de l’entretien ne sont ' +
-        'modifiables, et rien ne se supprime — un retour qui ne mérite rien passe en `ecarte`.',
+        'Change le statut d’un retour : lu, traite ou ecarte, et consigne ce qui l’a corrigé. ' +
+        '⛔ Ni le résumé, ni les citations, ni le fil de l’entretien ne sont modifiables, et ' +
+        'rien ne se supprime — un retour qui ne mérite rien passe en `ecarte`. ' +
+        '⛔ MARQUER `traite` EXIGE UN `correctif` : soit `ref`, le SHA du commit ou l’URL de la ' +
+        'PR, soit `note`, ce qui a été changé quand ce n’est pas un commit. Sans lui, « traité » ' +
+        'n’est qu’une affirmation que personne ne pourra vérifier six mois plus tard. ' +
+        '⚠️ `reponse` et `correctif.note` ne s’écrivent PAS pareil : la première part au ' +
+        'collaborateur et parle sa langue, la seconde reste entre développeurs.',
       inputSchema: {
         id: z.string().min(1).describe('L’identifiant du retour'),
         statut: z.enum(STATUTS_MARQUABLES).describe('lu, traite ou ecarte'),
         reponse: z
           .string()
-          .max(500)
+          .max(BORNES.reponse)
           .optional()
-          .describe('Le mot court facultatif pour le collaborateur (max 500 car.)'),
+          .describe(
+            'Le mot court facultatif POUR LE COLLABORATEUR, dans sa langue à lui — ' +
+              '« le tri garde son ordre maintenant », pas un nom de fonction (max 500 car.). ' +
+              'Refusé avec `lu`, qui ne notifie personne.',
+          ),
+        correctif: z
+          .object({
+            ref: z
+              .string()
+              .max(BORNES.correctifRef)
+              .regex(FORME_CORRECTIF_REF)
+              .optional()
+              .describe(
+                'Le SHA du commit (7 à 40 caractères hexadécimaux) ou l’URL https de la PR. ' +
+                  '⚠️ Feedys ne vérifie pas que ce commit existe — n’y mets que du vrai.',
+              ),
+            note: z
+              .string()
+              .max(BORNES.correctifNote)
+              .optional()
+              .describe(
+                'Ce qui a été changé, POUR UN DÉVELOPPEUR — « reset du tri corrigé dans ' +
+                  'useTableState ». Suffit à lui seul quand le correctif n’est pas un commit ' +
+                  '(une configuration, un déploiement) (max 500 car.).',
+              ),
+          })
+          .optional()
+          .describe('EXIGÉ pour `traite`. Au moins `ref` ou `note`. Refusé avec `lu`.'),
       },
       // ⚠️ `destructiveHint: false` : le changement de statut est réversible, et
       //    il laisse une ligne d’audit. Rien n’est détruit.
+      //
+      // ⚠️ `idempotentHint: true` tient toujours AVEC le correctif : il
+      //    REMPLACE au lieu de s’empiler, et son horodatage ne bouge que
+      //    lorsqu’il change réellement. L’historique complet, lui, vit dans
+      //    `audit`, qui est append-only et n’est pas un état.
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ id, statut, reponse }) => rendre(() => client.marquer(id, { statut, reponse })),
+    async ({ id, statut, reponse, correctif }) => {
+      // ⚠️ Un `{}` ou deux espaces ne sont pas un correctif : on les efface ici
+      //    plutôt que de laisser le serveur rendre un 400 que personne ne sait
+      //    lire.
+      const trace =
+        correctif !== undefined &&
+        ((correctif.ref ?? '').trim() !== '' || (correctif.note ?? '').trim() !== '')
+          ? correctif
+          : undefined
+
+      // ⛔ Le refus se dit AVANT le réseau, et avec des mots : le serveur, lui,
+      //    ne rend qu’un `requete_refusee` sec. Un agent qui lit « exige un
+      //    correctif » se corrige en un tour ; un agent qui lit « 400 » essaie
+      //    autre chose au hasard.
+      const refuse = refusDuMarquage({ statut, reponse, correctif: trace })
+      if (refuse !== null) return echec(new Error(refuse))
+
+      return rendre(() => client.marquer(id, { statut, reponse, correctif: trace }))
+    },
   )
 }

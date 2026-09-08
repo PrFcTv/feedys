@@ -1,6 +1,10 @@
 /**
  * `pnpm produit:creer -- --nom "VictorIA" --domaine victoria.exemple.fr`
  *
+ * ⚠️ `--forge https://github.com/org/depot` est facultatif : c’est ce qui rend
+ *    cliquable le SHA d’un correctif consigné par MCP (P-024). Sans elle, la
+ *    référence reste affichée, simplement pas cliquable.
+ *
  * Crée un produit et imprime sa clé publique et son secret. ⛔ UNE fois : le
  * secret n’est stocké qu’en argon2, et rien ne peut le réafficher ensuite.
  *
@@ -26,12 +30,13 @@ try {
 }
 
 const ECRIRE = `
-  insert into produits (id, nom, domaine, cle_publique, secret_hash, secret_chiffre, contexte_metier)
-  values ($1, $2, $3, $4, $5, $6, $7)
+  insert into produits
+    (id, nom, domaine, cle_publique, secret_hash, secret_chiffre, contexte_metier, url_forge)
+  values ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 async function principal(): Promise<void> {
-  const { nom, domaine, metier } = lireArgumentsProduit(process.argv.slice(2))
+  const { nom, domaine, metier, forge } = lireArgumentsProduit(process.argv.slice(2))
 
   const url = process.env['DATABASE_URL']
   if (!url) {
@@ -73,6 +78,7 @@ async function principal(): Promise<void> {
       await hacherSecret(secret),
       chiffrer(secret, clef),
       metier ?? null,
+      forge ?? null,
     ])
   } finally {
     await client.end()
@@ -84,7 +90,9 @@ async function principal(): Promise<void> {
 Produit créé · ${nom} — ${domaine}
 
   Clé publique   ${cle}
-  Secret         ${secret}${metier ? `\n  Métier         ${metier}` : ''}
+  Secret         ${secret}${metier ? `\n  Métier         ${metier}` : ''}${
+    forge ? `\n  Dépôt          ${forge}` : ''
+  }
 
 À coller dans le logiciel hôte :
 

@@ -85,3 +85,61 @@ export function ecritureStatut(
   const mot = reponse.trim() || null
   return { sql: POSER_STATUT_AVEC_MOT, parametres: [statut, mot], mot }
 }
+
+/**
+ * La trace du correctif — ce qui a réparé, et quand.
+ *
+ * ⛔ ELLE REMPLACE, ELLE NE S’EMPILE PAS. C’est ce qui garde `marquer_retour`
+ *    idempotent : rejouer le même appel laisse la même ligne. L’historique
+ *    complet — chaque correctif successif, avec son auteur et son heure — vit
+ *    dans `audit`, qui est append-only et n’est pas un état
+ *    (04-Architecture/conventions-db.md §audit).
+ *
+ * ⚠️ `correctif_le` ne bouge QUE si le correctif change réellement — même
+ *    raisonnement que `reponse_envoyee_le` juste au-dessus, et même piège
+ *    évité : sans le `case`, remarquer « traité » une seconde fois ferait
+ *    croire à une seconde correction.
+ */
+export const POSER_CORRECTIF = `
+  update retours
+     set correctif_ref = $2,
+         correctif_note = $3,
+         correctif_le = case
+           when correctif_le is null
+             or $2 is distinct from correctif_ref
+             or $3 is distinct from correctif_note
+           then now()
+           else correctif_le
+         end,
+         maj_le = now()
+   where id = $1
+`
+
+export interface Correctif {
+  readonly ref?: string | undefined
+  readonly note?: string | undefined
+}
+
+/**
+ * Ce qu’il faut écrire pour consigner un correctif — ou `null` quand il n’y a
+ * rien à consigner.
+ *
+ * ⛔ `undefined` veut dire « je n’y touche pas », JAMAIS « efface ». Un
+ *    back-office qui reclasse une étiquette six semaines plus tard ne doit pas
+ *    faire disparaître le commit qui avait réparé le bug — c’est le défaut que
+ *    P-020 avait déjà payé une fois sur `reponse_texte`.
+ */
+export function ecritureCorrectif(correctif: Correctif | undefined): {
+  readonly sql: string
+  readonly parametres: readonly unknown[]
+  readonly ref: string | null
+  readonly note: string | null
+} | null {
+  if (correctif === undefined) return null
+
+  const ref = correctif.ref?.trim() || null
+  const note = correctif.note?.trim() || null
+  if (ref === null && note === null) return null
+
+  return { sql: POSER_CORRECTIF, parametres: [ref, note], ref, note }
+}

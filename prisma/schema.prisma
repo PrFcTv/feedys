@@ -92,6 +92,9 @@ model Produit {
   secretChiffre String?  @map("secret_chiffre")
   /// Le vocabulaire métier et glossaire du logiciel hôte, saisi à la main.
   contexteMetier String? @map("contexte_metier")
+  /// L’URL du dépôt du produit — ce qui rend un SHA de correctif cliquable.
+  /// ⛔ Feedys ne l’appelle jamais : elle ne sert qu’à composer un lien (P-021).
+  urlForge      String?  @map("url_forge")
   actif         Boolean  @default(true)
   creeLe        DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe         DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
@@ -119,6 +122,12 @@ model Retour {
   reponseTexte     String?      @map("reponse_texte")
   reponseEnvoyeeLe DateTime?    @map("reponse_envoyee_le") @db.Timestamptz(6)
   reponseLueLe     DateTime?    @map("reponse_lue_le") @db.Timestamptz(6)
+  /// Ce qui a corrigé le retour — un SHA, ou l’URL d’une PR.
+  correctifRef     String?      @map("correctif_ref")
+  /// ⛔ Écrit pour un développeur, et ne part JAMAIS au collaborateur : c’est
+  /// `reponseTexte` qui lui parle, et les deux ne se confondent pas (P-021).
+  correctifNote    String?      @map("correctif_note")
+  correctifLe      DateTime?    @map("correctif_le") @db.Timestamptz(6)
   creeLe           DateTime     @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe            DateTime     @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 
