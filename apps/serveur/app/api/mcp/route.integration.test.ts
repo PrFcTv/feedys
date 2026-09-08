@@ -200,7 +200,9 @@ describe('lire_retour', () => {
 
     // ⛔ La parole d’origine, entière et dans l’ordre.
     expect(retour.fil).toHaveLength(2)
-    expect(retour.fil[0]).toEqual({ ordre: 0, role: 'collaborateur', texte: PAROLE })
+    // ⚠️ `geste: null` fait partie de ce que MCP rend : l’agent doit pouvoir
+    //    distinguer la parole d’une manipulation d’interface (BUGS_LOG 016).
+    expect(retour.fil[0]).toEqual({ ordre: 0, role: 'collaborateur', texte: PAROLE, geste: null })
     expect(retour.fil[1]?.role).toBe('bot')
 
     expect(retour.contexte).toMatchObject({ navigateur: 'Chrome 141' })

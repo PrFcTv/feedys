@@ -94,6 +94,19 @@ export const TourFil = z.object({
   ordre: z.number().int(),
   role: z.enum(['collaborateur', 'bot']),
   texte: z.string(),
+  /**
+   * ⛔ CE QUI DISTINGUE UNE PAROLE D’UN GESTE, et l’agent doit le voir.
+   *
+   * Une ligne `collaborateur` n’est pas nécessairement quelque chose que la
+   * personne a DIT : une correction de la carte de compréhension et une réponse
+   * d’un clic sont des manipulations d’interface, dont le texte est écrit par
+   * Feedys. Les rendre sans marque ferait lire à l’agent les mots du bot comme
+   * la parole du collaborateur — le défaut
+   * [BUGS_LOG](../../../03-Bugs/BUGS_LOG.md) 016, un étage plus bas.
+   *
+   * ⚠️ Absent = de la parole, et c’est le cas de la quasi-totalité des lignes.
+   */
+  geste: z.enum(['correction', 'reponse_axe']).nullish(),
 })
 
 export type TourFil = z.infer<typeof TourFil>

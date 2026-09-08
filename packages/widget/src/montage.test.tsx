@@ -73,7 +73,7 @@ function installer(remplacements: Partial<Ports> = {}) {
     tours.push(corps)
     return {
       ok: true,
-      tour: { comprehension: CARTE, question: 'C’est nouveau ?', motif: 'la récurrence' },
+      tour: { comprehension: CARTE, question: 'C’est nouveau ?', axe: null, motif: 'la récurrence' },
     }
   })
 
@@ -471,7 +471,7 @@ describe('EN ENTRETIEN — la carte de compréhension', () => {
     const { racine, fins, trouver } = installer({
       demanderTour: async (): Promise<ResultatTour> => ({
         ok: true,
-        tour: { comprehension: CARTE, question: null, motif: 'j’en sais assez' },
+        tour: { comprehension: CARTE, question: null, axe: null, motif: 'j’en sais assez' },
       }),
     })
 
@@ -639,6 +639,7 @@ describe('l’invite du champ suit ce qui est À L’ÉCRAN, pas la phase', () =
         tour: {
           comprehension: null,
           question: 'Je n’ai pas bien saisi — vous pouvez redire ?',
+          axe: null,
           motif: 'transcript inintelligible',
         },
       }),
@@ -719,7 +720,7 @@ describe('ce que le widget dit quand un tour n’aboutit pas', () => {
         }
         return {
           ok: true,
-          tour: { comprehension: CARTE, question: 'Et sur quel écran ?', motif: 'il manque l’écran' },
+          tour: { comprehension: CARTE, question: 'Et sur quel écran ?', axe: null, motif: 'il manque l’écran' },
         }
       },
     })
@@ -738,7 +739,7 @@ describe('ce que le widget dit quand un tour n’aboutit pas', () => {
     const { racine, trouver } = installer({
       demanderTour: async (): Promise<ResultatTour> => ({
         ok: true,
-        tour: { comprehension: CARTE, question: '   ', motif: 'question vide' },
+        tour: { comprehension: CARTE, question: '   ', axe: null, motif: 'question vide' },
       }),
     })
 
@@ -801,7 +802,7 @@ describe('l’écran ne garde rien de l’entretien précédent', () => {
     await act(async () => {
       attendu.resoudre({
         ok: true,
-        tour: { comprehension: CARTE, question: 'C’est nouveau ?', motif: 'la récurrence' },
+        tour: { comprehension: CARTE, question: 'C’est nouveau ?', axe: null, motif: 'la récurrence' },
       })
     })
     await calmer()
@@ -894,7 +895,7 @@ describe('une question blanche', () => {
     const { racine, terminer, trouver } = installer({
       demanderTour: async () => ({
         ok: true,
-        tour: { comprehension: CARTE, question: '   ', motif: 'aucun' },
+        tour: { comprehension: CARTE, question: '   ', axe: null, motif: 'aucun' },
       }),
     })
 
@@ -903,5 +904,104 @@ describe('une question blanche', () => {
     expect(trouver('.question')).toBeNull()
     expect(terminer).toHaveBeenCalledOnce()
     expect(terminer.mock.calls[0]?.[1]).toMatchObject({ raison: 'envoi' })
+  })
+})
+
+describe('⛔ les réponses d’un clic (D-025)', () => {
+  /** Un bot qui pose une question fermée et déclare son axe. */
+  const avecAxe =
+    (axe: 'recurrence' | 'ampleur') =>
+    async (_retour: string, _corps: CorpsTour): Promise<ResultatTour> => ({
+      ok: true,
+      tour: { comprehension: CARTE, question: 'C’est déjà arrivé ?', axe, motif: 'la récurrence' },
+    })
+
+  function propositions(racine: ShadowRoot): HTMLButtonElement[] {
+    return [...racine.querySelectorAll<HTMLButtonElement>('.proposition')]
+  }
+
+  it('rend trois boutons, écrits par le DÉPÔT et pas par le modèle', async () => {
+    const { racine } = installer({ demanderTour: vi.fn(avecAxe('recurrence')) })
+    await entrerEnEntretien(racine)
+
+    expect(propositions(racine).map((b) => b.textContent)).toEqual([
+      'C’est la première fois',
+      'C’est déjà arrivé',
+      'À chaque fois',
+    ])
+  })
+
+  it('⛔ un clic envoie le tour, avec la VALEUR et jamais le libellé', async () => {
+    const demanderTour = vi.fn(avecAxe('recurrence'))
+    const { racine } = installer({ demanderTour })
+    await entrerEnEntretien(racine)
+
+    await act(async () => {
+      propositions(racine)[2]!.click()
+    })
+    await calmer()
+
+    // ⚠️ Le premier appel est le tour d’ouverture ; le second est le clic.
+    expect(demanderTour.mock.calls[1]?.[1]).toMatchObject({
+      axe: 'recurrence',
+      valeurAxe: 'systematique',
+    })
+  })
+
+  it('⚠️ et il emporte ce qui était en cours d’écriture — on n’a pas voulu le jeter', async () => {
+    const demanderTour = vi.fn(avecAxe('ampleur'))
+    const { racine } = installer({ demanderTour })
+    await entrerEnEntretien(racine)
+
+    await ecrire(racine, 'surtout le matin')
+    await act(async () => {
+      propositions(racine)[0]!.click()
+    })
+    await calmer()
+
+    expect(demanderTour.mock.calls[1]?.[1]).toMatchObject({
+      axe: 'ampleur',
+      valeurAxe: 'bloque',
+      texte: 'surtout le matin',
+    })
+  })
+
+  it('⛔ aucun bouton quand le bot n’a pas déclaré d’axe — le cas ordinaire', async () => {
+    const { racine } = installer()
+    await entrerEnEntretien(racine)
+
+    expect(propositions(racine)).toHaveLength(0)
+  })
+
+  it('⛔ aucun bouton sans question : ils répondraient à ce que personne ne voit', async () => {
+    const { racine } = installer({
+      demanderTour: async () => ({
+        ok: true,
+        // ⚠️ Le serveur ne rend pas ça — `borner()` l’en empêche. Le widget ne
+        //    doit pas s’en remettre à lui pour autant.
+        tour: { comprehension: CARTE, question: null, axe: 'recurrence' as const, motif: 'assez' },
+      }),
+    })
+    await entrerEnEntretien(racine)
+
+    expect(propositions(racine)).toHaveLength(0)
+  })
+
+  it('⛔ ce n’est pas un choix obligatoire : ni radiogroup, ni bouton « Autre »', async () => {
+    const { racine } = installer({ demanderTour: vi.fn(avecAxe('ampleur')) })
+    await entrerEnEntretien(racine)
+
+    expect(racine.querySelector('[role="radiogroup"]')).toBeNull()
+    expect(racine.querySelector('[role="radio"]')).toBeNull()
+    expect(propositions(racine).map((b) => b.textContent)).not.toContain('Autre')
+  })
+
+  it('⛔ le champ texte et le micro restent là — la parole n’est jamais remplacée', async () => {
+    const { racine, trouver } = installer({ demanderTour: vi.fn(avecAxe('recurrence')) })
+    await entrerEnEntretien(racine)
+
+    expect(trouver('.champ')).not.toBeNull()
+    // ⛔ Et « Envoyer maintenant » n’est jamais désactivé pendant un entretien.
+    expect(racine.querySelector<HTMLButtonElement>('.envoyer')!.disabled).toBe(false)
   })
 })

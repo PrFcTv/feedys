@@ -16,7 +16,7 @@
  */
 import { z } from 'zod'
 
-import { BORNES, TYPES_AUDIO, TYPES_CAPTURE } from './transport'
+import { AXES, BORNES, TYPES_AUDIO, TYPES_CAPTURE, valeurDAxe } from './transport'
 
 /**
  * ⚠️ Les constantes vivent dans `transport.ts`, SANS zod, et sont réexportées
@@ -25,6 +25,7 @@ import { BORNES, TYPES_AUDIO, TYPES_CAPTURE } from './transport'
  *    26 Ko gzip pour trois nombres. Voir l’en-tête de `transport.ts`.
  */
 export {
+  AXES,
   BORNES,
   CHEMIN_COLLABORATEUR,
   CHEMIN_RETOURS,
@@ -34,10 +35,14 @@ export {
   PREFIXE_SECRET,
   TYPES_AUDIO,
   TYPES_CAPTURE,
+  VALEURS_AXE,
   cheminAccuse,
   cheminFin,
   cheminTour,
+  valeurDAxe,
 } from './transport'
+
+export type { Axe, ValeurAxe } from './transport'
 
 /**
  * Un fichier joint, en base64.
@@ -221,6 +226,15 @@ export const SchemaCorpsTour = z
     /** Le transcript avant correction à la main. On garde les hésitations. */
     transcriptBrut: z.string().max(BORNES.texte).optional(),
     /**
+     * ⛔ L’axe répondu d’un clic, et SA valeur — jamais un libellé.
+     *
+     * Le widget envoie `systematique`, pas « À chaque fois ». Ce qui traverse la
+     * frontière est une valeur d’énumération ; les mots restent de chaque côté
+     * ([D-025](../../../00-Projet/DECISIONS_LOG.md)).
+     */
+    axe: z.enum(AXES).optional(),
+    valeurAxe: z.string().max(BORNES.valeurAxe).optional(),
+    /**
      * Ce que la personne a corrigé sur la carte, rendu en clair par le widget.
      *
      * ⚠️ La carte n’a pas de bouton « valider » : on corrige, ça part avec le
@@ -232,6 +246,23 @@ export const SchemaCorpsTour = z
     source: z.enum(['voix', 'texte']).optional(),
   })
   .strict()
+  /**
+   * ⛔ L’un sans l’autre n’a aucun sens, et la valeur doit APPARTENIR à l’axe.
+   *    Sans ce contrôle, `{ axe: 'recurrence', valeurAxe: 'bloque' }` écrirait
+   *    dans le fil une réponse qui n’existe pas, et la synthèse la recopierait
+   *    dans un champ qui la refuse.
+   */
+  .refine(
+    (corps) =>
+      (corps.axe === undefined && corps.valeurAxe === undefined) ||
+      (corps.axe !== undefined &&
+        corps.valeurAxe !== undefined &&
+        valeurDAxe(corps.axe, corps.valeurAxe)),
+    {
+      message: 'L’axe et sa valeur vont ensemble, et la valeur doit être l’une des siennes.',
+      path: ['valeurAxe'],
+    },
+  )
 
 /**
  * Ce qu’un tour rend.
@@ -248,6 +279,21 @@ export const SchemaTourRendu = z
   .object({
     comprehension: SchemaComprehension.nullable(),
     question: z.string().max(BORNES.question).nullable(),
+    /**
+     * L’axe sur lequel cette question se répond d’un clic — ou `null`.
+     *
+     * ⛔ Le modèle déclare l’AXE, jamais les libellés : le widget écrit les
+     *    siens. C’est ce qui empêche la prose du bot d’entrer dans le fil, puis
+     *    dans les citations ([D-025], [BUGS_LOG] 016).
+     *
+     * ⚠️ `null` est le cas ordinaire : la plupart des questions appellent un
+     *    récit, et trois boutons dessous le remplaceraient par un mot.
+     *
+     * ⛔ Il ne peut pas être non nul quand `question` l’est. Le verrou est côté
+     *    serveur, dans `borner()` — des propositions sans question sont un
+     *    formulaire orphelin.
+     */
+    axe: z.enum(AXES).nullable(),
     /**
      * Pourquoi cette question.
      *

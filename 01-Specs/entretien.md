@@ -140,6 +140,57 @@ cet ordre de priorité.
 ⚠️ **Une seule de ces questions par tour.** Le bot choisit celle dont la réponse change le plus la
 compréhension du problème — pas celle qui vient en premier dans le tableau.
 
+### La réponse d’un clic — sur deux axes, et deux seulement
+
+Deux lignes de ce tableau se répondent par **une valeur** et pas par un récit. Sur celles-là, le
+bot déclare un **axe** à côté de sa question, et le widget pose **trois boutons** sous la question.
+
+| axe | ce qu’on peut répondre | ce que ça remplit |
+|---|---|---|
+| `recurrence` | `premiere_fois` · `deja_vu` · `systematique` | `recurrence`, sur la carte **et** dans la note |
+| `ampleur` | `bloque` · `ralentit` · `agace` | `impact` de la note, aujourd’hui deviné |
+
+⛔ **Le modèle déclare l’axe. Il n’écrit jamais les libellés.** Les mots des boutons sont écrits
+dans le dépôt, côté widget ; ceux de la ligne du fil sont écrits côté serveur. Un modèle qui
+rédigerait ses propres propositions ferait entrer sa prose dans le fil en ligne `collaborateur`, et
+la note la citerait comme si la personne l’avait prononcée
+([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 016, [D-025](../00-Projet/DECISIONS_LOG.md)).
+
+⛔ **Jamais sur une question ouverte.** « Qu’est-ce que vous veniez de faire ? » n’a pas d’axe, et
+n’en aura pas : trois boutons dessous remplacent un récit par un mot. Le prompt le demande ; ce
+n’est pas lui qui l’applique.
+
+⛔ **Aucun bouton « Autre ».** Il ferait du bloc un choix obligatoire. Le champ texte et le micro
+sont juste en dessous, au même niveau de visibilité — **ils sont l’autre**.
+
+#### Les verrous, côté serveur
+
+Le prompt demande poliment ; `borner()` ne demande pas.
+
+| Situation | Ce que le serveur rend |
+|---|---|
+| `question: null` — le bot s’arrête, ou la limite est atteinte | `axe: null`. Des boutons sans question sont un formulaire orphelin |
+| `axe: recurrence` alors que la carte porte déjà une récurrence | `axe: null`, **question conservée** — règle 1 : on ne redemande pas ce qu’on a |
+| une valeur qui n’appartient pas à son axe | la réponse est **jetée**, pas écrite : un fil append-only ne se répare pas |
+
+#### Ce que ça devient dans le fil, et dans la note
+
+Un clic écrit **une seule ligne**, dans les mots du serveur :
+
+```
+Réponse · Récurrence — à chaque fois
+```
+
+⛔ **Ce n’est pas de la parole.** La ligne porte `geste = 'reponse_axe'` et sort du bassin des
+citations, exactement comme une correction de carte ([synthese.md](synthese.md) §le bassin où l’on
+cite). La **valeur**, elle, est stockée à part — c’est elle qui **fixe** `impact` ou `recurrence`
+dans la note, par-dessus ce que le modèle avait déduit. ⚠️ Le dernier clic gagne : quelqu’un qui se
+ravise a changé d’avis.
+
+⚠️ **Un clic ne produit pas deux lignes.** Il n’emprunte pas le chemin des corrections de carte —
+sinon le même fait arriverait au modèle deux fois. Le champ de la carte se met à jour avec la
+compréhension du tour suivant, comme après une réponse dictée.
+
 ## La carte de compréhension
 
 C’est le seul écran vraiment neuf du produit, et il ne se comporte **pas** comme un message de
@@ -282,6 +333,7 @@ type TourEntretien = {
     recurrence?: 'premiere_fois' | 'deja_vu' | 'systematique'
   }
   question: string | null   // null = le bot estime en savoir assez
+  axe: 'recurrence' | 'ampleur' | null  // la question se répond d’un clic — ⛔ jamais les libellés
   motif: string             // pourquoi cette question — journalisé, jamais montré
 }
 ```

@@ -555,7 +555,7 @@ secret n’est jamais réaffiché · désactiver un produit fait rendre `404` à
 
 ---
 
-## P-025 · La citation qui n’en est pas une
+## P-025 · La citation qui n’en est pas une — ✅ fait
 
 **Objectif** — une note ne peut pas citer entre guillemets un mot que le bot a écrit.
 [BUGS_LOG](../03-Bugs/BUGS_LOG.md) 016.
@@ -607,7 +607,7 @@ verts en local.
 
 ---
 
-## P-026 · La réponse d’un clic
+## P-026 · La réponse d’un clic — ✅ fait
 
 **Objectif** — répondre à la relance sans réactiver le micro ni retaper une phrase, **sans que le
 bot mette des mots dans la bouche de personne**. [D-025](../00-Projet/DECISIONS_LOG.md).

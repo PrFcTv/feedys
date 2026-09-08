@@ -211,6 +211,17 @@ test('⛔ tour coupé : l’invite du champ ne parle pas d’une fiche absente',
   await expect(page.locator('.envoyer')).toBeEnabled()
   await expect(page.locator('.envoyer')).toHaveText('Envoyer maintenant')
 
+  // ⛔ ET AUCUNE RÉPONSE D’UN CLIC : sans tour, il n’y a pas de question, donc
+  //    pas d’axe. Trois boutons flottant sur un entretien coupé demanderaient de
+  //    trancher une question que personne n’a posée (D-025).
+  //
+  // ⚠️ C’est la seule chose que ce parcours peut prouver des propositions : le
+  //    modèle est HORS LIGNE en e2e, aucun axe ne peut donc y remonter. Leur
+  //    rendu nominal est couvert par `montage.test.tsx`, dans un shadow DOM
+  //    complet — et leur tenue dans un vrai navigateur tiers reste le trou
+  //    connu de T-003.
+  await expect(page.locator('.proposition')).toHaveCount(0)
+
   // ⛔ Rien de ce qui est affiché ne s’excuse, n’explique la panne, ne promet.
   const invite = (await champ.getAttribute('placeholder')) ?? ''
   const avis = (await page.locator('.avis').textContent()) ?? ''

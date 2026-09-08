@@ -20,6 +20,8 @@ import type { PortDebit } from '../retours/debit'
 import type { PortDepotRetours, ProduitConnu } from '../retours/ingestion'
 import { origineAutorisee } from '../retours/origine'
 
+import type { Axe, ValeurAxe } from './axes'
+import { ligneDeFil, reponseValide } from './axes'
 import type { Comprehension, Modele, TourEntretien } from './modele'
 import type { ContexteEntretien, GesteMessage, TourFil } from './prompts'
 
@@ -62,6 +64,15 @@ export interface MessageAEcrire {
    *    rien ne rougisse — c’est exactement ainsi que 016 est arrivé.
    */
   readonly geste: GesteMessage | null
+  /**
+   * L’axe répondu d’un clic, et sa valeur. ⚠️ Les deux ou aucun.
+   *
+   * ⛔ La VALEUR est stockée, pas le libellé. `texte` porte les mots pour l’œil
+   *    et pour le modèle ; c’est la colonne qui sert à fixer la note, parce
+   *    qu’une phrase se réinterprète et pas une valeur d’énumération.
+   */
+  readonly axe: Axe | null
+  readonly valeurAxe: ValeurAxe | null
 }
 
 /** L’état d’un entretien, tel que la base le rend. */
@@ -120,6 +131,9 @@ export interface EntreeTour extends AccesEntretien {
   readonly texte?: string | undefined
   readonly transcriptBrut?: string | undefined
   readonly corrections?: string | undefined
+  /** ⚠️ Une réponse d’un clic. Les deux ou aucun — `reponseValide` tranche. */
+  readonly axe?: string | undefined
+  readonly valeurAxe?: string | undefined
 }
 
 export interface EntreeFin extends AccesEntretien {
@@ -142,6 +156,8 @@ export type MotifRefusTour =
 export interface TourRendu {
   readonly comprehension: Comprehension | null
   readonly question: string | null
+  /** ⛔ Décidé par `borner()`, jamais rendu tel que le modèle l’a donné. */
+  readonly axe: Axe | null
   readonly motif: string
 }
 
@@ -255,16 +271,19 @@ export async function jouerTour(entree: EntreeTour, ports: PortsTour): Promise<R
   //    `comprehension: null` plutôt qu’une compréhension inventée.
   if (!intelligible(fil)) {
     if (posees > 0) {
-      return { ok: true, tour: { comprehension: null, question: null, motif: MOTIF_INAUDIBLE } }
+      return { ok: true, tour: { comprehension: null, question: null, axe: null, motif: MOTIF_INAUDIBLE } }
     }
 
     await ports.depot.ecrire(entree.retourId, [
-      { ordre: ordreLibre, role: 'bot', texte: RELANCE_INAUDIBLE, transcriptBrut: null, motif: MOTIF_INAUDIBLE, geste: null },
+      { ordre: ordreLibre, role: 'bot', texte: RELANCE_INAUDIBLE, transcriptBrut: null, motif: MOTIF_INAUDIBLE, geste: null, axe: null, valeurAxe: null },
     ])
 
     return {
       ok: true,
-      tour: { comprehension: null, question: RELANCE_INAUDIBLE, motif: MOTIF_INAUDIBLE },
+      // ⛔ Aucun axe sur la relance inaudible : on n’a rien compris, donc rien à
+      //    proposer. Trois boutons sous « vous pouvez redire ? » demanderaient
+      //    de trancher une question qu’on n’a pas posée.
+      tour: { comprehension: null, question: RELANCE_INAUDIBLE, axe: null, motif: MOTIF_INAUDIBLE },
     }
   }
 
@@ -292,7 +311,7 @@ export async function jouerTour(entree: EntreeTour, ports: PortsTour): Promise<R
   //    ce qui a été demandé, la carte est rendue au widget et corrigée là.
   if (tour.question !== null) {
     await ports.depot.ecrire(entree.retourId, [
-      { ordre: ordreLibre, role: 'bot', texte: tour.question, transcriptBrut: null, motif: tour.motif, geste: null },
+      { ordre: ordreLibre, role: 'bot', texte: tour.question, transcriptBrut: null, motif: tour.motif, geste: null, axe: null, valeurAxe: null },
     ])
   }
 
@@ -380,14 +399,48 @@ async function rejouerAval(retourId: string, ports: PortsTour): Promise<void> {
 /**
  * Ce que la personne apporte à ce tour, en lignes de fil.
  *
- * ⚠️ La correction d’abord, la réponse ensuite : c’est l’ordre dans lequel ça se
- *    fait à l’écran, et le modèle doit lire les deux dans cet ordre-là.
+ * ⚠️ L’ordre EST le contrat : la réponse d’un clic, puis la correction, puis ce
+ *    qui a été dit ou écrit. C’est l’ordre dans lequel ça se fait à l’écran —
+ *    on clique la réponse à la question posée, puis on reprend la fiche, puis on
+ *    ajoute —, et le modèle doit les lire dans cet ordre-là.
  */
 function composerApports(
-  entree: { readonly texte?: string | undefined; readonly transcriptBrut?: string | undefined; readonly corrections?: string | undefined },
+  entree: {
+    readonly texte?: string | undefined
+    readonly transcriptBrut?: string | undefined
+    readonly corrections?: string | undefined
+    readonly axe?: string | undefined
+    readonly valeurAxe?: string | undefined
+  },
   depuis: number,
 ): MessageAEcrire[] {
   const lignes: MessageAEcrire[] = []
+
+  // ⛔ LA RÉPONSE D’UN CLIC D’ABORD : elle répond à la question que le bot vient
+  //    de poser, et le modèle doit la lire avant tout le reste.
+  //
+  // ⚠️ Validée ICI et pas seulement à la route : le domaine ne suppose jamais
+  //    qu’on l’a validé avant lui, et `entretien:rejouer` comme les tests
+  //    entrent par ici sans passer par la route. Une paire incohérente est
+  //    JETÉE, pas écrite — un « Réponse · Récurrence — undefined » dans un fil
+  //    append-only ne se répare pas.
+  if (reponseValide(entree.axe, entree.valeurAxe)) {
+    const axe = entree.axe as Axe
+    const valeur = entree.valeurAxe as ValeurAxe
+
+    lignes.push({
+      ordre: depuis + lignes.length,
+      role: 'collaborateur',
+      texte: ligneDeFil(axe, valeur),
+      transcriptBrut: null,
+      motif: null,
+      // ⛔ CE N’EST PAS DE LA PAROLE. Le texte est écrit par le serveur : la
+      //    ligne sort du bassin des citations, comme une correction (P-025).
+      geste: 'reponse_axe',
+      axe,
+      valeurAxe: valeur,
+    })
+  }
 
   const corrections = entree.corrections?.trim()
   if (corrections) {
@@ -403,6 +456,8 @@ function composerApports(
       //    l’a seulement laissé en place. D’où le geste, qui la sort du bassin
       //    des citations sans la sortir du fil (BUGS_LOG 016).
       geste: 'correction',
+      axe: null,
+      valeurAxe: null,
     })
   }
 
@@ -417,6 +472,8 @@ function composerApports(
       motif: null,
       // ⚠️ De la parole : dictée ou tapée, ce sont ses mots. Citable.
       geste: null,
+      axe: null,
+      valeurAxe: null,
     })
   }
 
@@ -444,6 +501,11 @@ function intelligible(fil: readonly TourFil[]): boolean {
 export function borner(tour: TourEntretien, relancesRestantes: number): TourRendu {
   const { comprehension } = tour
 
+  const question =
+    relancesRestantes <= 0 || tour.question === null || tour.question.trim() === ''
+      ? null
+      : tronquer(tour.question, BORNES.question)
+
   return {
     comprehension: {
       type: comprehension.type,
@@ -452,12 +514,39 @@ export function borner(tour: TourEntretien, relancesRestantes: number): TourRend
       ...(comprehension.ecran ? { ecran: tronquer(comprehension.ecran, BORNES.ecran) } : {}),
       ...(comprehension.recurrence ? { recurrence: comprehension.recurrence } : {}),
     },
-    question:
-      relancesRestantes <= 0 || tour.question === null || tour.question.trim() === ''
-        ? null
-        : tronquer(tour.question, BORNES.question),
+    question,
+    axe: axeRetenu(tour.axe, question, comprehension),
     motif: tronquer(tour.motif, BORNES.motif),
   }
+}
+
+/**
+ * L’axe que le SERVEUR retient — le prompt le demande poliment, ces lignes ne le
+ * demandent pas ([D-025](../../../../00-Projet/DECISIONS_LOG.md)).
+ *
+ * ⛔ Deux verrous, et ils ne sont pas symétriques :
+ *
+ * 1. **Pas de question, pas d’axe.** Des boutons sous un entretien qui se
+ *    termine sont un formulaire orphelin : on cliquerait sur une réponse que
+ *    plus personne n’attend, et le clic partirait dans un tour refusé.
+ *
+ * 2. **La récurrence déjà connue ne se redemande pas.** C’est la règle 1 de
+ *    01-Specs/entretien.md — ne jamais demander ce qu’on a — appliquée au seul
+ *    axe dont la valeur est déjà dans la compréhension. ⚠️ `ampleur` n’a pas
+ *    d’équivalent : la carte ne la porte pas, il n’y a donc rien à comparer.
+ *
+ * ⚠️ La question, elle, reste : si le modèle a posé une vraie question ET
+ *    déclaré un axe déjà connu, on garde la question et on jette les boutons.
+ *    Jeter la question serait perdre un tour pour un défaut de forme.
+ */
+function axeRetenu(
+  axe: Axe | null,
+  question: string | null,
+  comprehension: Comprehension,
+): Axe | null {
+  if (axe === null || question === null) return null
+  if (axe === 'recurrence' && comprehension.recurrence !== undefined) return null
+  return axe
 }
 
 /** ⚠️ Une troncature, jamais un rejet : perdre un tour entier pour un caractère de trop serait absurde. */

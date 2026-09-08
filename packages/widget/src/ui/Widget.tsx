@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 
-import type { Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour, ReponseCollaborateur, TourRendu } from '../contrat'
+import type { Axe, Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour, ReponseCollaborateur, TourRendu, ValeurAxe } from '../contrat'
 import { dicteeDisponible } from '../dictee/reconnaissance'
 import type { Resultat } from '../envoi'
 import type { ResultatTour } from '../entretien'
@@ -29,6 +29,7 @@ import { Carte } from './Carte'
 import { Ecoute } from './Ecoute'
 import { piegerFocus } from './focus'
 import { Micro } from './Micro'
+import { Propositions } from './Propositions'
 import { TEXTES, TOUR_SANS_SUITE, inviteChamp, titreNotification } from './textes'
 import type { PortsDictee } from './useDictee'
 import { useDictee } from './useDictee'
@@ -225,6 +226,13 @@ export function Widget(ports: Ports) {
    */
   const question = tour?.question != null && tour.question.trim() !== '' ? tour.question : null
 
+  /**
+   * ⚠️ Dérivé comme `question`, et au même endroit : une question blanche ne
+   *    doit pas laisser trois boutons orphelins à l’écran, répondant à une
+   *    question que personne ne voit ([BUGS_LOG] 012 pour la même famille).
+   */
+  const axe = question === null ? null : (tour?.axe ?? null)
+
   /** Ce qu’elle vient de dire ou d’écrire, prêt à partir. */
   const apport = useCallback((): { texte?: string; transcriptBrut?: string } => {
     const contenu = texte.trim()
@@ -372,19 +380,29 @@ export function Widget(ports: Ports) {
   }, [jouer, oublierApport, ports, texte, source, transcriptBrut])
 
   /** Répondre à la question du bot — ou simplement lui envoyer une correction. */
-  const repondre = useCallback(() => {
-    const identifiant = retour
-    if (identifiant === null) return
+  /**
+   * ⚠️ `reponse` est le seul paramètre : le reste du tour — ce qui a été tapé,
+   *    ce qui a été corrigé sur la carte — part TOUJOURS avec, qu’on ait cliqué
+   *    « Répondre » ou une proposition. Quelqu’un qui a commencé à écrire puis
+   *    clique sur un bouton n’a pas voulu jeter sa phrase.
+   */
+  const repondre = useCallback(
+    (reponse?: { readonly axe: Axe; readonly valeurAxe: ValeurAxe }) => {
+      const identifiant = retour
+      if (identifiant === null) return
 
-    const corps: CorpsTour = {
-      ...apport(),
-      ...(corrections === '' ? {} : { corrections }),
-    }
+      const corps: CorpsTour = {
+        ...apport(),
+        ...(corrections === '' ? {} : { corrections }),
+        ...(reponse ?? {}),
+      }
 
-    oublierApport()
-    setCarteOrigine(carte)
-    void jouer(identifiant, corps)
-  }, [apport, carte, corrections, jouer, oublierApport, retour])
+      oublierApport()
+      setCarteOrigine(carte)
+      void jouer(identifiant, corps)
+    },
+    [apport, carte, corrections, jouer, oublierApport, retour],
+  )
 
   useEffect(() => {
     ports.brancher?.({ ouvrir, fermer })
@@ -536,6 +554,30 @@ export function Widget(ports: Ports) {
                   </p>
                 )}
 
+                {/*
+                  ⛔ SOUS la question, AU-DESSUS du micro : les propositions sont
+                     un raccourci vers la réponse, pas un remplacement de la
+                     parole. Le micro et le champ texte restent en dessous, au
+                     même niveau de visibilité (D-025).
+
+                  ⛔ Absentes pendant l’écoute, comme le pied de panneau : « on
+                     relâche, on relit, on envoie ». Un bouton qui envoie
+                     pendant qu’on parle couperait le geste.
+
+                  ⚠️ `axe` n’est jamais non nul sans question — le verrou est
+                     côté serveur, dans borner(). Le test ici est une ceinture,
+                     pas la bretelle.
+                */}
+                {axe !== null && question !== null && dictee.ecoute === null && (
+                  <Propositions
+                    axe={axe}
+                    fige={attente || phase === 'envoi'}
+                    surReponse={(axeChoisi, valeurAxe) => {
+                      repondre({ axe: axeChoisi, valeurAxe })
+                    }}
+                  />
+                )}
+
                 {dictee.ecoute !== null && <Ecoute dictee={dictee} />}
 
                 {/*
@@ -597,7 +639,11 @@ export function Widget(ports: Ports) {
                       class="repondre"
                       type="button"
                       disabled={rienAEnvoyer || attente}
-                      onClick={repondre}
+                      // ⚠️ Enveloppé : `onClick` passerait l’événement, et
+                      //    `repondre` le prendrait pour une réponse d’axe.
+                      onClick={() => {
+                        repondre()
+                      }}
                     >
                       {TEXTES.boutons.repondre}
                     </button>

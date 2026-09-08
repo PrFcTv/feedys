@@ -19,7 +19,8 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 
-import type { Comprehension } from '../../../../packages/widget/src/contrat'
+import type { Axe, Comprehension } from '../../../../packages/widget/src/contrat'
+import { AXES } from '../../../../packages/widget/src/transport'
 
 import type { Synthese } from '../synthese/schema'
 import { SchemaSynthese } from '../synthese/schema'
@@ -34,6 +35,15 @@ export interface TourEntretien {
   readonly comprehension: Comprehension
   /** `null` = le bot estime en savoir assez. */
   readonly question: string | null
+  /**
+   * L’axe fermé sur lequel sa question se répond d’un clic — ou `null`.
+   *
+   * ⛔ UN AXE, PAS DES LIBELLÉS. Le modèle ne rédige aucune proposition : le
+   *    dépôt écrit les mots ([D-025]). Le laisser les écrire ferait entrer sa
+   *    prose dans le fil en ligne `collaborateur`, et la note la citerait comme
+   *    si la personne l’avait dite — le défaut que P-025 vient de fermer.
+   */
+  readonly axe: Axe | null
   /** ⛔ Journalisé, jamais affiché au collaborateur. */
   readonly motif: string
 }
@@ -61,6 +71,12 @@ const SchemaTourModele = z
       })
       .strict(),
     question: z.string().nullish(),
+    /**
+     * ⚠️ `nullish` et non requis : un modèle qui omet le champ ne doit pas faire
+     *    échouer la génération entière et perdre le tour. L’absence vaut
+     *    « aucun axe », qui est le cas ordinaire.
+     */
+    axe: z.enum(AXES).nullish(),
     motif: z.string(),
   })
   .strict()
@@ -155,6 +171,7 @@ export function modeleClaude(options: OptionsClaude): Modele {
             : {}),
         },
         question: vide(object.question) ? null : (object.question as string),
+        axe: object.axe ?? null,
         motif: object.motif,
       }
     },
@@ -233,6 +250,9 @@ const TOUR_PAR_DEFAUT: TourEntretien = {
     ecran: 'Liste des dossiers',
   },
   question: 'C’est arrivé depuis un moment, ou c’est nouveau ?',
+  // ⚠️ Le bouchon déclare l’axe : c’est la question fermée par excellence, et
+  //    c’est aussi ce qui exerce la boucle des propositions sans dépenser un jeton.
+  axe: 'recurrence',
   motif: 'La récurrence change ce qu’un développeur ferait : régression ou comportement d’origine.',
 }
 

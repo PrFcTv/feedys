@@ -166,6 +166,10 @@ model Message {
   motif          String?
   /// NULL = de la parole. Renseigné = fabriqué à partir des mots du bot, jamais citable.
   geste          GesteMessage?
+  /// L’axe fermé répondu d’un clic — recurrence ou ampleur (P-026).
+  axe            String?
+  /// ⛔ La VALEUR répondue, pas le libellé : c’est elle qui fixe la note.
+  valeurAxe      String?     @map("valeur_axe")
   creeLe         DateTime    @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe          DateTime    @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 

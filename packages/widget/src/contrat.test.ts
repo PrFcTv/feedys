@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { BORNES, analyserCorpsRetour } from './contrat'
+import { BORNES, analyserCorpsRetour, analyserCorpsTour } from './contrat'
 
 const CONTEXTE = { url: 'https://victoria.exemple.fr/dossiers' }
 
@@ -117,5 +117,32 @@ describe('analyserCorpsRetour', () => {
     })
 
     expect(resultat.ok).toBe(false)
+  })
+})
+
+describe('⛔ analyserCorpsTour — l’axe et sa valeur vont ensemble (D-025)', () => {
+  it('accepte une paire cohérente', () => {
+    expect(analyserCorpsTour({ axe: 'recurrence', valeurAxe: 'systematique' }).ok).toBe(true)
+  })
+
+  it('accepte un tour sans axe — le cas ordinaire', () => {
+    expect(analyserCorpsTour({ texte: 'et c’est tous les jours' }).ok).toBe(true)
+  })
+
+  it.each([
+    ['un axe sans valeur', { axe: 'recurrence' }],
+    ['une valeur sans axe', { valeurAxe: 'systematique' }],
+    ['la valeur d’un autre axe', { axe: 'recurrence', valeurAxe: 'bloque' }],
+    ['une valeur inventée', { axe: 'ampleur', valeurAxe: 'catastrophique' }],
+    // ⚠️ `indetermine` est l’aveu du modèle dans la note, jamais une réponse
+    //    que quelqu’un donne : il n’est pas proposable, donc pas recevable.
+    ['l’aveu du modèle', { axe: 'ampleur', valeurAxe: 'indetermine' }],
+    ['un axe inconnu', { axe: 'gravite', valeurAxe: 'haute' }],
+  ])('refuse %s', (_cas, corps) => {
+    expect(analyserCorpsTour(corps).ok).toBe(false)
+  })
+
+  it('⛔ refuse un libellé à la place d’une valeur — ce qui voyage est la valeur', () => {
+    expect(analyserCorpsTour({ axe: 'recurrence', valeurAxe: 'À chaque fois' }).ok).toBe(false)
   })
 })

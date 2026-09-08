@@ -57,6 +57,7 @@ function tourAvec(question: string | null): TourEntretien {
       ecran: 'Liste des dossiers',
     },
     question,
+    axe: null,
     motif: 'la récurrence change ce qu’un développeur ferait',
   }
 }
@@ -96,10 +97,18 @@ function ports(modele: PortsTour['modele']): PortsTour {
 const acces = () => ({ retourId, cle: CLE, origine: `https://${DOMAINE}`, ip: '203.0.113.7' })
 
 async function fil(): Promise<
-  { ordre: number; role: string; texte: string; motif: string | null; geste: string | null }[]
+  {
+    ordre: number
+    role: string
+    texte: string
+    motif: string | null
+    geste: string | null
+    axe: string | null
+    valeur_axe: string | null
+  }[]
 > {
   const { rows } = await client.query(
-    'select ordre, role, texte, motif, geste from messages where retour_id = $1 order by ordre asc',
+    'select ordre, role, texte, motif, geste, axe, valeur_axe from messages where retour_id = $1 order by ordre asc',
     [retourId],
   )
   return rows as {
@@ -108,6 +117,8 @@ async function fil(): Promise<
     texte: string
     motif: string | null
     geste: string | null
+    axe: string | null
+    valeur_axe: string | null
   }[]
 }
 
@@ -233,7 +244,7 @@ describe('le contexte technique arrive jusqu’au modèle', () => {
     // ⚠️ `geste: null` fait partie de la forme depuis P-025 : le fil DIT que
     //    cette ligne est de la parole, il ne le laisse pas déduire.
     expect(modele.recues[0]?.fil).toEqual([
-      { role: 'collaborateur', texte: PAROLE, geste: null },
+      { role: 'collaborateur', texte: PAROLE, geste: null, axe: null, valeurAxe: null },
     ])
   })
 
@@ -363,6 +374,46 @@ describe('la fin de l’entretien', () => {
     const charge = await creerDepotEntretien(bassin).charger(retourId, 'prod_1')
 
     expect(charge?.fil.map((tour) => tour.geste ?? null)).toEqual([null, 'correction'])
+  })
+
+  it('⛔ la réponse d’un clic arrive en base avec sa valeur, et marquée', async () => {
+    await jouerTour(
+      { ...acces(), axe: 'ampleur', valeurAxe: 'ralentit' },
+      ports(modeleBouchon({ tours: [tourAvec(null)] })),
+    )
+
+    const ligne = (await fil()).find((l) => l.axe !== null)
+
+    expect(ligne).toMatchObject({
+      role: 'collaborateur',
+      texte: 'Réponse · Ampleur — ça ralentit',
+      geste: 'reponse_axe',
+      axe: 'ampleur',
+      valeur_axe: 'ralentit',
+    })
+  })
+
+  it('⛔ la base REFUSE un axe qui ne serait pas un geste — 016 ne se rouvre pas par la porte d’à côté', async () => {
+    // ⚠️ Le domaine ne peut pas écrire ça : `composerApports` pose toujours les
+    //    deux ensemble. C’est bien pour ça qu’on l’éprouve en SQL direct — la
+    //    contrainte protège du code qui n’existe pas encore.
+    await expect(
+      client.query(
+        `insert into messages (id, retour_id, ordre, role, texte, axe, valeur_axe)
+         values ($1, $2, 99, 'collaborateur', 'Réponse · Ampleur — ça bloque', 'ampleur', 'bloque')`,
+        [identifiant(), retourId],
+      ),
+    ).rejects.toThrow(/messages_axe_est_un_geste/)
+  })
+
+  it('⛔ et elle refuse un axe sans valeur, ou une valeur sans axe', async () => {
+    await expect(
+      client.query(
+        `insert into messages (id, retour_id, ordre, role, texte, geste, axe)
+         values ($1, $2, 98, 'collaborateur', 'x', 'reponse_axe', 'ampleur')`,
+        [identifiant(), retourId],
+      ),
+    ).rejects.toThrow(/messages_axe_complet/)
   })
 
   it('un entretien clos refuse un tour de plus', async () => {

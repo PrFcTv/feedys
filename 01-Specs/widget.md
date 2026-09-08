@@ -196,6 +196,25 @@ Voir [entretien.md] pour le comportement du bot. Côté widget :
 - micro et champ texte restent disponibles pour répondre ;
 - **« Envoyer maintenant »** est présent à chaque tour, sans exception.
 
+#### Les réponses d’un clic
+
+Quand le bot déclare un **axe** ([entretien.md] §La réponse d’un clic), trois boutons apparaissent
+**sous la question et au-dessus du bloc micro**. Un clic **envoie le tour** — pas de sélection à
+confirmer : deux clics supprimeraient le seul bénéfice de l’affaire.
+
+⛔ **Ce n’est pas un choix obligatoire**, et rien à l’écran ne doit le suggérer : pas de
+`radiogroup`, pas d’état sélectionné, pas de bouton « Autre », pas de bouton « valider ». Le champ
+texte et le micro restent en dessous, au même niveau de visibilité.
+
+⛔ **Ils disparaissent pendant l’écoute**, comme le pied de panneau : « on relâche, on relit, on
+envoie ». Un bouton qui envoie pendant qu’on parle couperait le geste.
+
+⚠️ **Un clic emporte ce qui était en cours d’écriture**, comme « Répondre ». Quelqu’un qui a
+commencé une phrase puis clique sur un bouton n’a pas voulu la jeter.
+
+⚠️ **Les libellés sont écrits dans le widget**, jamais rendus par le serveur : ce qui voyage sur le
+fil est la **valeur** (`systematique`), pas le mot ([D-025](../00-Projet/DECISIONS_LOG.md)).
+
 Deux boutons, et un seul est primaire :
 
 | Bouton | Ce qu’il fait |

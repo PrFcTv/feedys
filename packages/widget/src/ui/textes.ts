@@ -19,7 +19,12 @@
  *
  * ⛔ Ce fichier ne contient aucune couleur, aucune classe, aucun style : des
  *    mots, et rien d’autre.
+ *
+ * ⚠️ `import type` seulement depuis `contrat` — il tire zod, et zod pèse 26 Ko
+ *    gzip sur un budget de 60. Les VALEURS viennent de `transport`
+ *    (`budget.test.ts`).
  */
+import type { Axe, ValeurAxe } from '../contrat'
 
 /** Le lanceur, l’en-tête, l’accusé. */
 export const TEXTES = {
@@ -64,6 +69,48 @@ export const TEXTES = {
     attente: 'une réponse vous attend',
   },
 } as const
+
+/**
+ * Les réponses d’un clic — ce que portent les boutons sous la question.
+ *
+ * ⛔ ÉCRITS ICI, ET PAS DEMANDÉS AU MODÈLE. C’est le point de
+ *    [D-025](../../../../00-Projet/DECISIONS_LOG.md) : le modèle déclare l’axe,
+ *    le dépôt écrit les mots. Le laisser rédiger « Systématique » ferait entrer
+ *    sa prose dans le fil comme si la personne l’avait dite —
+ *    [BUGS_LOG](../../../../03-Bugs/BUGS_LOG.md) 016, refermé la veille.
+ *
+ * ⛔ CE QUI PART SUR LE FIL EST LA VALEUR, JAMAIS LE LIBELLÉ. Le serveur écrit
+ *    ses propres mots de son côté ; ces deux listes n’ont aucune raison de
+ *    coïncider, et rien ne les compare.
+ *
+ * ⚠️ Rédigés comme on RÉPOND, pas comme on étiquette : « Ça me ralentit » et non
+ *    « Ralentit ». Un bouton qui nomme une catégorie fait remplir un formulaire ;
+ *    un bouton qui dit une phrase fait répondre à quelqu’un.
+ *
+ * ⛔ Pas de bouton « Autre ». Il ferait du bloc un choix obligatoire, alors que
+ *    le champ texte et le micro sont juste en dessous, au même niveau.
+ */
+export const PROPOSITIONS: Readonly<
+  Record<Axe, readonly { readonly valeur: ValeurAxe; readonly libelle: string }[]>
+> = {
+  recurrence: [
+    { valeur: 'premiere_fois', libelle: 'C’est la première fois' },
+    { valeur: 'deja_vu', libelle: 'C’est déjà arrivé' },
+    { valeur: 'systematique', libelle: 'À chaque fois' },
+  ],
+  ampleur: [
+    { valeur: 'bloque', libelle: 'Ça me bloque' },
+    { valeur: 'ralentit', libelle: 'Ça me ralentit' },
+    { valeur: 'agace', libelle: 'Ça m’agace' },
+  ],
+}
+
+/**
+ * ⚠️ Le nom accessible du groupe. ⛔ Pas de `radiogroup` : ce n’est pas un choix
+ *    obligatoire, et l’annoncer comme tel dirait à un lecteur d’écran qu’il faut
+ *    trancher parmi trois options — exactement ce que le produit refuse.
+ */
+export const PROPOSITIONS_LIBELLE = 'Réponses rapides'
 
 /** Titre sobre de notification d’un retour traité pour le collaborateur. */
 export function titreNotification(titre?: string | null): string {

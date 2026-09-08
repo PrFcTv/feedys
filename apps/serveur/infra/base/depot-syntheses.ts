@@ -43,7 +43,7 @@ const CHARGER = `
  *    et la note cite un mot du bot (BUGS_LOG 016).
  */
 const FIL = `
-  select role, texte, geste
+  select role, texte, geste, axe, valeur_axe
     from messages
    where retour_id = $1
    order by ordre asc
@@ -100,6 +100,8 @@ export function creerDepotSyntheses(bassin: Bassin): PortDepotSyntheses {
           role: tour['role'] === 'bot' ? ('bot' as const) : ('collaborateur' as const),
           texte: String(tour['texte'] ?? ''),
           geste: GESTES.find((connu) => connu === tour['geste']) ?? null,
+          axe: ouNul(tour['axe']),
+          valeurAxe: ouNul(tour['valeur_axe']),
         }))
 
         const recuLe = ligne['cree_le']

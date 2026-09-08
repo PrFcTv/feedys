@@ -28,6 +28,28 @@ en face), pas « formulaire » (c’est exactement ce qu’on refuse d’être).
 
 Spécifié dans [01-Specs/entretien.md]. Table `messages`, une ligne par tour.
 
+#### Axe
+
+**Une question du bot dont la réponse tient dans une liste close** — la récurrence, l’ampleur. Le
+bot déclare l’axe ; le dépôt écrit les mots des boutons. La personne répond **d’un clic**.
+
+⛔ Pas « suggestion » : le mot est déjà pris, avec le sens inverse — [01-Specs/synthese.md] interdit
+« toute suggestion technique » dans la note. Pas « quick chip » ni « quick reply » : anglicismes
+sans nécessité. Pas « option » ni « choix » : ni l’un ni l’autre n’est obligatoire, et les nommer
+ainsi ferait croire qu’il faut trancher.
+
+⛔ **Un axe n’est pas un champ de formulaire.** Il n’existe que là où le bot a posé une question, il
+disparaît avec elle, et le micro comme le champ texte restent au même niveau en dessous.
+
+#### Geste
+
+**Ce qui, dans le fil, vient de la personne sans être sa parole** : une correction de la carte, une
+réponse d’un clic. Le texte de ces lignes est écrit par Feedys, pas dicté.
+
+⛔ **Un geste n’est jamais cité.** C’est la distinction qui empêche la note de mettre les mots du
+bot entre guillemets ([03-Bugs/BUGS_LOG.md] 016). Colonne `messages.geste` ; `NULL` veut dire
+« elle l’a dit ».
+
 ### Synthèse
 
 **La note produite à la fin**, destinée au développeur. Typée, produite une fois, jamais réécrite.
