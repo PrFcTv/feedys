@@ -81,6 +81,12 @@ Trois colonnes sur la table `retours` ([0005_retour_collaborateur.sql](../db/mig
   résolution dans la même instruction de code.
 - ⛔ **`marquer_retour` reste idempotent** (`idempotentHint: true`) : rejouer le même marquage
   n’efface pas le mot déjà parti et ne rouvre pas un accusé déjà donné. Voir §2 bis.
+- ⛔ **Un mot avec le statut `lu` est refusé ici AUSSI**, exactement comme au back-office. Les deux
+  chemins refusent la même chose : c’est ce qui permet de ne se rappeler qu’une seule règle.
+- ⚠️ Depuis P-024, le même appel porte **`correctif`** — ce qui a réparé, pour le développeur —
+  et il est **exigé pour `traite`**. ⛔ `reponse` et `correctif.note` ne se recopient jamais l’une
+  dans l’autre : deux publics, deux langues. Tout est dans
+  [tracabilite-du-correctif.md](tracabilite-du-correctif.md).
 
 ### 2 bis. ⛔ Une réponse ne se re-notifie pas, et ne s’efface pas toute seule
 

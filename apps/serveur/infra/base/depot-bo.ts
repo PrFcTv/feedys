@@ -19,6 +19,7 @@ import type {
 import { auditStatut } from '../../domaine/backoffice/correction'
 import type { Filtres, Statut, TypeRetour } from '../../domaine/backoffice/filtres'
 import { depuisDe } from '../../domaine/backoffice/filtres'
+import { lienCorrectif } from '../../domaine/retours/correctif'
 import type { Synthese } from '../../domaine/synthese/schema'
 import { analyserSynthese } from '../../domaine/synthese/schema'
 import { identifiant } from '../identifiants'
@@ -63,6 +64,23 @@ export interface ContexteFiche {
   readonly captureChemin: string | null
 }
 
+/**
+ * Ce qui a corrigé le retour.
+ *
+ * ⛔ Le back-office l’AFFICHE, il ne le saisit pas : le correctif se consigne
+ *    par `marquer_retour`, là où l’agent a le dépôt sous la main. Ajouter un
+ *    champ de plus au formulaire élargirait la surface modifiable à la main,
+ *    que ce back-office garde volontairement étroite
+ *    (01-Specs/back-office.md §Les seules corrections possibles).
+ */
+export interface CorrectifFiche {
+  readonly ref: string | null
+  readonly note: string | null
+  readonly le: Date | null
+  /** ⚠️ Composée, jamais appelée : Feedys ne parle pas à la forge (D-024). */
+  readonly url: string | null
+}
+
 export interface Fiche {
   readonly id: string
   readonly statut: Statut
@@ -79,6 +97,7 @@ export interface Fiche {
   readonly reponseTexte: string | null
   readonly reponseEnvoyeeLe: Date | null
   readonly reponseLueLe: Date | null
+  readonly correctif: CorrectifFiche | null
   readonly synthese: Synthese | null
   readonly modele: string | null
   readonly fil: readonly TourFiche[]
@@ -106,7 +125,8 @@ const FICHE = `
   select r.id, r.statut, r.type, r.titre, r.zone, r.source,
          r.auteur_nom, r.auteur_role, r.identite_verifiee, r.cree_le, r.envoye_le,
          r.reponse_texte, r.reponse_envoyee_le, r.reponse_lue_le,
-         p.nom as produit_nom,
+         r.correctif_ref, r.correctif_note, r.correctif_le,
+         p.nom as produit_nom, p.url_forge,
          s.contenu, s.modele,
          c.url, c.titre_page, c.ecran, c.selecteur_dom, c.navigateur, c.systeme,
          c.viewport_l, c.viewport_h, c.fuseau, c.capture_chemin,
@@ -285,6 +305,19 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
 
         const notificationStatut = ouNul(ligne['notification_statut'])
 
+        const correctifRef = ouNul(ligne['correctif_ref'])
+        const correctifNote = ouNul(ligne['correctif_note'])
+
+        const correctif: CorrectifFiche | null =
+          correctifRef === null && correctifNote === null
+            ? null
+            : {
+                ref: correctifRef,
+                note: correctifNote,
+                le: (ligne['correctif_le'] as Date | null) ?? null,
+                url: lienCorrectif(ouNul(ligne['url_forge']), correctifRef),
+              }
+
         return {
           id: String(ligne['id']),
           statut: String(ligne['statut']) as Statut,
@@ -301,6 +334,7 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
           reponseTexte: ouNul(ligne['reponse_texte']),
           reponseEnvoyeeLe: (ligne['reponse_envoyee_le'] as Date | null) ?? null,
           reponseLueLe: (ligne['reponse_lue_le'] as Date | null) ?? null,
+          correctif,
           synthese: analyserSynthese(ligne['contenu']) ?? null,
           modele: ouNul(ligne['modele']),
           fil: messages.rows.map((tour) => ({

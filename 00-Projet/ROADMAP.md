@@ -44,6 +44,7 @@ référence du MVP marche de bout en bout.**
 | P-018 · le rôle de connexion | ✅ fait — deux rôles, deux moments : les GRANT de [D-009](DECISIONS_LOG.md) mordent enfin, et le démarrage dit si c’est le cas |
 | P-019 · la première mise en service | ⏳ la liste de vérification est écrite ([hebergement.md](../04-Architecture/hebergement.md) §La pose chez un hôte) — ⛔ **la pose attend un logiciel hôte réel et des collaborateurs qui parlent** |
 | P-020 · le retour au collaborateur | ✅ fait — notification in-widget sobre et à sens unique ([retour-au-collaborateur.md](../01-Specs/retour-au-collaborateur.md), [D-021](DECISIONS_LOG.md)) |
+| P-024 · la traçabilité du correctif | ✅ fait — hors séquence, dans la foulée de P-020 : « traité » exige désormais ce qui a corrigé, et `lire_retour` le rend ([tracabilite-du-correctif.md](../01-Specs/tracabilite-du-correctif.md), [D-024](DECISIONS_LOG.md)) |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 

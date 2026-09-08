@@ -216,3 +216,28 @@ que rien ne la reprenne — ni BUGS_LOG, ni ce registre. C’est exactement ce q
 
 **En attendant** : rien. Le mode dégradé est censé être rare, et c’est précisément sa fréquence
 qui rouvrira le sujet.
+
+---
+
+## T-009 — Rien ne consigne un correctif quand l’agent oublie de marquer
+
+**Différé le** : 2026-09-08, pendant P-024
+**Déclencheur de reprise** : le premier retour trouvé corrigé dans le code mais **encore `envoye`
+ou `lu`** en base — autrement dit, la première fois que la trace manque parce que personne n’a
+appelé `marquer_retour`
+**Coût si plus tard** : identique — c’est un hook et un appel HTTP, indépendants du schéma
+
+P-024 fait porter le correctif par `marquer_retour` ([D-024](DECISIONS_LOG.md)). La trace est donc
+un **geste** : un agent qui corrige puis passe à autre chose ne laisse rien, et un développeur qui
+code sans agent encore moins.
+
+Le sens inverse ferait de la trace un **sous-produit du commit** : un `Feedys: <id>` dans le
+message, relevé par un `commit-msg` ou par la CI, qui appelle `POST /api/mcp/retours/:id/statut`
+avec le SHA du commit. Ça marche pour un humain comme pour un agent, et ça ne s’oublie pas.
+
+⚠️ Ce qui le rend différable : l’exigence de correctif sur `traite` couvre déjà le cas fréquent —
+un agent qui marque marque bien. Ce qui reste ouvert, c’est le cas de celui qui **ne marque pas du
+tout**, et on n’en a aucun exemple réel tant que P-019 n’est pas posé.
+
+**En attendant** : la trace dépend de l’appel à `marquer_retour`, et son absence se lit dans la
+liste du back-office — un `bug` corrigé qui traîne en `envoye` depuis trois semaines.

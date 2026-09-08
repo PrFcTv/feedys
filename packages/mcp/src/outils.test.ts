@@ -129,21 +129,130 @@ describe('marquer_retour', () => {
     poserLesOutils(fauxServeur as unknown as Parameters<typeof poserLesOutils>[0], client)
     expect(enregistrements['marquer_retour']).toBeDefined()
 
+    // ⚠️ Le correctif accompagne « traite » depuis P-024 : les deux champs
+    //    voyagent ensemble, et ne disent PAS la même chose à la même personne.
     const retourOutil = await enregistrements['marquer_retour']!({
       id: 'ret_1',
       statut: 'traite',
       reponse: 'Corrigé',
+      correctif: { ref: 'a1b2c3d' },
     })
 
     expect(retourOutil.isError).toBeUndefined()
     expect(JSON.parse(appels[0]?.corps ?? '{}')).toEqual({
       statut: 'traite',
       reponse: 'Corrigé',
+      correctif: { ref: 'a1b2c3d' },
     })
   })
 
   it('⛔ ne connaît que lu, traite et ecarte', () => {
     expect([...STATUTS_MARQUABLES]).toEqual(['lu', 'traite', 'ecarte'])
+  })
+})
+
+/**
+ * ⛔ Ce qui est testé ici : « traité » cesse d’être une affirmation. L’outil
+ *    refuse AVANT le réseau, avec une phrase — un agent qui lit « exige un
+ *    correctif » se corrige en un tour ; un agent qui lit « 400 » essaie autre
+ *    chose au hasard (01-Specs/tracabilite-du-correctif.md).
+ */
+describe('marquer_retour · le correctif', () => {
+  type Handler = (args: Record<string, unknown>) => Promise<{
+    isError?: boolean
+    content: { type: 'text'; text: string }[]
+  }>
+
+  function outilMarquer() {
+    const { client, appels } = bouchon({ id: 'ret_1', statut: 'traite' })
+    const enregistrements: Record<string, Handler> = {}
+
+    poserLesOutils(
+      {
+        registerTool: (nom: string, _schema: unknown, handler: Handler) => {
+          enregistrements[nom] = handler
+        },
+      } as unknown as Parameters<typeof poserLesOutils>[0],
+      client,
+    )
+
+    return { marquer: enregistrements['marquer_retour']!, appels }
+  }
+
+  it('⛔ refuse « traite » sans correctif, et ne part même pas sur le réseau', async () => {
+    const { marquer, appels } = outilMarquer()
+
+    const refus = await marquer({ id: 'ret_1', statut: 'traite' })
+
+    expect(refus.isError).toBe(true)
+    expect(refus.content[0]?.text).toContain('correctif')
+    // ⛔ Le point : aucun appel HTTP. Le statut n’a pas bougé en base.
+    expect(appels).toHaveLength(0)
+  })
+
+  it('accepte « traite » avec un SHA, et le transmet', async () => {
+    const { marquer, appels } = outilMarquer()
+
+    const rendu = await marquer({
+      id: 'ret_1',
+      statut: 'traite',
+      correctif: { ref: 'a1b2c3d4e5f6', note: 'reset du tri corrigé dans useTableState' },
+    })
+
+    expect(rendu.isError).toBeUndefined()
+    expect(JSON.parse(appels[0]?.corps ?? '{}')).toEqual({
+      statut: 'traite',
+      correctif: { ref: 'a1b2c3d4e5f6', note: 'reset du tri corrigé dans useTableState' },
+    })
+  })
+
+  it('accepte une note seule — tout correctif n’est pas un commit', async () => {
+    const { marquer, appels } = outilMarquer()
+
+    const rendu = await marquer({
+      id: 'ret_1',
+      statut: 'traite',
+      correctif: { note: 'corrigé par la configuration du proxy, sans changement de code' },
+    })
+
+    expect(rendu.isError).toBeUndefined()
+    expect(JSON.parse(appels[0]?.corps ?? '{}')).toMatchObject({ statut: 'traite' })
+  })
+
+  it('⛔ traite un correctif vide comme un correctif absent', async () => {
+    const { marquer, appels } = outilMarquer()
+
+    const refus = await marquer({ id: 'ret_1', statut: 'traite', correctif: { note: '   ' } })
+
+    expect(refus.isError).toBe(true)
+    expect(appels).toHaveLength(0)
+  })
+
+  it('⛔ refuse un correctif avec « lu » — lu veut dire « j’ai lu », pas « j’ai corrigé »', async () => {
+    const { marquer, appels } = outilMarquer()
+
+    const refus = await marquer({ id: 'ret_1', statut: 'lu', correctif: { ref: 'a1b2c3d' } })
+
+    expect(refus.isError).toBe(true)
+    expect(appels).toHaveLength(0)
+  })
+
+  it('⛔ refuse un mot au collaborateur avec « lu » — personne ne le lirait', async () => {
+    const { marquer, appels } = outilMarquer()
+
+    const refus = await marquer({ id: 'ret_1', statut: 'lu', reponse: 'C’est corrigé !' })
+
+    expect(refus.isError).toBe(true)
+    expect(appels).toHaveLength(0)
+  })
+
+  it('laisse passer « ecarte » sans correctif — il n’y avait rien à corriger', async () => {
+    const { marquer, appels } = outilMarquer()
+
+    const rendu = await marquer({ id: 'ret_1', statut: 'ecarte' })
+
+    expect(rendu.isError).toBeUndefined()
+    expect(JSON.parse(appels[0]?.corps ?? '{}')).toEqual({ statut: 'ecarte' })
   })
 })
 

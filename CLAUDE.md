@@ -98,8 +98,10 @@ pnpm db:generate      # régénère le client Prisma après édition du schema
 pnpm widget:demo      # page de démonstration : le widget dans une fausse app hôte,
                       # sur un autre port. C’est LÀ qu’on recette le widget, jamais
                       # dans le back-office — voir §Le widget ne se recette pas chez lui
-pnpm produit:creer -- --nom "VictorIA" --domaine victoria.example
-                      # crée un produit et imprime sa clé publique + son secret UNE fois
+pnpm produit:creer -- --nom "VictorIA" --domaine victoria.example [--forge https://…]
+                      # crée un produit et imprime sa clé publique + son secret UNE fois.
+                      # --forge est l’URL du dépôt : c’est elle qui rend cliquable le SHA
+                      # d’un correctif consigné par MCP. Feedys ne l’appelle jamais.
 pnpm entretien:rejouer -- --retour <id> [--synthese] [--prompt] [--modele <id>]
                       # rejoue la boucle d’entretien sur un retour existant, sans widget.
                       # C’est l’outil de mise au point du prompt : on change le prompt,

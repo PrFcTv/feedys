@@ -925,3 +925,68 @@ Un hébergement qui impose son propre terminateur TLS — un load balancer d’i
 exemple. Le conteneur n’a rien à changer : c’est exactement ce que
 [§La forme](../04-Architecture/hebergement.md) exige, aucun mécanisme du logiciel ne dépend du
 fournisseur.
+
+---
+
+## D-024 — Le correctif se consigne dans `marquer_retour`, et Feedys ne vérifie jamais chez la forge
+
+**2026-09-08**
+
+### Le problème
+
+Un retour marqué `traite` ne disait rien de ce qui l’avait réparé. Six semaines plus tard, personne
+ne savait quel commit corrigeait quoi — ni si quelque chose avait été corrigé. **« Traité » était
+une affirmation que rien ne venait étayer**, et un agent de code pouvait la poser sans avoir touché
+une ligne.
+
+Le manque était le plus visible côté MCP : l’agent lit le retour, écrit le correctif, marque
+`traite` — et le lien entre les trois n’existait nulle part.
+
+### Les alternatives écartées
+
+1. **Un quatrième outil MCP, `tracer_correctif`** :
+   ⛔ **Rejeté.** Consigner le correctif et marquer « traité » sont **le même geste** ; deux appels,
+   c’est un agent qui en oublie un. Et `packages/mcp/src/outils.ts` écrit noir sur blanc qu’il n’y
+   aura pas de quatrième outil — l’amender aurait demandé une raison plus forte que le confort.
+2. **Une table `correctifs` en 1-n** :
+   ⛔ **Rejeté.** Elle aurait porté plusieurs commits par retour, les réouvertures et les reverts.
+   Mais `audit` fait déjà exactement cela : append-only, une ligne par marquage, avec l’avant et
+   l’après. La table aurait dupliqué l’historique pour un produit qui a un développeur et quatre
+   logiciels. Colonnes typées pour l’**état**, `audit` pour l’**histoire**.
+3. **Vérifier le commit auprès de la forge** :
+   ⛔ **Rejeté, et c’est la moitié de cette décision.** Cela ferait entrer dans le serveur un jeton
+   GitHub, une dépendance réseau sur un tiers, et un périmètre qui n’est pas le sien. Feedys écoute
+   des collaborateurs et transmet des notes ; il n’audite pas un dépôt.
+4. **Un correctif facultatif partout** :
+   ⛔ **Rejeté.** Facultatif, il serait vide — et on aurait payé une migration pour trois colonnes
+   que personne ne remplit.
+
+### La décision
+
+**`marquer_retour` porte le correctif, et `traite` l’exige.**
+
+```ts
+{ id, statut, reponse?, correctif?: { ref?, note? } }
+```
+
+- ⛔ **`correctif` est EXIGÉ pour `traite`**, refusé avec `lu`, facultatif pour `ecarte`. `note`
+  seule suffit : un correctif qui tient dans une configuration n’a pas de SHA, et le refuser
+  obligerait à inventer une référence.
+- ⛔ **`reponse` et `correctif.note` ne se recopient jamais.** Deux publics, deux langues :
+  « corrigé dans `useTableState` » n’a aucun sens pour quelqu’un qui a dit « le tri se remet à
+  zéro ».
+- ⛔ **La forme de `ref` est vérifiée — SHA de 7 à 40 hex, ou URL https —, son existence ne l’est
+  pas.** Un SHA inventé produit un lien mort, qui se voit en un clic. C’est préférable à une
+  vérification silencieuse qu’on aurait cessé de lire.
+- **L’état remplace, l’audit s’empile.** `correctif_le` ne bouge que si le correctif change
+  réellement : `idempotentHint: true` reste vrai.
+- **Le back-office affiche, il ne saisit pas.** La surface modifiable à la main reste étroite.
+
+Le détail : [01-Specs/tracabilite-du-correctif.md](../01-Specs/tracabilite-du-correctif.md).
+
+### Ce qui la renverserait
+
+Un retour qui se corrige couramment en plusieurs commits **et** dont on veut lire la liste sans
+ouvrir l’audit : la table 1-n redeviendrait le bon outil. Ou l’arrivée d’un second développeur qui
+marque « traité » depuis le back-office plus souvent que par MCP — l’exigence changerait alors de
+chemin, ou deviendrait un champ de formulaire.

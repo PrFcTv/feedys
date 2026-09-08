@@ -14,8 +14,8 @@ concerné ([D-007](../../00-Projet/DECISIONS_LOG.md)).
 | Outil | Ce qu’il rend | Écrit ? |
 |---|---|---|
 | `lister_retours` | les retours filtrés par statut, type, zone, date | non |
-| `lire_retour` | la synthèse complète **et le fil brut de l’entretien** | non |
-| `marquer_retour` | change le statut : `lu`, `traite`, `ecarte` | le statut, et **rien d’autre** |
+| `lire_retour` | la synthèse complète, **le fil brut**, et ce qui a déjà été répondu ou corrigé | non |
+| `marquer_retour` | change le statut et consigne le correctif | le statut, un mot, une trace |
 
 ⚠️ **`lire_retour` rend aussi le fil brut**, pas seulement la note. Quand un agent creuse
 réellement un problème, la parole d’origine contient souvent ce que le résumé a perdu.
@@ -23,7 +23,33 @@ réellement un problème, la parole d’origine contient souvent ce que le résu
 ⛔ **Aucun outil ne modifie ni ne supprime le contenu d’un retour.** Ni le titre, ni le résumé, ni
 les citations, ni un message. Ce que quelqu’un a dit ne se réécrit pas — ce n’est pas une
 limitation technique, c’est le contrat du produit. Un retour qui ne mérite rien passe en `ecarte` ;
-il n’est pas détruit.
+il n’est pas détruit. Ce que `marquer_retour` écrit **s’ajoute** sans jamais récrire.
+
+### ⛔ Marquer `traite` exige de dire ce qui a corrigé
+
+```ts
+marquer_retour({
+  id: 'ret_…',
+  statut: 'traite',
+  reponse: 'Le tri garde son ordre maintenant.',        // pour le COLLABORATEUR
+  correctif: {
+    ref: 'a1b2c3d4',                                     // SHA (7–40 hex) ou URL https de PR
+    note: 'reset du tri corrigé dans useTableState',     // pour le DÉVELOPPEUR
+  },
+})
+```
+
+- ⛔ **`correctif` est exigé pour `traite`** — au moins `ref` **ou** `note`. Sans lui, « traité »
+  n’est qu’une affirmation que personne ne pourra vérifier six mois plus tard.
+- ⛔ **`reponse` et `correctif.note` ne disent pas la même chose à la même personne.** La première
+  part au collaborateur et parle sa langue ; la seconde reste entre développeurs.
+- ⚠️ **`note` seule suffit** quand le correctif n’est pas un commit — une configuration, un
+  déploiement.
+- ⛔ **Avec `lu`, les deux sont refusés** : `lu` ne notifie personne et ne corrige rien.
+- ⚠️ **Feedys ne vérifie pas que le commit existe** — la forme est contrôlée, le fond est cru sur
+  parole. N’y mets que du vrai : un SHA inventé produit un lien mort dans le back-office.
+
+Le détail : [01-Specs/tracabilite-du-correctif.md](../../01-Specs/tracabilite-du-correctif.md).
 
 ## Installer dans Claude Code
 
