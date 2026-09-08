@@ -8,6 +8,7 @@
  *
  * ⚠️ Tout le reste est construit à la demande : rien ne se connecte à l’import.
  */
+import type { PortsCollaborateur } from '../domaine/retours/collaborateur'
 import type { PortsBalayage } from '../domaine/entretien/balayage'
 import type { PortsNotification } from '../domaine/notification/envoyer'
 import { envoyerNote } from '../domaine/notification/envoyer'
@@ -15,12 +16,13 @@ import type { PortsIngestion } from '../domaine/retours/ingestion'
 import type { PortsSynthese } from '../domaine/synthese/produire'
 import type { PortsTour } from '../domaine/entretien/tour'
 import { MAX_RELANCES } from '../domaine/entretien/tour'
-import { creerDebitEntretien, creerDebitIngestion } from '../domaine/retours/debit'
+import { creerDebitCollaborateur, creerDebitEntretien, creerDebitIngestion } from '../domaine/retours/debit'
 import { etiquettesDe, produireSynthese } from '../domaine/synthese/produire'
 import { modeleClaude } from '../domaine/entretien/modele'
 
 import { pool } from './base/connexion'
 import { creerDepotBalayage } from './base/depot-balayage'
+import { creerDepotCollaborateur } from './base/depot-collaborateur'
 import { creerDepotEntretien } from './base/depot-entretien'
 import { creerDepotNotifications } from './base/depot-notifications'
 import { creerDepotRetours } from './base/depot-retours'
@@ -51,6 +53,21 @@ export function portsIngestion(): PortsIngestion {
     // ⛔ `aval` reste vide : l’entretien n’est pas déclenché par l’ingestion, il
     //    est demandé par le widget, tour par tour. La place reste réservée pour
     //    ce qui devrait suivre la persistance sans pouvoir la défaire.
+  }
+}
+
+/**
+ * ⚠️ Les limiteurs sont créés UNE fois au chargement du module, pas à chaque
+ *    appel : des compteurs reconstruits à chaque requête ne compteraient rien.
+ *    Même raison que `debit` et `debitEntretien` plus haut.
+ */
+const debitCollaborateur = creerDebitCollaborateur()
+
+export function portsCollaborateur(): PortsCollaborateur {
+  return {
+    produits: creerDepotRetours(pool()),
+    depot: creerDepotCollaborateur(pool()),
+    debit: debitCollaborateur,
   }
 }
 

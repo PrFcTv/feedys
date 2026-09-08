@@ -43,6 +43,7 @@ référence du MVP marche de bout en bout.**
 | P-017 · les textes des états dégradés | ✅ fait — l’invite suit ce qui est à l’écran, et le widget parle enfin quand un tour n’aboutit pas ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 004) |
 | P-018 · le rôle de connexion | ✅ fait — deux rôles, deux moments : les GRANT de [D-009](DECISIONS_LOG.md) mordent enfin, et le démarrage dit si c’est le cas |
 | P-019 · la première mise en service | ⏳ la liste de vérification est écrite ([hebergement.md](../04-Architecture/hebergement.md) §La pose chez un hôte) — ⛔ **la pose attend un logiciel hôte réel et des collaborateurs qui parlent** |
+| P-020 · le retour au collaborateur | ✅ fait — notification in-widget sobre et à sens unique ([retour-au-collaborateur.md](../01-Specs/retour-au-collaborateur.md), [D-021](DECISIONS_LOG.md)) |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
@@ -84,7 +85,7 @@ C’est tout. Si ce parcours marche de bout en bout sur **un seul produit**, le 
 
 ## Après le MVP, dans l’ordre de valeur
 
-**① Le retour au collaborateur.** « Ce que vous avez signalé mardi est corrigé. » C’est la suite
+**① Le retour au collaborateur.** ✅ fait — « Ce que vous avez signalé mardi est corrigé. » Notification sobre in-widget, à sens unique, adossée à l’identité signée hôte ([D-021](DECISIONS_LOG.md), P-020). C’est la suite
 la plus rentable de toutes : c’est elle qui fait qu’on continue à parler. Sans elle, Feedys est
 un puits.
 

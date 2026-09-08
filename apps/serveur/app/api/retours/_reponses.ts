@@ -19,7 +19,7 @@ import { EN_TETE_CLE, EN_TETE_IDENTITE } from '../../../../../packages/widget/sr
 export function enTetesCors(origine: string | null): Record<string, string> {
   return {
     'access-control-allow-origin': origine ?? '*',
-    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-allow-headers': `content-type, ${EN_TETE_CLE}, ${EN_TETE_IDENTITE}`,
     'access-control-max-age': '86400',
     vary: 'Origin',
@@ -30,6 +30,29 @@ export function json(corps: unknown, statut: number, origine: string | null): Re
   return new Response(JSON.stringify(corps), {
     status: statut,
     headers: { 'content-type': 'application/json; charset=utf-8', ...enTetesCors(origine) },
+  })
+}
+
+/**
+ * Comme `json`, mais pour ce qui dépend de QUI demande.
+ *
+ * ⛔ La relève d’un collaborateur est découpée sur `x-feedys-identite`, pas sur
+ *    l’URL. Un proxy d’entreprise — et Feedys vit derrière des proxys
+ *    d’entreprise — ne voit qu’un GET sans cookie sur une URL fixe : sans
+ *    consigne, il a le droit de servir la réponse d’Alice à Bob.
+ *
+ * ⚠️ `vary` liste les en-têtes qui changent la réponse ; `no-store` dit de ne
+ *    rien garder du tout. Les deux, parce que le premier seul se fait ignorer.
+ */
+export function jsonPrive(corps: unknown, statut: number, origine: string | null): Response {
+  return new Response(JSON.stringify(corps), {
+    status: statut,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store, private',
+      ...enTetesCors(origine),
+      vary: `Origin, ${EN_TETE_IDENTITE}, ${EN_TETE_CLE}`,
+    },
   })
 }
 

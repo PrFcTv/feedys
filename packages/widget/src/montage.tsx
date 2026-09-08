@@ -22,6 +22,7 @@ import { collecter, definirOrigineFeedys, suivreSurvol } from './contexte'
 import { envoyer } from './envoi'
 import { identiteHote } from './identite'
 import { demanderTour, terminer } from './entretien'
+import { accuser, relever } from './releve'
 import { FEUILLE } from './ui/styles'
 import type { Commandes, Ports } from './ui/Widget'
 import { Widget } from './ui/Widget'
@@ -136,6 +137,19 @@ export function monter(configuration: Configuration, options: OptionsMontage = {
         retour,
         corps,
         ...(garderEnVie === undefined ? {} : { garderEnVie }),
+      }),
+    releverReponses: () =>
+      relever({
+        origine: configuration.origine,
+        cle: configuration.cle,
+        identite: identiteHote(),
+      }),
+    accuserReception: (retourId: string) =>
+      accuser({
+        origine: configuration.origine,
+        cle: configuration.cle,
+        identite: identiteHote(),
+        retourId,
       }),
     brancher: (recues) => {
       commandes = recues

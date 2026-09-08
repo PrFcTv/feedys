@@ -108,7 +108,20 @@ export default async function FicheRetour({ params }: { params: Promise<{ id: st
         note="⛔ des étiquettes, pas de la parole — ni le résumé, ni les citations, ni le fil"
       >
         <div className="flex flex-col gap-4">
-          <FormulaireStatut action={poserStatut} statut={fiche.statut} />
+          <FormulaireStatut
+            action={poserStatut}
+            statut={fiche.statut}
+            reponseEnvoyee={fiche.reponseTexte !== null}
+          />
+          {fiche.reponseEnvoyeeLe ? (
+            <p className="text-[13px] text-encre-3">
+              Réponse envoyée le {dateComplete(fiche.reponseEnvoyeeLe, fiche.contexte?.fuseau)}
+              {fiche.reponseTexte ? ` : « ${fiche.reponseTexte} »` : ''}
+              {fiche.reponseLueLe
+                ? ` · vue le ${dateComplete(fiche.reponseLueLe, fiche.contexte?.fuseau)}`
+                : ' · en attente de lecture'}
+            </p>
+          ) : null}
           <FormulaireEtiquettes action={poserEtiquettes} type={fiche.type} zone={fiche.zone} />
         </div>
       </Section>

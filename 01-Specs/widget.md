@@ -67,18 +67,37 @@ Le widget est un invité. Cinq obligations :
 
 Une pastille discrète, ancrée en bas à droite par défaut, déplaçable par configuration.
 
-- Elle ne pulse pas, ne rebondit pas, n’affiche pas de badge. Rien ne réclame l’attention.
+- Elle ne pulse pas et ne rebondit pas. Rien ne réclame l’attention.
+- ⚠️ **Une exception, et une seule** : une pastille apparaît dans le coin supérieur du lanceur
+  si une réponse à un retour précédent attend d’être lue
+  ([retour-au-collaborateur.md](retour-au-collaborateur.md)). C’est un badge de non-lus, et la
+  spécification l’interdisait jusqu’à P-020 : le renversement est assumé et argumenté en
+  [D-021](../00-Projet/DECISIONS_LOG.md). ⛔ Elle ne compte pas, ne s’anime pas, n’apparaît que
+  sur un geste du développeur, et disparaît définitivement au premier regard. Si l’une de ces
+  quatre conditions tombe, c’est D-021 qu’il faut rouvrir.
 - Au survol, elle s’élargit et révèle son libellé : **« Un retour »**.
 - ⛔ Pas de bulle d’accueil automatique. Jamais de « Besoin d’aide ? » qui s’ouvre tout seul.
 
 ### Ouvert — l’accueil
 
-Le panneau s’ouvre. **Le micro est déjà armé, l’enregistrement non.** Le collaborateur voit :
+Le panneau s’ouvre. Si le collaborateur a une réponse en attente de lecture, une carte sobre
+s’affiche en tête du corps :
+- « Votre retour sur « [Titre] » a été pris en compte. » (ou « Votre retour a été pris en compte. ») ;
+- Le mot du développeur s’il a été renseigné ;
+- Un bouton unique : **« J’ai vu »**, qui accuse réception et retire la carte.
+- ⛔ **Strictement à sens unique** : aucun champ de saisie de réponse, aucun fil de discussion, aucun bouton de relance.
+
+**Le micro est déjà armé, l’enregistrement non.** Le collaborateur voit :
 
 ```
 ┌─────────────────────────────────────────┐
 │  Qu’est-ce qui se passe ?           ✕   │
 │                                         │
+│  ┌───────────────────────────────────┐  │
+│  │ Votre retour sur « … » a été pris │  │
+│  │ en compte.                        │  │
+│  │ Corrigé ce matin.     [ J’ai vu ] │  │
+│  └───────────────────────────────────┘  │
 │                                         │
 │         [ 🎙 ]                          │
 │    maintenir pour parler                │

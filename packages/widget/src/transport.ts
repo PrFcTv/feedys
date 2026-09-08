@@ -86,6 +86,8 @@ export const BORNES = {
   auteurNom: 200,
   /** « gestionnaire », « comptable »… Utile pour lire le retour, pas pour trier. */
   auteurRole: 120,
+  /** Le message facultatif du développeur pour le collaborateur. */
+  reponseTexte: 500,
 } as const
 
 /** Les types de capture acceptés. ⛔ Liste close. */
@@ -114,4 +116,12 @@ export function cheminTour(retour: string): string {
 /** Le chemin de fin d’entretien — envoi manuel ou abandon. */
 export function cheminFin(retour: string): string {
   return `${CHEMIN_RETOURS}/${encodeURIComponent(retour)}/fin`
+}
+
+/** Le chemin de relève des retours du collaborateur. */
+export const CHEMIN_COLLABORATEUR = `${CHEMIN_RETOURS}/collaborateur`
+
+/** Le chemin pour accuser réception d’un retour traité. */
+export function cheminAccuse(retour: string): string {
+  return `${CHEMIN_RETOURS}/${encodeURIComponent(retour)}/accuse`
 }

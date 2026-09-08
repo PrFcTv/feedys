@@ -19,6 +19,22 @@ describe('le changement de statut', () => {
     }
   })
 
+  it('accepte un mot court optionnel pour le collaborateur', () => {
+    expect(
+      lireChangementStatut({ statut: 'traite', reponse: 'Corrigé dans la version de ce matin' }),
+    ).toEqual({
+      ok: true,
+      valeur: { statut: 'traite', reponse: 'Corrigé dans la version de ce matin' },
+    })
+  })
+
+  it('refuse une réponse qui dépasse 500 caractères', () => {
+    expect(lireChangementStatut({ statut: 'traite', reponse: 'a'.repeat(501) })).toEqual({
+      ok: false,
+      motif: 'valeur_refusee',
+    })
+  })
+
   it('⛔ refuse les statuts que le SERVEUR écrit — réécrire l’histoire du retour', () => {
     for (const statut of ['en_cours', 'abandonne', 'envoye']) {
       expect(lireChangementStatut({ statut })).toEqual({ ok: false, motif: 'valeur_refusee' })
@@ -86,9 +102,42 @@ describe('les lignes d’audit', () => {
       detail: { avant: 'envoye', apres: 'traite' },
     })
 
+    expect(auditStatut('envoye', 'traite', 'Corrigé')).toEqual({
+      action: 'statut',
+      detail: { avant: 'envoye', apres: 'traite', reponse: 'Corrigé' },
+    })
+
     expect(auditEtiquettes({ type: null, zone: null }, { type: 'bug', zone: 'Liste' })).toEqual({
       action: 'etiquettes',
       detail: { avant: { type: null, zone: null }, apres: { type: 'bug', zone: 'Liste' } },
     })
+  })
+})
+
+describe('le mot au collaborateur', () => {
+  it('⛔ refuse un mot avec le statut « lu » plutôt que de le jeter en silence', () => {
+    const lu = lireChangementStatut({ statut: 'lu', reponse: 'Corrigé ce matin' })
+
+    expect(lu.ok).toBe(false)
+  })
+
+  it('accepte « lu » quand le champ est vide — le formulaire le poste toujours', () => {
+    const lu = lireChangementStatut({ statut: 'lu', reponse: '' })
+
+    expect(lu).toEqual({ ok: true, valeur: { statut: 'lu' } })
+  })
+
+  it('⛔ un champ VIDE ne dit pas « efface », il dit « je n’y touche pas »', () => {
+    const lu = lireChangementStatut({ statut: 'traite', reponse: '   ' })
+
+    // ⚠️ `reponse` ABSENTE, et pas `reponse: null` : c’est cette absence que
+    //    `ecritureStatut` lit pour ne PAS réécrire la colonne.
+    expect(lu).toEqual({ ok: true, valeur: { statut: 'traite' } })
+  })
+
+  it('garde le mot, débarrassé de ses blancs', () => {
+    const lu = lireChangementStatut({ statut: 'traite', reponse: '  Corrigé ce matin  ' })
+
+    expect(lu).toEqual({ ok: true, valeur: { statut: 'traite', reponse: 'Corrigé ce matin' } })
   })
 })

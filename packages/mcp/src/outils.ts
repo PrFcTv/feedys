@@ -104,11 +104,16 @@ export function poserLesOutils(serveur: McpServer, client: ClientFeedys): void {
       inputSchema: {
         id: z.string().min(1).describe('L’identifiant du retour'),
         statut: z.enum(STATUTS_MARQUABLES).describe('lu, traite ou ecarte'),
+        reponse: z
+          .string()
+          .max(500)
+          .optional()
+          .describe('Le mot court facultatif pour le collaborateur (max 500 car.)'),
       },
       // ⚠️ `destructiveHint: false` : le changement de statut est réversible, et
       //    il laisse une ligne d’audit. Rien n’est détruit.
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ id, statut }) => rendre(() => client.marquer(id, { statut })),
+    async ({ id, statut, reponse }) => rendre(() => client.marquer(id, { statut, reponse })),
   )
 }

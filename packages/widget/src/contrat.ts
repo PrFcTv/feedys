@@ -26,6 +26,7 @@ import { BORNES, TYPES_AUDIO, TYPES_CAPTURE } from './transport'
  */
 export {
   BORNES,
+  CHEMIN_COLLABORATEUR,
   CHEMIN_RETOURS,
   EN_TETE_CLE,
   EN_TETE_IDENTITE,
@@ -33,6 +34,7 @@ export {
   PREFIXE_SECRET,
   TYPES_AUDIO,
   TYPES_CAPTURE,
+  cheminAccuse,
   cheminFin,
   cheminTour,
 } from './transport'
@@ -335,6 +337,32 @@ export function analyserCorpsTour(valeur: unknown): Analyse<CorpsTour> {
 export function analyserCorpsFin(valeur: unknown): Analyse<CorpsFin> {
   return analyser(SchemaCorpsFin, valeur)
 }
+
+/**
+ * La réponse du développeur à un retour du collaborateur.
+ *
+ * ⛔ Une notification à sens unique : aucun fil, aucun champ de réponse,
+ *    aucun support client direct (01-Specs/retour-au-collaborateur.md).
+ */
+export const SchemaReponseCollaborateur = z
+  .object({
+    id: z.string().min(1),
+    titre: z.string().max(BORNES.titre).nullable(),
+    statut: z.string().min(1),
+    reponseTexte: z.string().max(BORNES.reponseTexte).nullable(),
+    reponseEnvoyeeLe: z.string().min(1),
+  })
+  .strict()
+
+export type ReponseCollaborateur = z.infer<typeof SchemaReponseCollaborateur>
+
+/**
+ * ⚠️ Il n’y a PAS d’`analyserReponsesCollaborateur` ici, et c’est délibéré : le
+ *    seul lecteur de cette liste est le widget, et le widget ne peut pas
+ *    importer une valeur de ce fichier sans embarquer zod (voir `budget.test.ts`).
+ *    Sa validation vit dans `releve.ts`, à la main. Un analyseur zod ici
+ *    n’aurait eu aucun appelant — il en avait zéro quand P-020 l’a écrit.
+ */
 
 function analyser<T>(schema: z.ZodType<T>, valeur: unknown): Analyse<T> {
   const resultat = schema.safeParse(valeur)

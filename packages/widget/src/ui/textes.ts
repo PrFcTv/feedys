@@ -57,7 +57,22 @@ export const TEXTES = {
     relacher: 'relâchez pour terminer',
     mainsLibres: 'j’écoute — cliquez pour terminer',
   },
+
+  notification: {
+    action: 'J’ai vu',
+    /** ⚠️ Le nom accessible du lanceur quand la pastille est là. Jamais affiché. */
+    attente: 'une réponse vous attend',
+  },
 } as const
+
+/** Titre sobre de notification d’un retour traité pour le collaborateur. */
+export function titreNotification(titre?: string | null): string {
+  const propre = titre?.trim()
+  if (propre) {
+    return `Votre retour sur « ${propre} » a été pris en compte.`
+  }
+  return 'Votre retour a été pris en compte.'
+}
 
 /**
  * Ce qu’on dit quand l’onde ne viendra pas.
