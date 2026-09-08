@@ -77,10 +77,30 @@ export function finDe(statut: string, relancesPosees: number, maximum: number): 
   return relancesPosees >= maximum ? 'limite' : 'envoi'
 }
 
-/** Ce que la personne a dit, et rien d’autre. ⚠️ C’est la seule source des citations. */
+/**
+ * Ce que la personne a DIT, et rien d’autre. ⚠️ C’est la seule source des citations.
+ *
+ * ⛔ `role === 'collaborateur'` NE SUFFIT PAS, et c’était le défaut
+ *    ([BUGS_LOG](../../../../03-Bugs/BUGS_LOG.md) 016). Une correction de carte
+ *    est bien une ligne `collaborateur` — elle vient bien d’elle — mais son
+ *    texte est fabriqué à partir de ce que le BOT avait écrit :
+ *    `Correction · Écran — Liste des mandats`. Sans le second filtre, la note
+ *    citait « Liste des mandats » entre guillemets comme si la personne l’avait
+ *    prononcé, et `plafonnerConfiance` faisait MONTER la confiance sur la foi
+ *    des mots du bot.
+ *
+ * ⚠️ `verbatim.ts` ne pouvait rien y faire, et il n’y avait rien à y changer :
+ *    il vérifie qu’une citation est une sous-chaîne exacte du fil, et elle
+ *    l’était réellement. Le défaut était dans le BASSIN, pas dans la recherche.
+ *
+ * ⛔ On retire une SOURCE, pas une ligne. Les corrections restent dans le fil,
+ *    partent au modèle par `messagesDuFil`, et se lisent au back-office et par
+ *    MCP. C’est leur usage comme matière à citation qui disparaît.
+ */
 export function parolesDe(fil: readonly TourFil[]): string[] {
   return fil
     .filter((tour) => tour.role === 'collaborateur')
+    .filter((tour) => tour.geste === undefined || tour.geste === null)
     .map((tour) => tour.texte)
     .filter((texte) => texte.trim() !== '')
 }

@@ -9,6 +9,8 @@
  *    jamais d’un paramètre client. Un identifiant de retour deviné ne donne donc
  *    accès à rien chez un autre produit (architecture.md §Sécurité).
  */
+import type { GesteMessage } from '../../domaine/entretien/prompts'
+import { GESTES } from '../../domaine/entretien/prompts'
 import type {
   EntretienCharge,
   MessageAEcrire,
@@ -42,15 +44,15 @@ const CHARGER = `
 
 /** ⚠️ Trié sur `ordre`, jamais sur `cree_le` : deux tours peuvent partager la seconde. */
 const FIL = `
-  select role, texte, ordre
+  select role, texte, ordre, geste
     from messages
    where retour_id = $1
    order by ordre asc
 `
 
 const ECRIRE_MESSAGE = `
-  insert into messages (id, retour_id, ordre, role, texte, transcript_brut, motif)
-  values ($1, $2, $3, $4, $5, $6, $7)
+  insert into messages (id, retour_id, ordre, role, texte, transcript_brut, motif, geste)
+  values ($1, $2, $3, $4, $5, $6, $7, $8::geste_message)
 `
 
 /**
@@ -65,6 +67,18 @@ const CLORE = `
    where id = $1
      and statut = 'en_cours'
 `
+
+/**
+ * ⛔ On ne fait pas confiance à ce que la base rend : une valeur inconnue devient
+ *    `null`, c’est-à-dire « de la parole ». ⚠️ Le repli est délibérément du côté
+ *    prudent pour le FIL — une ligne mal relue reste lisible — mais il est du
+ *    mauvais côté pour les citations. C’est pourquoi l’énumération est la même
+ *    des deux côtés et vérifiée par `migrations.integration.test.ts` : le repli
+ *    ne doit jamais servir.
+ */
+function gesteOuNul(valeur: unknown): GesteMessage | null {
+  return GESTES.find((connu) => connu === valeur) ?? null
+}
 
 function ouNul(valeur: unknown): string | null {
   return typeof valeur === 'string' && valeur.trim() !== '' ? valeur : null
@@ -89,6 +103,7 @@ export function creerDepotEntretien(bassin: Bassin): PortDepotEntretien {
         const tours = fil.rows.map((tour) => ({
           role: tour['role'] === 'bot' ? ('bot' as const) : ('collaborateur' as const),
           texte: String(tour['texte'] ?? ''),
+          geste: gesteOuNul(tour['geste']),
         }))
 
         const ordres = fil.rows.map((tour) => Number(tour['ordre'] ?? 0))
@@ -140,6 +155,7 @@ export function creerDepotEntretien(bassin: Bassin): PortDepotEntretien {
             message.texte,
             message.transcriptBrut,
             message.motif,
+            message.geste,
           ])
         }
 

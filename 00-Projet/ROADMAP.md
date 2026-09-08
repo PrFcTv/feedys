@@ -45,10 +45,12 @@ référence du MVP marche de bout en bout.**
 | P-019 · la première mise en service | ⏳ la liste de vérification est écrite ([hebergement.md](../04-Architecture/hebergement.md) §La pose chez un hôte) — ⛔ **la pose attend un logiciel hôte réel et des collaborateurs qui parlent** |
 | P-020 · le retour au collaborateur | ✅ fait — notification in-widget sobre et à sens unique ([retour-au-collaborateur.md](../01-Specs/retour-au-collaborateur.md), [D-021](DECISIONS_LOG.md)) |
 | P-024 · la traçabilité du correctif | ✅ fait — hors séquence, dans la foulée de P-020 : « traité » exige désormais ce qui a corrigé, et `lire_retour` le rend ([tracabilite-du-correctif.md](../01-Specs/tracabilite-du-correctif.md), [D-024](DECISIONS_LOG.md)) |
+| P-025 · la citation qui n’en est pas une | ⏳ écrit — une correction de carte est citable dans la note comme si la personne l’avait dite ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 016) |
+| P-026 · la réponse d’un clic | ⏳ écrit — le modèle déclare un axe fermé, le dépôt écrit les valeurs ([D-025](DECISIONS_LOG.md)). ⛔ Après P-025 |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
-**La suite est écrite** : [05-Prompts/APRES-MVP.md] — neuf prompts, P-015 à P-023, dont le
+**La suite est écrite** : [05-Prompts/APRES-MVP.md] — P-015 à P-026, dont le
 premier est joué. Le lot 7
 finit un MVP qui n’est pas tout à fait fini (la recette non jouée, les deux défauts contournés
 de [BUGS_LOG](../03-Bugs/BUGS_LOG.md)), le lot 8 le met en service, le lot 9 est l’ordre de

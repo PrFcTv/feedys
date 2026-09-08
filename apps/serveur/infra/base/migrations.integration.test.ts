@@ -51,6 +51,7 @@ const TABLES_METIER = [
 const ENUMS = [
   'canal_notification',
   'confiance_synthese',
+  'geste_message',
   'role_message',
   'source_retour',
   'statut_retour',
@@ -153,7 +154,7 @@ describe('le socle, appliqué sur une base vierge', () => {
     )
   })
 
-  it('crée les six enums, avec leurs valeurs — ⛔ ni priorité, ni sévérité, ni score', async () => {
+  it('crée les sept enums, avec leurs valeurs — ⛔ ni priorité, ni sévérité, ni score', async () => {
     const { rows } = await base.client.query<{ nom: string; valeurs: string[] }>(
       `select t.typname as nom, array_agg(e.enumlabel::text order by e.enumsortorder) as valeurs
        from pg_type t
@@ -177,6 +178,11 @@ describe('le socle, appliqué sur une base vierge', () => {
     ])
     expect(parNom.get('type_retour')).toEqual(['bug', 'idee', 'question', 'gene'])
     expect(parNom.get('source_retour')).toEqual(['voix', 'texte'])
+    // ⛔ Les DEUX valeurs, dès 0008 : `reponse_axe` n’a pas encore de
+    //    producteur (il arrive avec P-026), mais `alter type … add value` ne
+    //    permet pas d’employer la valeur dans la transaction qui l’ajoute, et
+    //    le runner enveloppe chaque migration dans la sienne (D-025).
+    expect(parNom.get('geste_message')).toEqual(['correction', 'reponse_axe'])
   })
 
   it('crée les quatre index qui comptent', async () => {

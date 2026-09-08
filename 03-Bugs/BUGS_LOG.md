@@ -599,3 +599,57 @@ sans importer l’infrastructure du serveur. Il nomme en plus la variable réell
 **Ce qui l’a laissé passer** — la fonction était `private` dans `demarrage.ts`, et rien ne cherchait
 ses autres appelants. Un `grep DATABASE_URL_MIGRATIONS` sur `apps/serveur/outils/` ne rendait rien,
 et personne ne l’avait fait.
+
+---
+
+## 016 — Une correction de la carte est citable dans la note comme si la personne l’avait dite
+
+**Statut** : ✅ Résolu (2026-09-08, P-025)
+**Constaté le** : 2026-09-08, en préparant [D-025](../00-Projet/DECISIONS_LOG.md)
+**Où** : `apps/serveur/domaine/synthese/produire.ts`
+
+**Symptôme** — le développeur lit dans la note une citation entre guillemets — « Liste des
+mandats » — que le collaborateur n’a jamais prononcée. C’est le libellé que le bot avait proposé
+sur la carte, et que la personne a simplement laissé en place en corrigeant un autre champ.
+
+**Cause** — `parolesDe()` filtre `role === 'collaborateur'` **et rien d’autre**. Or
+`composerApports()` (`domaine/entretien/tour.ts`) écrit les corrections de carte comme des lignes
+`collaborateur` : `Correction · Écran — Liste des mandats`. Le texte de ces lignes est fabriqué par
+le widget à partir de la carte du bot, pas dicté.
+
+⚠️ **`verbatim.ts` n’y est pour rien, et il ne faut pas y toucher.** Il vérifie qu’une citation est
+une sous-chaîne exacte du fil — elle l’est réellement. Le défaut n’est pas dans la vérification, il
+est dans le **bassin** qu’on lui donne à chercher.
+
+⚠️ **Ce que ça coûte n’est pas cosmétique.** La citation verbatim est ce que la note a de plus
+fiable ([01-Specs/synthese.md](../01-Specs/synthese.md)), et `plafonnerConfiance` rabat la confiance
+à `basse` quand aucune citation ne survit. Une ligne de correction citée fait donc **monter** la
+confiance de la note sur la foi des mots du bot.
+
+**Correctif** — le fil **porte** désormais la distinction, dans une colonne : `messages.geste`
+(`geste_message`, nullable). `null` veut dire « la personne l’a dit » ; `correction` veut dire que
+le texte est fabriqué. `parolesDe()` ne retient que les lignes sans geste.
+
+⛔ **Pourquoi pas le préfixe de texte.** Reconnaître une correction à son `Correction · ` aurait
+marché jusqu’au jour où quelqu’un dicte le mot « correction ». Le fait doit être porté par la
+donnée, pas déduit de son apparence.
+
+⛔ **Pourquoi pas dans `verbatim.ts`.** Il fait exactement son travail : la citation *était* une
+sous-chaîne exacte du fil. Le défaut était dans le **bassin**, pas dans la recherche — et le
+corriger dans la recherche aurait affaibli la seule garantie qui tient par construction.
+
+⚠️ **Aucune donnée existante n’est réécrite.** Les corrections déjà en base restent `geste is null`,
+donc encore citables : on ne reconstruit pas le passé en devinant, et `messages` est append-only.
+Les notes déjà produites ne se refont pas non plus — il n’y en a qu’une par retour.
+
+**Ce qui l’a laissé passer** — les tests de `verbatim.ts` prouvent qu’une citation est bien une
+tranche du fil. Aucun ne demandait **de quoi le fil est fait** : on avait testé le contenu du
+bassin, jamais sa composition. Le test qui manquait tenait en une phrase — « une ligne
+`Correction ·` n’est pas citable » — et il rougit bien avant le correctif : `expected [ 'Liste des
+mandats' ] to deeply equal []`.
+
+⚠️ La leçon est celle de la relecture du lot 7, une fois de plus : **du code juste qui devient faux
+parce qu’autre chose a changé autour de lui.** `parolesDe()` était exact le jour où il a été écrit —
+toute ligne `collaborateur` était alors de la parole. C’est la carte corrigeable qui a introduit la
+première ligne fabriquée, sans que rien ne relise le filtre. D’où `MessageAEcrire.geste`
+**exigé** et non facultatif : la prochaine ligne fabriquée ne pourra pas entrer en silence.

@@ -12,10 +12,34 @@
  *    (architecture.md §3). C’est `infra/prompts.ts` qui va le chercher.
  */
 
+/**
+ * Ce qui, dans une ligne `collaborateur`, N’EST PAS de la parole.
+ *
+ * ⛔ `null` — l’absence de geste — veut dire « la personne l’a dit ». Tout le
+ *    reste vient d’une manipulation d’interface : le texte de la ligne est alors
+ *    fabriqué à partir de ce que le BOT avait écrit, et il ne peut pas devenir
+ *    une citation ([BUGS_LOG](../../../../03-Bugs/BUGS_LOG.md) 016,
+ *    [D-025](../../../../00-Projet/DECISIONS_LOG.md)).
+ *
+ * ⚠️ `reponse_axe` n’a pas encore de producteur : il arrive avec P-026. Il est
+ *    déclaré ici comme il l’est dans l’énumération Postgres, et pour la même
+ *    raison — `alter type … add value` ne permet pas d’employer la valeur dans
+ *    la transaction qui l’ajoute.
+ */
+export type GesteMessage = 'correction' | 'reponse_axe'
+
+/** Les gestes connus, pour relire ce que la base rend sans faire confiance. */
+export const GESTES: readonly GesteMessage[] = ['correction', 'reponse_axe']
+
 /** Un tour du fil, tel qu’il est en base. */
 export interface TourFil {
   readonly role: 'collaborateur' | 'bot'
   readonly texte: string
+  /**
+   * ⛔ Absent ou `null` = de la parole. Renseigné = une manipulation
+   *    d’interface, jamais citable (§`GesteMessage`).
+   */
+  readonly geste?: GesteMessage | null
 }
 
 /**

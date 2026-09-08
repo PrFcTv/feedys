@@ -95,12 +95,20 @@ function ports(modele: PortsTour['modele']): PortsTour {
 
 const acces = () => ({ retourId, cle: CLE, origine: `https://${DOMAINE}`, ip: '203.0.113.7' })
 
-async function fil(): Promise<{ ordre: number; role: string; texte: string; motif: string | null }[]> {
+async function fil(): Promise<
+  { ordre: number; role: string; texte: string; motif: string | null; geste: string | null }[]
+> {
   const { rows } = await client.query(
-    'select ordre, role, texte, motif from messages where retour_id = $1 order by ordre asc',
+    'select ordre, role, texte, motif, geste from messages where retour_id = $1 order by ordre asc',
     [retourId],
   )
-  return rows as { ordre: number; role: string; texte: string; motif: string | null }[]
+  return rows as {
+    ordre: number
+    role: string
+    texte: string
+    motif: string | null
+    geste: string | null
+  }[]
 }
 
 beforeAll(async () => {
@@ -222,7 +230,11 @@ describe('le contexte technique arrive jusqu’au modèle', () => {
 
     await jouerTour(acces(), ports(modele))
 
-    expect(modele.recues[0]?.fil).toEqual([{ role: 'collaborateur', texte: PAROLE }])
+    // ⚠️ `geste: null` fait partie de la forme depuis P-025 : le fil DIT que
+    //    cette ligne est de la parole, il ne le laisse pas déduire.
+    expect(modele.recues[0]?.fil).toEqual([
+      { role: 'collaborateur', texte: PAROLE, geste: null },
+    ])
   })
 
   it('charge bien le contexte métier du produit et la situation d’écran', async () => {
@@ -316,6 +328,41 @@ describe('la fin de l’entretien', () => {
       'Correction · Écran — Mandats',
       'et ça me ralentit',
     ])
+  })
+
+  it('⛔ la correction est marquée `correction` EN BASE, la parole reste nulle — 016', async () => {
+    await jouerTour(
+      {
+        ...acces(),
+        corrections: 'Écran — Liste des mandats',
+        texte: 'et c’est tous les jours',
+      },
+      ports(modeleBouchon({ tours: [tourAvec('une ?')] })),
+    )
+
+    const lignes = await fil()
+
+    // ⛔ LA PROPRIÉTÉ, contre le SQL réel : l’énumération Postgres accepte la
+    //    valeur, la colonne la rend, et le repli prudent de `gesteOuNul` n’a pas
+    //    servi. Un test unitaire ne pouvait pas le prouver — il bouchonne le
+    //    dépôt, donc il aurait été vert avec une migration jamais appliquée.
+    expect(lignes.map((l) => [l.texte, l.geste])).toEqual([
+      [PAROLE, null],
+      ['Correction · Écran — Liste des mandats', 'correction'],
+      ['et c’est tous les jours', null],
+      ['une ?', null],
+    ])
+  })
+
+  it('⛔ et le fil rechargé porte le geste : c’est lui qui atteint la synthèse', async () => {
+    await jouerTour(
+      { ...acces(), corrections: 'Écran — Liste des mandats' },
+      ports(modeleBouchon({ tours: [tourAvec(null)] })),
+    )
+
+    const charge = await creerDepotEntretien(bassin).charger(retourId, 'prod_1')
+
+    expect(charge?.fil.map((tour) => tour.geste ?? null)).toEqual([null, 'correction'])
   })
 
   it('un entretien clos refuse un tour de plus', async () => {

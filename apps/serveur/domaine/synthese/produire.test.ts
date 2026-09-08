@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { modeleBouchon } from '../entretien/modele'
 import { MAX_RELANCES } from '../entretien/tour'
 import type { TourFil } from '../entretien/prompts'
+import { messagesDuFil } from '../entretien/prompts'
 
 import type { PortDepotSyntheses, PortsSynthese, RetourASynthetiser } from './produire'
 import { etiquettesDe, finDe, parolesDe, plafonnerConfiance, produireSynthese } from './produire'
@@ -29,6 +30,19 @@ const FIL: TourFil[] = [
   { role: 'collaborateur', texte: PAROLE },
   { role: 'bot', texte: 'C’est arrivé depuis un moment, ou c’est nouveau ?' },
   { role: 'collaborateur', texte: 'non ça a toujours fait ça je crois' },
+]
+
+/**
+ * Le même fil, avec une correction de carte au bout.
+ *
+ * ⛔ « Liste des mandats » est un mot du BOT — la personne a corrigé un autre
+ *    champ et laissé celui-là en place. La ligne est bien `collaborateur`, elle
+ *    vient bien d’elle, et elle doit rester dans le fil ; mais elle ne peut pas
+ *    devenir une citation (BUGS_LOG 016).
+ */
+const FIL_AVEC_CORRECTION: TourFil[] = [
+  ...FIL,
+  { role: 'collaborateur', texte: 'Correction · Écran — Liste des mandats', geste: 'correction' },
 ]
 
 const BUG: Synthese = {
@@ -237,6 +251,34 @@ describe('⛔ les citations sont verbatim, quoi que le modèle produise', () => 
 
   it('ne prend que la parole de la personne comme source', () => {
     expect(parolesDe(FIL)).toEqual([PAROLE, 'non ça a toujours fait ça je crois'])
+  })
+
+  it('⛔ une correction de carte n’est pas de la parole — BUGS_LOG 016', () => {
+    expect(parolesDe(FIL_AVEC_CORRECTION)).toEqual([PAROLE, 'non ça a toujours fait ça je crois'])
+  })
+
+  it('⛔ et le mot du bot passé par une correction ne peut donc plus être cité — 016', async () => {
+    const parLaCorrection: Synthese = { ...BUG, citations: ['Liste des mandats'] }
+
+    const resultat = await produireSynthese(
+      RETOUR,
+      portsAvec(
+        baseAvec({ fil: FIL_AVEC_CORRECTION }),
+        modeleBouchon({ synthese: parLaCorrection }),
+      ),
+      MAX_RELANCES,
+    )
+
+    expect(resultat.ok).toBe(true)
+    if (!resultat.ok) return
+    expect(resultat.synthese.contenu.citations).toEqual([])
+  })
+
+  it('⚠️ mais la correction reste dans le fil — on retire une SOURCE, pas une ligne', () => {
+    expect(FIL_AVEC_CORRECTION.map((tour) => tour.texte)).toContain(
+      'Correction · Écran — Liste des mandats',
+    )
+    expect(messagesDuFil(FIL_AVEC_CORRECTION)).toHaveLength(FIL_AVEC_CORRECTION.length)
   })
 })
 
