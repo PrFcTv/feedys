@@ -555,6 +555,133 @@ secret n’est jamais réaffiché · désactiver un produit fait rendre `404` à
 
 ---
 
+## P-025 · La citation qui n’en est pas une
+
+**Objectif** — une note ne peut pas citer entre guillemets un mot que le bot a écrit.
+[BUGS_LOG](../03-Bugs/BUGS_LOG.md) 016.
+
+⚠️ **Petit correctif, gros enjeu.** La citation verbatim est ce que la note a de plus fiable, et
+`plafonnerConfiance` en dépend directement : une correction citée fait **monter** la confiance sur
+la foi des mots du bot. ⚠️ Ce prompt passe **avant** P-026, qui étend l’exclusion qu’il pose.
+
+```
+Corrige le défaut 016 de 03-Bugs/BUGS_LOG.md.
+
+Lis 03-Bugs/BUGS_LOG.md 016, 00-Projet/DECISIONS_LOG.md D-025,
+apps/serveur/domaine/synthese/produire.ts, apps/serveur/domaine/synthese/verbatim.ts,
+apps/serveur/domaine/entretien/tour.ts (composerApports) et
+04-Architecture/conventions-db.md.
+
+Le bassin des citations — parolesDe() — ne doit contenir que ce que la personne
+a réellement DIT. Les lignes de correction de carte, écrites par composerApports
+sous la forme « Correction · <champ> — <valeur> », sont fabriquées à partir de la
+carte du bot : elles en sortent.
+
+⛔ Ne touche pas à verbatim.ts. Il fait exactement son travail — le défaut est
+   dans ce qu’on lui donne à chercher, pas dans sa façon de chercher.
+⛔ Ne retire rien du fil. Les lignes de correction restent visibles au
+   back-office et par MCP. C’est leur usage comme SOURCE DE CITATION qu’on
+   supprime, pas leur existence.
+⛔ Ne reconnais pas une correction à son préfixe de texte. Le fil doit porter
+   de quoi la distinguer, sinon la règle se casse le jour où quelqu’un dicte
+   « correction · ».
+
+LA MIGRATION — décidée en D-025, ne la rediscute pas :
+  create type geste_message as enum ('correction', 'reponse_axe');
+  alter table messages add column if not exists geste geste_message;
+« geste is null » veut dire « c’est de la parole ». ⚠️ Les DEUX valeurs sont
+déclarées ici bien que P-025 n’emploie que la première : alter type … add value
+ne permet pas d’employer la valeur dans la transaction qui l’ajoute.
+Colonne nullable typée, ⛔ jamais de metadata. Miroir prisma/schema.prisma puis
+pnpm db:generate, ⛔ jamais prisma migrate. messages reste append-only.
+
+Le test qui manquait tient en une phrase : une ligne « Correction · » n’est pas
+citable. Écris-le d’abord, vois-le rougir, puis corrige.
+
+Dans le même commit : l’entrée 016 passe à ✅ Résolu.
+```
+
+**Acceptation** — le test rougit avant le correctif · une correction de carte n’apparaît plus jamais
+en citation · une correction reste lisible dans le fil au back-office et par MCP · les six checks
+verts en local.
+
+---
+
+## P-026 · La réponse d’un clic
+
+**Objectif** — répondre à la relance sans réactiver le micro ni retaper une phrase, **sans que le
+bot mette des mots dans la bouche de personne**. [D-025](../00-Projet/DECISIONS_LOG.md).
+
+⚠️ **Ne s’ouvre qu’après P-025** : il étend l’exclusion et réutilise la colonne posées là.
+
+```
+Écris la réponse d’un clic.
+
+Lis 00-Projet/DECISIONS_LOG.md D-025, 01-Specs/entretien.md (§Ce qu’il est utile
+de demander, §La carte de compréhension, §Les cinq règles dures),
+01-Specs/widget.md §En entretien, 01-Specs/synthese.md,
+04-Architecture/DESIGN.md, 04-Architecture/conventions-db.md et
+02-Metier/glossaire.md.
+
+CE QUI EST DÉJÀ DÉCIDÉ (D-025) — ⛔ ne le rediscute pas :
+- deux axes, « recurrence » et « ampleur », et pas un de plus ;
+- le modèle déclare l’axe, il n'écrit AUCUN libellé ;
+- aucune puce « Autre » — le champ texte et le micro SONT l’autre ;
+- le widget envoie la VALEUR, jamais le libellé ;
+- une réponse d’un clic n’est pas de la parole : geste = 'reponse_axe',
+  exclue du bassin des citations ;
+- les verrous sont dans borner(), côté serveur.
+
+CE QUE TU AS À FAIRE
+1. Le contrat, côté MIT : AXES et VALEURS_AXE dans transport.ts (⛔ sans zod,
+   il ne dépend de rien) ; SchemaTourRendu gagne « axe » ; SchemaCorpsTour gagne
+   « axe » et « valeurAxe », liés par un refine — l’un sans l’autre est refusé.
+   ⚠️ Relance budget.test.ts après : trois boutons ne doivent pas coûter 26 Ko.
+2. Le modèle : SchemaTourModele gagne « axe ». Deux phrases dans
+   prompts/systeme.md — un axe SEULEMENT si la réponse à ta question est
+   exactement l’une de ses valeurs, sinon null. ⛔ Aucun appel supplémentaire.
+3. borner() : les trois verrous de D-025 — pas de question → pas d’axe ;
+   recurrence déjà posée → pas d’axe ; valeur hors énumération → jetée.
+   Les tests d’abord.
+4. La migration : messages.axe et messages.valeur_axe, colonnes nullables
+   typées (⛔ jamais de metadata), avec un check que les deux sont nulles ou
+   aucune. La colonne geste existe déjà (P-025). Miroir Prisma,
+   pnpm db:generate, ⛔ jamais prisma migrate.
+5. La synthèse : parolesDe() exclut aussi geste = 'reponse_axe' ; un axe
+   répondu FIXE impact ou recurrence, sur le modèle de plafonnerConfiance.
+   ⛔ On ne croit pas le modèle sur ce qu’on sait de source sûre.
+6. Le widget : trois boutons sous la question, au-dessus du bloc micro.
+   ⛔ Pas de role="radiogroup" : ce n’est pas un choix obligatoire.
+   ⛔ Absents pendant l'écoute, comme le pied de panneau.
+   Un clic ENVOIE le tour, en emportant le texte et les corrections en cours —
+   sinon le bénéfice d’une seconde disparaît. Tokens uniquement, ⛔ aucune
+   couleur en dur.
+   ⛔ UN CLIC PRODUIT UNE SEULE LIGNE DE FIL, PAS DEUX. Il envoie l’axe ; il ne
+      passe PAS aussi par le chemin des corrections de carte, sinon le même fait
+      arrive au modèle en double — une fois « Correction · Depuis — à chaque
+      fois », une fois « Réponse · Récurrence — systematique ». Le champ de la
+      carte se met à jour avec la compréhension du tour suivant, exactement
+      comme après une réponse dictée.
+7. MCP : une ligne d’axe se lit comme CHOISIE, pas comme dite. Sans ça, le
+   développeur relit le défaut 016 un étage plus bas.
+8. pnpm entretien:rejouer imprime l’axe rendu à chaque tour. C’est l’outil de
+   mise au point du prompt : sans lui, « le modèle propose des boutons sur une
+   question ouverte » ne se constate qu’en production. ⛔ Il n'écrit toujours
+   rien.
+
+Dans le même commit : 01-Specs/entretien.md, 01-Specs/widget.md et
+01-Specs/synthese.md mis à jour, et le glossaire si un mot nouveau apparaît.
+
+⛔ Recette sur « pnpm widget:demo », jamais dans le back-office.
+```
+
+**Acceptation** — un clic termine le tour en une seconde · aucune réponse d’un clic n’apparaît jamais
+en citation · un axe répondu se retrouve tel quel dans `impact` ou `recurrence` de la note · sur une
+question ouverte, aucun bouton n’apparaît · le bundle tient sous 60 Ko gzip · les six checks verts
+en local.
+
+---
+
 # Ce qui n’est pas encore un prompt
 
 ⚠️ Ces sujets sont ouverts et **n’ont volontairement pas de prompt** : leur déclencheur n’est pas

@@ -990,3 +990,91 @@ Un retour qui se corrige couramment en plusieurs commits **et** dont on veut lir
 ouvrir l’audit : la table 1-n redeviendrait le bon outil. Ou l’arrivée d’un second développeur qui
 marque « traité » depuis le back-office plus souvent que par MCP — l’exigence changerait alors de
 chemin, ou deviendrait un champ de formulaire.
+
+---
+
+## D-025 — Le modèle déclare l’axe, le dépôt écrit les valeurs
+
+**2026-09-08**
+
+### Le problème
+
+Au tour 1, le bot pose une question ouverte en deux phrases. Pour répondre « oui, c’est
+systématique », il faut réactiver le micro ou retaper une phrase. Pour quelqu’un de pressé, c’est
+le moment où l’on referme le panneau — et un entretien abandonné au tour 1 vaut la parole brute,
+sans rien de ce que la relance devait établir.
+
+L’idée d’origine : faire générer au modèle deux ou trois réponses rapides à côté de sa question,
+affichées en boutons cliquables.
+
+### Les alternatives écartées
+
+1. **Le modèle écrit lui-même les libellés** — « Systématique », « Première fois », « Seulement sur
+   certains dossiers ».
+   ⛔ **Rejeté**, pour trois raisons dont une décisive.
+   - **La parole fabriquée devient citable.** Une réponse cliquée entre dans le fil en ligne
+     `collaborateur`, et `parolesDe()` en fait du matériau de citation. Le développeur lirait entre
+     guillemets un mot que le bot a écrit. Le défaut existe **déjà**, en plus petit :
+     [BUGS_LOG](../03-Bugs/BUGS_LOG.md) 016.
+   - **Le mot est déjà pris, avec le sens inverse.** `domaine/synthese/schema.ts` et
+     [01-Specs/synthese.md](../01-Specs/synthese.md) interdisent « toute suggestion technique » :
+     deux sens opposés du même mot dans le même domaine.
+   - **Le modèle jugerait seul si sa question est fermée.** Rien ne l’en empêche sur « qu’est-ce que
+     vous veniez de faire, juste avant ? », et trois boutons sous une question ouverte remplacent un
+     récit par un mot. Le taux d’abandon baisserait pendant que la note se vide.
+2. **Aucun bouton : la question met en évidence le champ de la carte qu’elle vise.**
+   ⛔ **Rejeté, mais de peu.** Économe — zéro composant — et ça règle la redondance avec la carte.
+   Mais la carte ne porte que `type`, `titre`, `resume`, `ecran` et `recurrence` : l’**ampleur**
+   (« ça vous bloque, ou ça vous ralentit ? »), seule question du tableau §*Ce qu’il est utile de
+   demander* valable pour un bug **et** pour une idée, n’y a pas de champ.
+3. **Ajouter `ampleur` à la carte de compréhension.**
+   ⛔ **Rejeté.** Une sixième ligne éditable, « (non précisé) » la plupart du temps, sur un panneau
+   étroit, qui pousse le micro vers le bas de l’écran. La carte est ce que le bot a **compris**, pas
+   un formulaire à remplir ([01-Specs/entretien.md](../01-Specs/entretien.md) §La carte de
+   compréhension).
+
+### La décision
+
+**Le modèle décide *quand*, le code décide *quoi*.** C’est déjà la découpe de `RELANCE_INAUDIBLE`
+(« écrite ici et pas demandée au modèle ») et celle de `verbatim.ts`.
+
+À côté de sa question, le modèle déclare un **axe fermé** — ou `null`. Il n’écrit aucun libellé :
+les valeurs et leurs libellés sont dans le dépôt.
+
+| axe | valeurs | ce qu’il alimente |
+|---|---|---|
+| `recurrence` | `premiere_fois` · `deja_vu` · `systematique` | `Comprehension.recurrence` **et** `Synthese.recurrence` — mêmes valeurs, vérifié |
+| `ampleur` | `bloque` · `ralentit` · `agace` | `Synthese.impact`, aujourd’hui **obligatoire et deviné** — `indetermine` est l’échappatoire du modèle |
+
+- ⛔ **Deux axes, et pas un de plus.** Ce sont les deux seules lignes fermées du tableau §*Ce qu’il
+  est utile de demander*. Les quatre autres appellent un récit. `Synthese.frequence` est un texte
+  libre : le fermer serait inventer une énumération que rien n’a mesurée.
+- ⛔ **Aucune puce « Autre ».** Elle ferait du bloc un choix obligatoire. Le champ texte et le micro
+  **sont** l’autre, au même niveau de visibilité (CLAUDE.md §La parole d’abord).
+- ⛔ **Le widget envoie la valeur, jamais le libellé.** Les libellés français du widget restent côté
+  MIT ; le serveur écrit la ligne du fil dans ses propres mots, côté AGPL. Ce qui traverse la
+  frontière est une **forme** — une énumération —, jamais du texte d’interface.
+- ⛔ **Une réponse d’un clic n’est pas de la parole.** Elle entre dans le fil en ligne
+  `collaborateur` — elle vient bien de la personne — mais marquée `geste = 'reponse_axe'`, et
+  **exclue du bassin des citations**.
+- **Ce qu’on sait de source sûre l’emporte sur ce que le modèle déduit.** Un axe répondu **fixe**
+  `impact` ou `recurrence` dans la synthèse, sur le modèle de `plafonnerConfiance`.
+- **Les verrous sont côté serveur, dans `borner()`** : pas de question → pas d’axe ; `recurrence`
+  déjà posée → pas d’axe (règle 1 : on ne demande pas ce qu’on a) ; valeur hors énumération →
+  jetée. Le widget ne décide rien, comme pour les relances.
+- **Aucun appel de modèle supplémentaire.** L’axe voyage dans le `generateObject` du tour, pour
+  quelques jetons de sortie.
+
+⚠️ **`messages.geste` est posé par P-025, avec ses deux valeurs déclarées d’emblée.** P-025 n’utilise
+que `correction` et P-026 ajoute `reponse_axe` — mais `alter type … add value` ne permet pas
+d’employer la valeur dans la transaction qui l’ajoute, et les migrations du dépôt sont
+transactionnelles. Déclarer les deux d’un coup coûte un mot ; les séparer coûterait une migration
+en deux temps pour rien.
+
+### Ce qui la renverserait
+
+Un relevé montrant que les clics **remplacent** la parole au lieu de la relancer : des entretiens
+qui se terminent au tour 1 sur un bouton, avec des notes plus pauvres qu’avant. La mesure est
+disponible sans travail — `messages.geste = 'reponse_axe'`, rapporté au nombre de tours. Ou
+l’inverse : trois axes fermés supplémentaires qui émergent de vrais retours, et la table de
+libellés en dur deviendrait le mauvais outil.

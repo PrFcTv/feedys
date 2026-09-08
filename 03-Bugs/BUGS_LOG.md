@@ -599,3 +599,36 @@ sans importer l’infrastructure du serveur. Il nomme en plus la variable réell
 **Ce qui l’a laissé passer** — la fonction était `private` dans `demarrage.ts`, et rien ne cherchait
 ses autres appelants. Un `grep DATABASE_URL_MIGRATIONS` sur `apps/serveur/outils/` ne rendait rien,
 et personne ne l’avait fait.
+
+---
+
+## 016 — Une correction de la carte est citable dans la note comme si la personne l’avait dite
+
+**Statut** : 🔴 Ouvert
+**Constaté le** : 2026-09-08, en préparant [D-025](../00-Projet/DECISIONS_LOG.md)
+**Où** : `apps/serveur/domaine/synthese/produire.ts`
+
+**Symptôme** — le développeur lit dans la note une citation entre guillemets — « Liste des
+mandats » — que le collaborateur n’a jamais prononcée. C’est le libellé que le bot avait proposé
+sur la carte, et que la personne a simplement laissé en place en corrigeant un autre champ.
+
+**Cause** — `parolesDe()` filtre `role === 'collaborateur'` **et rien d’autre**. Or
+`composerApports()` (`domaine/entretien/tour.ts`) écrit les corrections de carte comme des lignes
+`collaborateur` : `Correction · Écran — Liste des mandats`. Le texte de ces lignes est fabriqué par
+le widget à partir de la carte du bot, pas dicté.
+
+⚠️ **`verbatim.ts` n’y est pour rien, et il ne faut pas y toucher.** Il vérifie qu’une citation est
+une sous-chaîne exacte du fil — elle l’est réellement. Le défaut n’est pas dans la vérification, il
+est dans le **bassin** qu’on lui donne à chercher.
+
+⚠️ **Ce que ça coûte n’est pas cosmétique.** La citation verbatim est ce que la note a de plus
+fiable ([01-Specs/synthese.md](../01-Specs/synthese.md)), et `plafonnerConfiance` rabat la confiance
+à `basse` quand aucune citation ne survit. Une ligne de correction citée fait donc **monter** la
+confiance de la note sur la foi des mots du bot.
+
+**Correctif** — à écrire (P-025).
+
+**Ce qui l’a laissé passer** — les tests de `verbatim.ts` prouvent qu’une citation est bien une
+tranche du fil. Aucun ne demande **de quoi le fil est fait** : on a testé le contenu du bassin,
+jamais sa composition. Le test qui manquait tient en une phrase — « une ligne `Correction ·` n’est
+pas citable ».
