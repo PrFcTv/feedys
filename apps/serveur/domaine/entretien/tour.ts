@@ -21,7 +21,7 @@ import type { PortDepotRetours, ProduitConnu } from '../retours/ingestion'
 import { origineAutorisee } from '../retours/origine'
 
 import type { Comprehension, Modele, TourEntretien } from './modele'
-import type { ContexteEntretien, TourFil } from './prompts'
+import type { ContexteEntretien, GesteMessage, TourFil } from './prompts'
 
 /**
  * ⛔ DEUX. Pas « deux par défaut », pas « deux, configurable » : une limite dure.
@@ -50,6 +50,18 @@ export interface MessageAEcrire {
   readonly texte: string
   readonly transcriptBrut: string | null
   readonly motif: string | null
+  /**
+   * ⛔ `null` = de la parole, et c’est le cas ordinaire. Renseigné = le texte de
+   *    la ligne est fabriqué à partir de ce que le bot avait écrit, et la ligne
+   *    ne pourra jamais devenir une citation (`GesteMessage`,
+   *    [BUGS_LOG](../../../../03-Bugs/BUGS_LOG.md) 016).
+   *
+   * ⚠️ Exigé plutôt que facultatif : chaque site d’écriture doit AVOIR À DIRE
+   *    si ce qu’il écrit est de la parole. Un défaut implicite aurait laissé la
+   *    prochaine ligne fabriquée entrer dans le bassin des citations sans que
+   *    rien ne rougisse — c’est exactement ainsi que 016 est arrivé.
+   */
+  readonly geste: GesteMessage | null
 }
 
 /** L’état d’un entretien, tel que la base le rend. */
@@ -232,7 +244,7 @@ export async function jouerTour(entree: EntreeTour, ports: PortsTour): Promise<R
 
   const fil: TourFil[] = [
     ...entretien.fil,
-    ...apportes.map(({ role, texte }) => ({ role, texte })),
+    ...apportes.map(({ role, texte, geste }) => ({ role, texte, geste })),
   ]
   const ordreLibre = entretien.prochainOrdre + apportes.length
   const posees = relancesPosees(fil)
@@ -247,7 +259,7 @@ export async function jouerTour(entree: EntreeTour, ports: PortsTour): Promise<R
     }
 
     await ports.depot.ecrire(entree.retourId, [
-      { ordre: ordreLibre, role: 'bot', texte: RELANCE_INAUDIBLE, transcriptBrut: null, motif: MOTIF_INAUDIBLE },
+      { ordre: ordreLibre, role: 'bot', texte: RELANCE_INAUDIBLE, transcriptBrut: null, motif: MOTIF_INAUDIBLE, geste: null },
     ])
 
     return {
@@ -280,7 +292,7 @@ export async function jouerTour(entree: EntreeTour, ports: PortsTour): Promise<R
   //    ce qui a été demandé, la carte est rendue au widget et corrigée là.
   if (tour.question !== null) {
     await ports.depot.ecrire(entree.retourId, [
-      { ordre: ordreLibre, role: 'bot', texte: tour.question, transcriptBrut: null, motif: tour.motif },
+      { ordre: ordreLibre, role: 'bot', texte: tour.question, transcriptBrut: null, motif: tour.motif, geste: null },
     ])
   }
 
@@ -385,6 +397,12 @@ function composerApports(
       texte: `Correction · ${tronquer(corrections, BORNES.texte)}`,
       transcriptBrut: null,
       motif: null,
+      // ⛔ LA LIGNE EST D’ELLE, SON TEXTE EST DU BOT. Le widget la compose à
+      //    partir des champs de la carte : « Correction · Écran — Liste des
+      //    mandats » contient un mot que la personne n’a jamais prononcé, elle
+      //    l’a seulement laissé en place. D’où le geste, qui la sort du bassin
+      //    des citations sans la sortir du fil (BUGS_LOG 016).
+      geste: 'correction',
     })
   }
 
@@ -397,6 +415,8 @@ function composerApports(
       texte: tronquer(texte, BORNES.texte),
       transcriptBrut: brut ? tronquer(brut, BORNES.texte) : null,
       motif: null,
+      // ⚠️ De la parole : dictée ou tapée, ce sont ses mots. Citable.
+      geste: null,
     })
   }
 

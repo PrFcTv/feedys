@@ -59,6 +59,14 @@ enum RoleMessage {
   @@map("role_message")
 }
 
+/// ⛔ Ce qui, dans une ligne `collaborateur`, n’est PAS de la parole. NULL = la personne l’a dit (P-025, BUGS_LOG 016, D-025).
+enum GesteMessage {
+  correction
+  reponse_axe
+
+  @@map("geste_message")
+}
+
 enum ConfianceSynthese {
   haute
   moyenne
@@ -156,6 +164,8 @@ model Message {
   transcriptBrut String?     @map("transcript_brut")
   audioChemin    String?     @map("audio_chemin")
   motif          String?
+  /// NULL = de la parole. Renseigné = fabriqué à partir des mots du bot, jamais citable.
+  geste          GesteMessage?
   creeLe         DateTime    @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe          DateTime    @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 

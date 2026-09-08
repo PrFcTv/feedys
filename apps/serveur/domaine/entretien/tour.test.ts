@@ -330,6 +330,31 @@ describe('les corrections de la carte', () => {
     expect(base.ecrits.map((m) => m.texte)).toEqual(['Correction · Type — une idée'])
     expect(base.clotures).toEqual(['envoye'])
   })
+
+  it('⛔ la correction porte un geste, la parole n’en porte pas — BUGS_LOG 016', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }])
+
+    await jouerTour(
+      { ...ACCES, corrections: 'Écran — Liste des mandats', texte: 'et c’est tous les jours' },
+      portsAvec(base, modeleBouchon()),
+    )
+
+    // ⛔ C’EST LA PROPRIÉTÉ QUI FERME 016. « Liste des mandats » est un mot du
+    //    bot que la personne a laissé en place : la ligne reste dans le fil,
+    //    mais elle sort du bassin des citations.
+    expect(base.ecrits.filter((m) => m.role === 'collaborateur').map((m) => m.geste)).toEqual([
+      'correction',
+      null,
+    ])
+  })
+
+  it('⚠️ et ce que le bot écrit n’est pas un geste non plus — un geste est une manipulation', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }])
+
+    await jouerTour({ ...ACCES, texte: 'et c’est tous les jours' }, portsAvec(base, modeleBouchon()))
+
+    expect(base.ecrits.filter((m) => m.role === 'bot').map((m) => m.geste)).toEqual([null])
+  })
 })
 
 describe('l’accès', () => {

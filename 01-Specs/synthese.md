@@ -112,6 +112,25 @@ construction, et le test qui la vérifie teste notre code, pas la docilité d’
 ⚠️ Une citation jetée est **journalisée** : c’est le signal qu’un prompt dérive vers la
 reformulation, et on veut le voir avant les utilisateurs.
 
+#### ⛔ Et le bassin où l’on cite n’est pas « toute ligne du collaborateur »
+
+La vérification ne vaut que ce que vaut ce qu’on lui donne à chercher. **Une ligne
+`collaborateur` n’est pas nécessairement de la parole** : les corrections de la carte de
+compréhension en sont, et leur texte est fabriqué à partir de ce que le **bot** avait écrit —
+`Correction · Écran — Liste des mandats` contient un mot que la personne n’a jamais prononcé, elle
+l’a seulement laissé en place.
+
+⛔ **Ces lignes sont exclues du bassin des citations.** Elles portent en base une colonne
+`messages.geste` non nulle ; `parolesDe()` ne retient que les lignes qui n’en portent pas.
+
+⚠️ **On retire une source, pas une ligne.** Les corrections restent dans le fil, partent au modèle
+et se lisent au back-office comme par MCP. C’est leur usage comme *matière à citation* qui
+disparaît.
+
+⚠️ **Ce n’était pas théorique** : comme la confiance est rabattue à `basse` quand aucune citation
+ne survit, une correction citée la faisait **monter** sur la foi des mots du bot
+([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 016, [D-025](../00-Projet/DECISIONS_LOG.md)).
+
 ### La qualification métier de la zone et de l’impact (P-02X)
 
 Le prompt système de la synthèse (`apps/serveur/domaine/synthese/prompts/synthese.md`) reçoit

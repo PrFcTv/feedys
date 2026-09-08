@@ -9,6 +9,7 @@
  *    déclenchée par le serveur lui-même, APRÈS la clôture d’un entretien déjà
  *    autorisé. Aucune requête client n’atteint ce dépôt.
  */
+import { GESTES } from '../../domaine/entretien/prompts'
 import type {
   EtiquettesRetour,
   PortDepotSyntheses,
@@ -36,8 +37,13 @@ const CHARGER = `
    limit 1
 `
 
+/**
+ * ⚠️ `geste` est lu ICI aussi, et c’est le point du correctif : sans lui,
+ *    `parolesDe()` ne peut pas distinguer une parole d’une correction de carte,
+ *    et la note cite un mot du bot (BUGS_LOG 016).
+ */
 const FIL = `
-  select role, texte
+  select role, texte, geste
     from messages
    where retour_id = $1
    order by ordre asc
@@ -93,6 +99,7 @@ export function creerDepotSyntheses(bassin: Bassin): PortDepotSyntheses {
         const fil = messages.rows.map((tour) => ({
           role: tour['role'] === 'bot' ? ('bot' as const) : ('collaborateur' as const),
           texte: String(tour['texte'] ?? ''),
+          geste: GESTES.find((connu) => connu === tour['geste']) ?? null,
         }))
 
         const recuLe = ligne['cree_le']
