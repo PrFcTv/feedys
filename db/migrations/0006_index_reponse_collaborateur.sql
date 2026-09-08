@@ -18,8 +18,11 @@
 -- ⚠️ Ce fichier ne porte ni BEGIN ni COMMIT : le runner enveloppe chaque
 --    migration dans sa propre transaction.
 
+-- ⚠️ `reponse_envoyee_le` est dans les colonnes, pas seulement dans le `where` :
+--    la relève filtre dessus (les réponses de moins de trente jours) ET trie
+--    dessus. L’y mettre évite le tri, pour zéro coût supplémentaire.
 create index if not exists retours_reponse_en_attente_idx
-  on retours (produit_id, auteur_ref)
+  on retours (produit_id, auteur_ref, reponse_envoyee_le desc)
   where reponse_envoyee_le is not null and reponse_lue_le is null;
 
 comment on index retours_reponse_en_attente_idx is

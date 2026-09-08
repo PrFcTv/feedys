@@ -229,6 +229,51 @@ describe('le cycle de retour au collaborateur (Postgres réel)', () => {
   })
 
   /**
+   * ⛔ Une réponse jamais lue s’éteint au bout de trente jours.
+   *
+   * ⚠️ Ce que ça protège : la pastille du lanceur. Sans borne, elle reste posée
+   *    des mois sur le widget de quelqu’un qui ne l’ouvrira plus — et une
+   *    pastille qui persiste sans être réclamée cesse d’être une information
+   *    pour devenir une obligation, c’est-à-dire le badge de non-lus d’Intercom
+   *    que D-021 dit expressément ne PAS être.
+   *
+   * ⚠️ L’intervalle vit dans le SQL : seul un vrai Postgres le prouve.
+   */
+  it('⛔ une réponse de plus de trente jours ne se relève plus — mais reste en base', async () => {
+    const idRetour = 'ret_collab_3'
+    const refAuteur = 'usr_chloe'
+    const jetonChloe = jeton(refAuteur)
+
+    await client.query(
+      `insert into retours (id, produit_id, source, statut, auteur_ref, auteur_nom, auteur_role, identite_verifiee, titre,
+                            reponse_texte, reponse_envoyee_le)
+       values ($1, 'prd_collab', 'texte', 'traite', $2, 'Chloé', 'Gestionnaire', true, 'Vieux retour',
+               'Corrigé il y a longtemps.', now() - interval '31 days')`,
+      [idRetour, refAuteur],
+    )
+
+    const repVieux = await routeCollab.GET(requeteGet({ [EN_TETE_IDENTITE]: jetonChloe }))
+    expect((await repVieux.json()).retours).toEqual([])
+
+    // ⛔ La trace n’est PAS effacée : le back-office la lit toujours. C’est la
+    //    relève qui cesse, pas la mémoire.
+    const { rows } = await client.query(
+      'select reponse_texte, reponse_envoyee_le from retours where id = $1',
+      [idRetour],
+    )
+    expect(rows[0].reponse_texte).toBe('Corrigé il y a longtemps.')
+    expect(rows[0].reponse_envoyee_le).not.toBeNull()
+
+    // Et la veille du seuil, elle se relève encore.
+    await client.query(
+      `update retours set reponse_envoyee_le = now() - interval '29 days' where id = $1`,
+      [idRetour],
+    )
+    const repRecent = await routeCollab.GET(requeteGet({ [EN_TETE_IDENTITE]: jetonChloe }))
+    expect((await repRecent.json()).retours).toHaveLength(1)
+  })
+
+  /**
    * ⛔ Le défaut que ce scénario ferme, et pourquoi il était invisible.
    *
    * La première version posait `reponse_envoyee_le = now()` et

@@ -76,6 +76,20 @@ export interface Ports {
   readonly accuserReception?: (retourId: string) => Promise<boolean>
 }
 
+/**
+ * ⛔ Trois cartes au plus, et les suivantes attendent leur tour.
+ *
+ * ⚠️ Le geste qui rend ce plafond nécessaire est banal : un développeur qui
+ *    solde dix vieux retours d’un coup. Sans lui, dix cartes s’empilent en
+ *    tête du panneau et poussent le micro hors de l’écran — le widget cesse
+ *    de servir à parler, qui est sa seule raison d’exister.
+ *
+ * ⛔ Et surtout PAS de « et 7 autres » : compter est exactement ce que D-021
+ *    s’interdit. Les autres arrivent au fur et à mesure des « J’ai vu », sans
+ *    jamais annoncer combien il en reste.
+ */
+const CARTES_AU_PLUS = 3
+
 /** L’accusé reste deux secondes. Assez pour être lu, trop peu pour gêner. */
 const DUREE_ACCUSE = 2_000
 
@@ -490,7 +504,7 @@ export function Widget(ports: Ports) {
               <div class="corps">
                 {/* ⛔ Notifications de retour au collaborateur (P-020) : à sens unique */}
                 {phase === 'repos' &&
-                  reponses.map((rep) => (
+                  reponses.slice(0, CARTES_AU_PLUS).map((rep) => (
                     <div key={rep.id} class="notification" role="status">
                       <div class="notification__titre">{titreNotification(rep.titre)}</div>
                       {rep.reponseTexte && <p class="notification__texte">{rep.reponseTexte}</p>}

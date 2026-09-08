@@ -803,6 +803,13 @@ n’apparaît que sur un geste du développeur, et elle disparaît définitiveme
 regard. ⚠️ Si l’une de ces quatre conditions tombe, c’est cette décision qu’il faut rouvrir,
 pas la pastille qu’il faut ajuster.
 
+Deux bornes les tiennent, et sans elles la pastille dérivait **vers** le badge Intercom :
+
+- **trois cartes au plus** dans le panneau. Solder dix vieux retours d’un coup poussait sinon
+  le micro hors de l’écran, et le widget cessait de servir à parler ;
+- **trente jours de vie** pour une réponse jamais lue. Une pastille posée depuis trois mois
+  n’est plus une information : c’est une tache, et une obligation.
+
 ### Les invariants préservés
 
 - **Frontière de licence** : les contrats de transport sont 100 % MIT (`packages/widget`),

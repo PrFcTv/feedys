@@ -119,6 +119,11 @@ poli que Feedys refuse d’être.
   notification, mais aucun flux hôte ne casse.
 - Si l’identité est valide : sélectionne les retours du produit où `auteur_ref = identite.ref`,
   `reponse_envoyee_le IS NOT NULL` et `reponse_lue_le IS NULL`.
+- ⛔ **Et de moins de trente jours.** Une réponse jamais lue s’éteint : sans borne, la pastille
+  reste posée des mois sur le widget de quelqu’un qui ne l’ouvrira plus, et une pastille qui
+  persiste sans être réclamée devient une obligation — le badge de non-lus que D-021 dit ne
+  PAS être. ⚠️ La ligne n’est pas touchée : c’est la relève qui cesse, pas la trace. Le
+  back-office la lit toujours.
 - Retourne :
   ```json
   [
@@ -155,6 +160,12 @@ Le widget applique strictement les règles d’intégration et d’ergonomie du 
    - ⛔ Aucun pop-up intrusif, aucune bulle qui s’ouvre toute seule, aucun son.
 
 2. **La carte sobre à l’ouverture** :
+   - ⛔ **Trois cartes au plus.** Le panneau sert à PARLER ; les cartes y sont un invité. Un
+     développeur qui solde dix vieux retours d’un coup — le geste le plus banal — pousserait
+     sinon le micro hors de l’écran. Les suivantes prennent la place au fur et à mesure des
+     « J’ai vu ».
+   - ⛔ **Et jamais de « et 7 autres ».** Compter est précisément ce que D-021 s’interdit :
+     rien n’annonce combien il en reste.
    - À l’ouverture du panneau, si des réponses attendent, une carte sobre (`.notification`)
      s’affiche en tête du corps :
      - Titre : « Votre retour sur « [Titre du retour] » a été pris en compte. » (ou « Votre retour a été pris en compte. » si le titre est absent).

@@ -241,3 +241,108 @@ describe('⛔ les classes rendues sont celles que la feuille déclare', () => {
     })
   }
 })
+
+/**
+ * ⛔ Le panneau sert à PARLER. Les cartes sont un invité, pas le sujet.
+ *
+ * ⚠️ Le geste qui rend ce plafond nécessaire est banal : un développeur qui
+ *    solde dix vieux retours d’un coup. Sans plafond, dix cartes s’empilent en
+ *    tête du corps et poussent le micro hors de l’écran.
+ */
+describe('⛔ les cartes ne noient pas le micro', () => {
+  function dixReponses(): ReponseCollaborateur[] {
+    return Array.from({ length: 10 }, (_, rang) => ({
+      id: `ret_${rang}`,
+      titre: `Retour ${rang}`,
+      statut: 'traite',
+      reponseTexte: 'Corrigé.',
+      reponseEnvoyeeLe: '2026-09-07T08:30:00.000Z',
+    }))
+  }
+
+  it('en affiche trois au plus, quoi qu’en dise le serveur', async () => {
+    const reponses = dixReponses()
+
+    let montage!: ReturnType<typeof monter>
+    await act(async () => {
+      montage = monter(CONFIGURATION, {
+        ports: {
+          releverReponses: async () => reponses,
+          accuserReception: async () => true,
+        },
+      })
+    })
+    await calmer()
+
+    const racine = racines[0]!
+    await ouvrir(racine)
+
+    expect(racine.querySelectorAll('.notification')).toHaveLength(3)
+
+    montage.demonter()
+  })
+
+  it('⛔ n’annonce JAMAIS combien il en reste — compter est ce que D-021 s’interdit', async () => {
+    const reponses = dixReponses()
+
+    let montage!: ReturnType<typeof monter>
+    await act(async () => {
+      montage = monter(CONFIGURATION, {
+        ports: {
+          releverReponses: async () => reponses,
+          accuserReception: async () => true,
+        },
+      })
+    })
+    await calmer()
+
+    const racine = racines[0]!
+    await ouvrir(racine)
+
+    // ⛔ Rien n’annonce combien il en reste.
+    //
+    // ⚠️ On ne cherche pas un chiffre nu : les titres bouchonnés vont de
+    //    « Retour 0 » à « Retour 9 », et l’assertion accuserait le nom du
+    //    retour lui-même. On cherche les mots qu’un compteur écrirait.
+    const texte = racine.querySelector('.panneau')?.textContent ?? ''
+    expect(texte).not.toMatch(/autres?/i)
+    expect(texte).not.toMatch(/en attente/i)
+    expect(texte).not.toMatch(/restante?s?/i)
+    expect(texte).not.toMatch(/non lue?s?/i)
+
+    montage.demonter()
+  })
+
+  it('la suivante prend la place dès qu’une carte est acquittée', async () => {
+    const reponses = dixReponses()
+
+    let montage!: ReturnType<typeof monter>
+    await act(async () => {
+      montage = monter(CONFIGURATION, {
+        ports: {
+          releverReponses: async () => reponses,
+          accuserReception: async () => true,
+        },
+      })
+    })
+    await calmer()
+
+    const racine = racines[0]!
+    await ouvrir(racine)
+
+    const premier = racine.querySelector('.notification .notification__titre')?.textContent
+    expect(premier).toContain('Retour 0')
+
+    await act(async () => {
+      racine.querySelector<HTMLButtonElement>('.notification__action')!.click()
+    })
+    await calmer()
+
+    // ⚠️ Toujours trois : la quatrième a pris la place, sans nouvelle relève.
+    expect(racine.querySelectorAll('.notification')).toHaveLength(3)
+    const apres = racine.querySelector('.notification .notification__titre')?.textContent
+    expect(apres).toContain('Retour 1')
+
+    montage.demonter()
+  })
+})
