@@ -1217,7 +1217,7 @@ non diagnostique par construction, ce qui l’aligne sur la règle 4 jusque dans
 - **Aucun rattrapage des exceptions d’avant le chargement**, hors `buffered` réseau. Un stub à
   poser dans le `<head>` de l’hôte casserait la promesse de l’intégration en une ligne.
 - **Ni iframes ni web workers** : un écouteur du document parent ne les voit pas. Écrit en non-but
-  plutôt que découvert en défaut ([TICKETS_DIFFERES](TICKETS_DIFFERES.md) T-010).
+  plutôt que découvert en défaut ([TICKETS_DIFFERES](TICKETS_DIFFERES.md) T-011).
 - **Aucune détection de « rien ne s’est passé »** — une requête qui n’est jamais partie est un
   signal réel, mais le mesurer demanderait de savoir ce que l’hôte aurait dû appeler.
 
@@ -1234,3 +1234,102 @@ renverse aucune règle. Au-dessus de 60 %, le renversement de la règle 1 est pa
 L’inverse la renverserait aussi : un hôte dont les indices se révéleraient porteurs de données
 métier malgré la normalisation. La réponse serait alors le retrait du relevé passif, pas un tamis
 de plus.
+
+---
+
+## D-027 — Le widget n’exige rien du CSP de son hôte, et l’identité peut être une fonction
+
+**2026-09-09**
+
+Deux dettes envers le logiciel qui nous héberge, trouvées en préparant la première pose, et
+réglées avant elle — après, la première serait devenue une négociation.
+
+### 1 · La feuille de style est **construite**, pas posée en `<style>`
+
+Un `<style>`, **même enfermé dans un shadow DOM**, est du style *en ligne* pour le navigateur : il
+tombe sous `style-src`, et un hôte qui a une politique stricte le refuse.
+
+**Le motif est une mesure, pas une intuition.** Le 2026-09-09, page nue, sous
+`default-src 'self'`, sans `style-src 'unsafe-inline'` :
+
+| | fond du lanceur | rayon | hauteur | console |
+|---|---|---|---|---|
+| `<style>` | `rgb(240,240,240)` — gris système | `0px` | `59px` | ⛔ `Applying inline style violates…` |
+| + `style-src 'unsafe-inline'` | `rgb(44,62,100)` = `--w-accent` | `999px` | `48px` | vide |
+| **feuille construite** | `rgb(44,62,100)` | `999px` | `48px` | **vide, SANS `unsafe-inline`** |
+
+⛔ Le widget **montait et fonctionnait** dans les trois cas. Ce n’était pas « la bulle
+n’apparaît pas » : c’était un bouton système gris et carré dans le coin d’un logiciel métier, plus
+une erreur rouge dans sa console. Ça a l’air cassé, et c’est nous.
+
+⛔ **Et ça contredisait notre propre doctrine.** [D-011] refuse de charger snapdom depuis un CDN
+parce que « lui imposer un tiers au moment de l’exécution, **et la règle CSP qui va avec**, n’est
+pas à nous de le décider ». Exiger `style-src 'unsafe-inline'` pour notre propre feuille était la
+même faute, non appliquée jusqu’au bout.
+
+**Ce que le widget demande désormais, mesuré** : `script-src` et `connect-src`, une seule origine,
+et **rien d’autre** — vérifié sous `style-src 'none'` et `img-src 'none'` explicites, plus durs que
+`'self'`. Le tableau complet, avec ce qui n’est **pas** exigé, est dans
+[hebergement.md](../04-Architecture/hebergement.md) §La pose chez un hôte, et chaque ligne a son
+test dans `tests/e2e/widget-csp.spec.ts`.
+
+⚠️ **Le repli sur `<style>` reste, et il n’est pas facultatif.** `CSSStyleSheet` constructible
+manque sur Safari < 16.4 et Firefox < 101. [D-003] exige Chrome ou Edge pour la **dictée**, jamais
+pour le reste : ailleurs, le champ texte doit rester impeccable. Sur ces navigateurs-là, un
+`<style>` et un CSP strict ne peuvent pas être vrais en même temps — le style l’emporte, parce
+qu’un widget nu se voit et qu’un CSP relâché ne se voit pas.
+
+⛔ **Pas de drapeau, pas de version, pas de négociation de capacités** pour choisir le chemin. Le
+widget essaie le bon, se replie, et se tait. ⚠️ Mais le repli **ne doit pas devenir le chemin
+ordinaire en silence** : rien n’est enveloppé dans un `try` global, chaque étape est vérifiée
+positivement — la feuille a-t-elle été *analysée*, a-t-elle été *adoptée* —, et le chemin
+réellement pris **se lit dans la racine** : une feuille adoptée et aucun `<style>`, ou l’inverse.
+
+⚠️ **La preuve est portée par un parcours e2e, pas par un test unitaire**, et c’est délibéré :
+happy-dom 20 sait construire une feuille, donc `montage.test.tsx` exerce bien le nouveau chemin —
+mais un DOM en JavaScript ne dit rien d’un CSP. Seul un vrai Chromium peut refuser un `<style>`.
+
+⚠️ **Ce que ça ne règle pas** : la **capture d’écran** coûte toujours deux directives à l’hôte —
+snapdom pose un `<style>` dans le document de l’hôte et charge un SVG en `data:`. Sans elles, la
+capture est simplement absente et l’envoi part quand même, mais la console de l’hôte porte deux
+lignes rouges. Ce n’est pas notre code, et c’est écrit :
+[T-010](TICKETS_DIFFERES.md).
+
+### 2 · `window.feedys.identite` accepte une fonction
+
+```js
+window.feedys = { identite: () => monJetonCourant }
+```
+
+Le widget relit l’identité à chaque envoi ; le mécanisme existait, mais l’hôte devait **reposer une
+chaîne lui-même** à chaque rotation de son jeton, et l’exemple du README lui donnait une heure. Or
+dans un logiciel métier, un onglet ouvert toute la journée est la norme : passé une heure, les
+retours arrivaient **sans auteur** — rien n’est perdu, mais
+[P-020](../01-Specs/retour-au-collaborateur.md) ne peut plus revenir vers personne, c’est-à-dire
+la suite que [ROADMAP](ROADMAP.md) classe ①.
+
+⛔ **Synchrone, et pas de promesse.** Une fonction `async` ferait attendre le chemin d’envoi sur du
+code de l’hôte : une de ses lenteurs, un de ses blocages, et c’est la parole de quelqu’un qui se
+perd. **On ne perd jamais une parole pour un problème d’identité** (P-012). Le refus est écrit dans
+`identite.ts` avec sa raison, et un test le tient — sans quoi quelqu’un ajoutera l’`await` dans six
+mois.
+
+⛔ **Une fonction qui lève, ou qui rend autre chose qu’une chaîne non vide, vaut identité absente**,
+et l’exception ne remonte jamais : un bug chez l’hôte ne casse pas l’envoi.
+
+⚠️ **La forme chaîne continue de marcher, à l’identique.** Aucun hôte existant n’a à bouger.
+
+⚠️ **Et l’exemple du README dit maintenant son compromis** : douze heures, parce qu’un jeton qui
+fuite vaut jusqu’à son expiration — ce qu’il permet est de faire passer un retour pour celui d’un
+collègue, rien d’autre, ni chez l’hôte ni chez Feedys.
+
+### Ce qui la renverserait
+
+- **Pour le CSP** : un hôte dont la politique interdirait aussi `script-src` d’une origine tierce —
+  il faudrait alors servir `widget.js` depuis son propre domaine, par un proxy, et c’est un tout
+  autre montage. Ou une version de Chrome qui ferait tomber les feuilles construites sous
+  `style-src` : le repli redeviendrait le seul chemin, et la dette de [D-011] serait à rouvrir en
+  entier.
+- **Pour l’identité** : un hôte incapable de fournir un jeton sans aller-retour réseau. Ce serait la
+  seule raison de rouvrir l’asynchrone — et la réponse ne serait pas d’attendre à l’envoi, mais de
+  laisser l’hôte **pousser** une nouvelle chaîne quand il l’a, ce qu’il peut déjà faire aujourd’hui.

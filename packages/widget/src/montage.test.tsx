@@ -19,6 +19,7 @@ import type { Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour } from '
 import type { ResultatTour } from './entretien'
 import type { Resultat } from './envoi'
 import { monter } from './montage'
+import { FEUILLE } from './ui/styles'
 import type { Ports } from './ui/Widget'
 
 const CONFIGURATION: Configuration = {
@@ -195,6 +196,56 @@ describe('monter — l’isolation', () => {
     montage.demonter()
 
     expect(document.querySelector('feedys-widget')).toBeNull()
+  })
+})
+
+/**
+ * ⚠️ CE QUE CE BLOC PROUVE, ET CE QU’IL NE PROUVE PAS. happy-dom 20 **sait**
+ *    construire une feuille (`new CSSStyleSheet()`, `replaceSync`,
+ *    `adoptedStyleSheets`) — vérifié le 2026-09-09 : le chemin exercé ici est
+ *    donc bien le NOUVEAU, et non le repli. ⛔ Mais un DOM en JavaScript ne dit
+ *    rien d’un CSP : c’est `tests/e2e/widget-csp.spec.ts`, dans un vrai
+ *    Chromium sous `default-src 'self'`, qui prouve que la feuille adoptée
+ *    n’exige plus rien de l’hôte. Ce bloc-ci tient l’autre moitié : que le
+ *    repli existe, qu’il pose la MÊME feuille, et que les deux chemins ne
+ *    coexistent jamais.
+ */
+describe('monter — la feuille de style', () => {
+  it('⛔ ADOPTE la feuille, et ne pose AUCUN <style> dans la racine', () => {
+    const { racine } = installer()
+
+    // ⛔ Un `<style>` est du style EN LIGNE pour le navigateur : sous un CSP
+    //    strict il est refusé, et le widget s’affiche nu (P-027).
+    expect(racine.querySelectorAll('style')).toHaveLength(0)
+    expect(racine.adoptedStyleSheets).toHaveLength(1)
+    // ⛔ Et la feuille a été ANALYSÉE, pas seulement acceptée.
+    expect(racine.adoptedStyleSheets[0]!.cssRules.length).toBeGreaterThan(0)
+  })
+
+  it('⛔ se replie sur un <style> quand la feuille construite manque — et pose LA MÊME feuille', () => {
+    // ⚠️ Safari < 16.4 et Firefox < 101, en une ligne : un document dont la
+    //    fenêtre n’expose pas `CSSStyleSheet`. ⛔ [D-003] exige Chrome ou Edge
+    //    pour la DICTÉE, jamais pour le reste — ailleurs, le champ texte doit
+    //    rester impeccable, donc habillé.
+    const ancien = new Proxy(document, {
+      get(cible, propriete) {
+        if (propriete === 'defaultView') return {}
+        const valeur = Reflect.get(cible, propriete, cible) as unknown
+        return typeof valeur === 'function' ? valeur.bind(cible) : valeur
+      },
+    })
+
+    void act(() => {
+      monter(CONFIGURATION, { document: ancien, ports: { collecter: vi.fn(async () => CONTEXTE) } })
+    })
+
+    const racine = racines[0]!
+
+    expect(racine.adoptedStyleSheets).toHaveLength(0)
+    const balises = racine.querySelectorAll('style')
+    expect(balises).toHaveLength(1)
+    // ⛔ Le repli change COMMENT la feuille est posée, jamais ce qu’elle contient.
+    expect(balises[0]!.textContent).toBe(FEUILLE)
   })
 })
 
