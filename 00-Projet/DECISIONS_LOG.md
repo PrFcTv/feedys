@@ -1333,3 +1333,253 @@ collègue, rien d’autre, ni chez l’hôte ni chez Feedys.
 - **Pour l’identité** : un hôte incapable de fournir un jeton sans aller-retour réseau. Ce serait la
   seule raison de rouvrir l’asynchrone — et la réponse ne serait pas d’attendre à l’envoi, mais de
   laisser l’hôte **pousser** une nouvelle chaîne quand il l’a, ce qu’il peut déjà faire aujourd’hui.
+
+---
+
+## D-028 — Une installation par client, et une image publiée pour la poser
+
+**2026-09-09**
+
+### Le problème
+
+Le dépôt supposait « une instance, un développeur, plusieurs de ses produits » ([D-005], repris par
+[D-015]). **C’est l’inverse** : les logiciels métier tournent sur le VPS **de chaque client**, et
+Feedys s’installe à côté d’eux, **une fois par client**.
+
+Le conteneur le permettait déjà — il écoute sur la boucle locale, derrière le proxy en place, et ne
+dépend d’aucun fournisseur ([hebergement.md](../04-Architecture/hebergement.md) §La forme). C’est le
+reste qui ne suivait pas : **rien n’était publié** — la CI construisait l’image et la jetait —, et
+**rien ne disait ce que cette topologie coûte**.
+
+### ⚠️ Ce que cette décision RENVERSE, et qu’il faut dire
+
+- **[D-005]** : « Une instance, un développeur, plusieurs de ses produits. Il n’y a pas de clients,
+  pas d’organisations, pas d’isolation à prouver à un tiers. » ⛔ La première phrase est **fausse**.
+  ⚠️ La seconde reste vraie, et c’est tout l’intérêt : il y a bien des clients, mais l’isolation
+  n’est **pas à prouver**, elle est **physique**. Une machine, une base, un jeu de secrets. On n’a
+  rien à démontrer parce qu’il n’y a rien à partager.
+- **[D-015]** : sa dernière phrase se lit désormais **par installation**. Le motif tient entier — le
+  secret chiffré protège un dump qui voyage —, et il protège même mieux ici, puisque
+  `FEEDYS_CLE_CHIFFREMENT` diffère d’un client à l’autre.
+- ⛔ **Ce qui ne change pas** : le multi-tenant reste hors périmètre **définitivement**
+  ([ROADMAP](ROADMAP.md) §Ce qui n’arrivera pas). Une instance = un client = un produit. La
+  distance entre « un client par instance » et « plusieurs clients par instance », c’est exactement
+  la distance entre ce dépôt et un SaaS.
+
+### Ce que la topologie coûte
+
+Écrit en entier dans [hebergement.md](../04-Architecture/hebergement.md) §Une installation par
+client, en quatre points qui se paient tous ailleurs qu’ici : **les retours sont les données du
+client** — avec la phrase à porter au contrat —, **la mise à jour est manuelle et multiple**, **le
+back-office et MCP se démultiplient**, **les secrets sont propres à chaque installation**.
+
+⚠️ Un seul de ces quatre points est agréable : un client qu’on ne met pas à jour garde son ancien
+widget, et **il n’y a jamais d’écart entre le widget et le serveur qui le sert** — ils sortent de la
+même image. C’est la contrepartie heureuse de « N déploiements ».
+
+### L’image publiée — sur GHCR, sur tag de version, et rien d’autre
+
+⛔ **Sur tag de version uniquement, jamais à chaque commit vers `main`.** Publier une image, c’est
+**distribuer** au sens de l’AGPL : l’article 13 veut que quiconque s’en sert à travers le réseau
+puisse obtenir la source **de la version qui tourne**. Un commit sans tag ne désigne pas une
+révision qu’on puisse nommer dans un pied de page ; un tag, si.
+
+⛔ **Et le tag EST la version, verbatim.** `lienSource()`
+([`apps/serveur/infra/source.ts`](../apps/serveur/infra/source.ts)) compose
+`github.com/PrFcTv/feedys/tree/<FEEDYS_VERSION>`. Un tag `v1.4.0` dont on retirerait le `v` — le
+réflexe le plus banal d’un pipeline — produirait `…/tree/1.4.0`, **un 404**. D’où la règle : le tag
+est un **semver nu**, `1.4.0`, et le même mot sert de nom de tag, de `FEEDYS_VERSION`, d’étiquette
+d’image et de cible au lien. La CI refuse tout le reste en le nommant, **retire l’image publiée pour
+lui demander sa version**, et vérifie que le lien répond — c’est le seul contrôle qui attrape un
+`--build-arg` oublié, et un `--build-arg` oublié est une image non conforme.
+
+**Les deux alternatives écartées** :
+
+- **publier à chaque commit vers `main`.** Le SHA serait un ref valide, donc l’article 13 serait
+  techniquement satisfait. Mais on distribuerait alors des images que personne n’a décidé de livrer,
+  et « quelle version tourne chez ce client » deviendrait un SHA de quarante caractères. Le tag est
+  précisément le geste qui dit « celle-ci » ;
+- **une étiquette `latest`.** Confortable, et c’est le problème : une installation qui la suivrait
+  changerait de version **toute seule** au prochain `docker compose pull`. Or ce qui décide de mettre
+  à jour le serveur de quelqu’un d’autre, c’est un humain. On publie donc une seule étiquette, la
+  version.
+
+⚠️ **Le job attend les six checks.** Un tag peut être posé sur n’importe quel commit, y compris un
+commit qui n’est jamais passé par `main`. Publier chez des tiers une image non vérifiée serait pire
+que ne rien publier.
+
+⚠️ **Et le `push: false` de la CI reste**, sur les PR comme sur `main` : on continue de prouver à
+chaque fois que l’image se construit et qu’elle refuse de démarrer sans ses variables. C’est le
+sixième check, il ne bouge pas.
+
+### ⛔ `linux/amd64` seulement — et c’est mesuré, pas supposé
+
+**Mesure du 2026-09-09**, `docker buildx build --no-cache`, séquentiel, même machine, sortie
+`cacheonly` :
+
+| Plateforme | Cache froid | |
+|---|---|---|
+| `linux/amd64`, natif | **62 s** | |
+| `linux/arm64`, sous QEMU | **319 s** | **5,1×** |
+
+⚠️ **Ce que cette mesure prouve, et ce qu’elle ne prouve pas.** Elle prouve le rapport, et elle
+prouve surtout que **l’image arm64 se construit** — la commande a rendu 0. Elle ne dit rien du temps
+d’un runner GitHub, qui est une autre machine.
+
+⚠️ **Et l’émulation n’est pas la seule voie** : GitHub offre des runners **arm64 natifs, gratuits
+aux dépôts publics** (`ubuntu-24.04-arm`, généralement disponibles depuis le 2025-08-07). Le coût
+réel ne serait donc pas 5,1× de temps, mais **un job de plus et une fusion de manifeste** — deux
+pièces mobiles supplémentaires dans le seul pipeline qui n’a pas le droit d’échouer le jour où l’on
+tague une version.
+
+**On publie `linux/amd64` seul**, pour deux raisons et pas une de plus :
+
+1. ⛔ **personne ne l’a demandée.** Aucun client ne tourne sur arm64 aujourd’hui. Publier « au cas
+   où » n’est pas une décision, c’est son report ;
+2. **le repli existe, il tient en une commande, et il est prouvé** : sur une machine arm64,
+   `docker build .` produit l’image — rien dans le `Dockerfile` n’est propre à une architecture, et
+   c’est justement ce que la mesure ci-dessus a vérifié en la construisant.
+
+**Ce qui la renverserait** : le **premier client sur un VPS arm64** — les offres Ampere et Graviton
+sont moins chères, ça arrivera. La réponse sera alors d’ajouter `linux/arm64` aux plateformes **et un
+job sur `ubuntu-24.04-arm`**, pas de faire tourner QEMU cinq minutes à chaque version.
+
+### ⛔ Ce qu’on ne construit pas, et qui aurait été tentant
+
+- **Aucun « phone home »**, aucune vérification de version automatique, aucune télémétrie vers le
+  développeur. C’était déjà la règle de §La forme ; ça devient ici une **clause de contrat** — « le
+  logiciel ne communique avec aucun serveur appartenant à son éditeur » est une phrase qu’on peut
+  faire lire à un client **parce que le code est public et qu’il peut la vérifier** ;
+- **aucune mise à jour automatique dans le conteneur.** Ni `watchtower`, ni un `latest` qu’on
+  suivrait ;
+- **aucun agrégateur** qui verrait les N installations. Ce serait du multi-tenant, et ce serait le
+  seul composant du produit à qui il faudrait ouvrir les bases de tous les clients à la fois.
+
+**Ce qui renverserait la topologie** : un client qui refuserait d’héberger et voudrait que Feedys
+tourne chez le développeur. C’est faisable **sans rien changer au logiciel** — c’est l’ancienne
+forme. Mais alors les retours de ce client vivent chez le développeur, et c’est la **phrase du
+contrat** qui change, pas le code.
+
+---
+
+## D-029 — La clé du modèle est celle du développeur, plafonnée par client — et un administrateur du client peut la lire
+
+**2026-09-09**
+
+### Le problème
+
+`ANTHROPIC_API_KEY` vit dans `.env.production` sur la machine **d’un client** ([D-028]). C’est **le
+seul endroit du produit où une fuite se paie en argent** : ailleurs — mot de passe de back-office,
+jeton MCP, clé de chiffrement — une fuite ouvre des données, ce qui est grave autrement, mais ne
+débite personne.
+
+Et rien ne l’encadrait.
+
+### Les trois options, pesées
+
+**(a) Une clé et un workspace Anthropic plafonnés PAR CLIENT.**
+
+- ✅ Le plafond **borne le dégât par construction** : une clé qui fuite coûte au plus le plafond du
+  mois, et le mois suivant repart à zéro. C’est le seul garde-fou qui n’a pas à être écrit, testé,
+  sauvegardé ni surveillé — il est chez le fournisseur ;
+- ✅ **la révocation est unitaire** : couper la clé d’un client n’éteint le bot chez personne
+  d’autre. C’est la même étanchéité que le reste de [D-028], appliquée au seul secret qui coûte ;
+- ✅ **l’attribution est native** : la console du fournisseur montre la consommation par workspace,
+  donc par client, sans qu’on écrive un compteur ;
+- ✅ le développeur garde la main sur le modèle. `FEEDYS_MODELE` est explicite et l’identifiant
+  employé est enregistré avec chaque synthèse (`domaine/synthese/produire.ts`) ; en changer reste sa
+  décision, pas celle du client ;
+- ⛔ **le coût est chez le développeur**, et c’est un vrai coût, à assumer dans son prix.
+
+**(b) Le client fournit sa propre clé.**
+
+- ✅ Le coût et le risque passent chez lui. Il n’y a plus rien à plafonner, ni à avancer ;
+- ✅ **c’est la bonne réponse pour un client qui a déjà un compte** chez le fournisseur, ou dont la
+  politique interdit que la parole de ses salariés transite par le compte d’un tiers ;
+- ⛔ **la friction tombe au pire moment.** Il faut un compte, une carte, une facturation en dollars,
+  et comprendre ce qu’est un jeton — au moment exact où l’installation doit tenir en une liste de
+  vérification ;
+- ⛔ **et ça déplace un mode de panne chez quelqu’un qui ne le regardera pas.** Un plafond atteint
+  ou une carte expirée **fait taire le bot** : les entretiens échouent, les notes ne partent plus,
+  et personne côté développeur n’est prévenu. Or le mode de défaillance le plus probable de Feedys
+  est précisément le silencieux — « si ça tombe à zéro, le produit est mort, bien avant qu’une
+  erreur ne le dise » ([hebergement.md](../04-Architecture/hebergement.md) §Ce qui doit être
+  surveillé).
+
+**(c) Une passerelle chez le développeur, que les instances appellent.**
+
+- ✅ La vraie clé ne quitte jamais sa machine. Le client n’a qu’un jeton de passerelle, révocable, et
+  le plafond devient fin, par client et par période ;
+- ⛔ **elle fait exactement ce que [hebergement.md] §La forme interdit** : le conteneur dépendrait
+  d’un service extérieur. Une instance chez un client tomberait parce qu’une machine du développeur
+  est tombée — le contraire de la topologie qu’on vient de choisir ;
+- ⛔ **et c’est la pire des trois du point de vue des données.** La parole des collaborateurs — la
+  matière la plus sensible du produit — quitterait le serveur du client pour transiter par une
+  machine du développeur. Aujourd’hui l’appel part de l’instance vers le fournisseur, point ; avec
+  une passerelle il y a un intermédiaire de plus à sécuriser, à faire figurer au contrat, et à ne
+  surtout pas journaliser. ⛔ Ça casse la phrase « le logiciel ne communique avec aucun serveur
+  appartenant à son éditeur », qui est ce qu’on donne à lire au client ;
+- ⛔ **et ce serait du multi-tenant par la bande** : un service partagé qui distingue les clients,
+  qui compte et qui plafonne, c’est-à-dire des comptes et des organisations. Exclu définitivement
+  par la [ROADMAP](ROADMAP.md) ;
+- ⛔ enfin, c’est **un service de plus à écrire, déployer, surveiller et sauvegarder**, pour un dépôt
+  d’une personne.
+
+### La décision — (a), et (b) sans discuter quand le client le demande
+
+**(a)** est la forme par défaut : une clé et un workspace plafonnés **par client**, chez le
+développeur. **(c)** est écartée pour de bon — pas parce qu’elle est chère, mais parce qu’elle fait
+transiter la parole des gens par une machine de plus.
+
+⚠️ **(b) n’est pas un échec, c’est un réglage** : c’est la même variable, `ANTHROPIC_API_KEY`, et le
+produit ne change pas d’une ligne. Ce qui change, c’est **qui paie et qui surveille**. Un client qui
+a déjà un compte, ou dont la politique l’exige, met la sienne.
+
+### ⛔ La contrepartie de (a), en clair
+
+**Un administrateur système du client peut lire la clé.** Elle est dans `.env.production`, ou dans le
+fichier d’environnement que Kamal pose en `0600` — dans les deux cas sur une machine dont il est
+root. Rien ne l’en empêche :
+
+- la chiffrer au repos ne sert à rien : il faudrait la clé de déchiffrement au même endroit ;
+- les permissions Docker ne protègent de personne qui peut faire `docker inspect` ;
+- et le processus doit bien l’avoir en clair pour appeler le fournisseur.
+
+⛔ **Le plafond est donc la SEULE chose qui borne le dégât.** Il n’y a pas de second garde-fou, et il
+ne faut pas prétendre le contraire. Un plafond mal réglé — ou pas réglé du tout — et la décision (a)
+n’offre plus rien.
+
+⚠️ Ce que ça permet concrètement : appeler le modèle pour son propre compte, sur la facture du
+développeur, jusqu’au plafond. **Pas** de lire les retours d’un autre client — la clé ne donne accès
+à aucune donnée, et les autres secrets sont propres à chaque installation ([D-028]).
+
+### ⛔ Et on n’écrit aucun code pour ça
+
+Pas de plafond applicatif, pas de compteur de jetons, pas de télémétrie.
+
+- La **limitation de débit par clé et par IP existe déjà** et couvre ce qu’elle doit couvrir : l’abus
+  par le widget, dont la clé publique est dans le HTML de l’hôte. Le tour d’entretien est le seul
+  endroit qui appelle le modèle, et il est le plus serré — dix par minute et par IP
+  (`domaine/retours/debit.ts`) ;
+- un **compteur applicatif serait un second registre à tenir juste** : il divergerait de la facture,
+  il faudrait le sauvegarder, et il finirait par répondre à côté le jour où on lui poserait la
+  question ;
+- un plafond **applicatif** couperait le bot au milieu d’un entretien pour protéger une facture. Or
+  ce produit perd sa valeur au moment exact où quelqu’un parle et où rien ne part.
+
+**Le reste se règle chez le fournisseur, pas ici.** C’est le même raisonnement que la sonde qui
+n’interroge pas le modèle : on ne met pas dans le logiciel un mécanisme dont le bon endroit est
+ailleurs.
+
+### Ce qui la renverserait
+
+- **Le nombre.** À dix clients, dix workspaces plafonnés se tiennent dans une console. À cinquante,
+  régler et relire les plafonds devient un travail — et **(b)** redevient raisonnable, chacun payant
+  ce qu’il consomme ;
+- **une clé restreinte par le fournisseur** — bornée à un modèle et à un débit, révocable, sans
+  workspace à créer. La contrepartie de (a) tomberait presque entièrement, et il n’y aurait plus
+  qu’à en délivrer une par installation ;
+- **une fuite réelle qui coûterait plus que le plafond.** Ça voudrait dire que le plafond était mal
+  réglé, pas que la décision était fausse ;
+- **un client dont la politique interdit que sa parole transite par le compte d’un tiers** → **(b)**,
+  sans discuter. Ça ne renverse pas la décision, ça exerce l’exception qu’elle prévoit.

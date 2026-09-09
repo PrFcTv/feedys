@@ -16,6 +16,154 @@ un autre — ça n’a pas d’importance, il ne communique avec eux que par HTT
 de son planificateur, ni de ses variables. Le conteneur doit pouvoir être déplacé d’un
 `docker run` à un autre sans que rien ne change.
 
+## Une installation par client
+
+⚠️ **La topologie a changé, et rien ne l’écrivait.** Ce dépôt a longtemps supposé « une instance,
+un développeur, plusieurs de ses produits » ([D-005](../00-Projet/DECISIONS_LOG.md)). C’est
+l’inverse : les logiciels métier tournent sur le VPS **de chaque client**, et Feedys s’installe à
+côté d’eux, **une fois par client** ([D-028](../00-Projet/DECISIONS_LOG.md)).
+
+```
+    VPS du client A                     VPS du client B
+  ┌───────────────────────┐           ┌───────────────────────┐
+  │ logiciel métier       │           │ logiciel métier       │
+  │ proxy — DÉJÀ LÀ       │           │ proxy — DÉJÀ LÀ       │
+  │   └─ feedys 127.0.0.1 │           │   └─ feedys 127.0.0.1 │
+  │        postgres       │           │        postgres       │
+  └───────────┬───────────┘           └───────────┬───────────┘
+              │        la note, par email         │
+              └─────────────────┬─────────────────┘
+                                ▼
+                     la boîte du développeur
+```
+
+Le conteneur le permettait déjà : il écoute sur la boucle locale, derrière le proxy en place, et ne
+dépend d’aucun fournisseur (§La forme). ⛔ **Ce qui suit n’est pas une liste de précautions : ce
+sont les quatre choses que cette topologie COÛTE**, et trois se paient chez quelqu’un d’autre.
+
+### ⛔ 1 · Les retours sont les données du client
+
+Ils **vivent sur son serveur** — sa base, son volume, ses sauvegardes — et ils contiennent des noms
+de personnes, parfois d’immeubles ou de dossiers (CLAUDE.md §Secrets). Ce ne sont pas des métriques
+anonymes : c’est de la parole, dictée par des salariés identifiés.
+
+⛔ **Et deux transmissions les font sortir de sa machine.** Le texte du retour part chez le
+fournisseur du modèle pour produire les relances et la note ; puis **la note arrive dans la boîte du
+développeur** — avec le nom et le rôle de l’auteur, l’URL où il était, et ⛔ **des citations mot
+pour mot de ce qu’il a dit** (`apps/serveur/domaine/notification/message.ts`).
+
+⚠️ **Ça se dit dans un contrat, pas dans une documentation technique.** Voici la phrase que
+l’intégrateur fait lire à son client — à recopier telle quelle, en remplaçant ce qui est entre
+crochets :
+
+> Feedys est installé sur votre serveur. Ce que vos collaborateurs signalent — le texte de leur
+> retour, la capture d’écran lorsqu’elle est jointe, ainsi que leur nom et leur fonction lorsque
+> votre logiciel les transmet — est enregistré dans une base de données que vous hébergez et qui
+> vous appartient.
+>
+> Deux transmissions sortent de votre serveur, et il n’y en a pas d’autres :
+>
+> 1. le texte du retour est envoyé à **Anthropic PBC (États-Unis)**, fournisseur du modèle de
+>    langage, qui rédige les questions de relance et la note de synthèse. Anthropic est à ce titre
+>    un sous-traitant, à faire figurer dans votre registre des traitements ;
+> 2. la note de synthèse — qui comprend **des citations mot pour mot** de ce qu’a dit le
+>    collaborateur, ainsi que son nom et sa fonction — est envoyée par email à
+>    [adresse(s) destinataire(s)], dont **[adresse du prestataire]**, qui assure la maintenance de
+>    votre logiciel.
+>
+> Le logiciel Feedys ne communique avec aucun serveur appartenant à son éditeur : il n’émet aucune
+> donnée d’usage, aucune statistique, et aucune vérification de version.
+
+⚠️ **Le dernier paragraphe est vérifiable, et c’est ce qui lui donne sa valeur** : le code est
+public, et §La forme interdit toute dépendance extérieure. ⛔ Il cesse d’être vrai le jour où
+quelqu’un ajoute un « phone home », si discret soit-il.
+
+### 2 · La mise à jour est manuelle, et multiple
+
+N installations, N déploiements, N fois la liste ci-dessous. ⛔ **Il n’y a pas de mise à jour
+automatique dans le conteneur, et il n’y en aura pas** : ce qui décide de mettre à jour le serveur
+de quelqu’un d’autre, c’est un humain. Ni `watchtower`, ni une étiquette `latest` qu’on suivrait —
+l’image publiée n’a d’ailleurs **que** son étiquette de version, exprès (§Construire et déployer).
+
+⚠️ **Un client qu’on ne met pas à jour garde son ancien widget, et c’est cohérent.** C’est SON
+instance qui sert `widget.js` : le widget et le serveur qui le sert **sortent de la même image**, et
+il n’y a donc jamais d’écart entre les deux. Les cinq minutes de cache du §Le service du widget
+gardent tout leur sens — elles propagent un correctif chez cet hôte-là, dès qu’on a déployé chez
+lui, et chez lui seulement.
+
+⛔ **Le corollaire ne se voit pas, et il coûte cher : une régression ne se rattrape plus d’un seul
+déploiement.** Sur une instance unique, un correctif touchait tout le monde en cinq minutes. Ici il
+faut se rendre chez chacun. C’est un argument pour publier **peu et sûrement**, pas souvent.
+
+### 3 · Le back-office et MCP se démultiplient
+
+N adresses, N mots de passe de back-office, N jetons MCP. Le développeur ouvre l’instance du client
+dont il s’occupe, et **l’email est le seul canal qui centralise** : c’est lui qui rassemble dans une
+boîte ce que N bases contiennent séparément. Le sujet porte `[Feedys · <produit>]`, ce qui suffit à
+trier (§La sauvegarde, et `01-Specs/synthese.md`).
+
+⛔ **On ne construit pas d’agrégateur.** Une console qui verrait plusieurs installations, ce sont
+des organisations, des comptes et une isolation à prouver à des tiers — c’est-à-dire du
+multi-tenant, que la [ROADMAP](../00-Projet/ROADMAP.md) §Ce qui n’arrivera pas exclut
+définitivement. Et ce serait le seul composant du produit à qui il faudrait ouvrir les bases de tous
+les clients **à la fois**.
+
+⚠️ Le serveur MCP se déclare donc **une fois par client** dans l’éditeur du développeur, chacun avec
+son URL et son jeton. C’est plus verbeux, et c’est la même propriété que partout ailleurs ici : un
+jeton perdu ouvre **une** installation, pas toutes.
+
+### 4 · ⛔ Les secrets sont propres à chaque installation
+
+Aucun de ceux-ci ne se réutilise d’un client à l’autre :
+
+| Secret | Ce que sa réutilisation coûterait |
+|---|---|
+| `FEEDYS_CLE_CHIFFREMENT` | elle déchiffre le secret des produits ([D-015](../00-Projet/DECISIONS_LOG.md)). Partagée, **un vieux dump pris chez un client permet de forger l’identité d’un collaborateur chez tous les autres** |
+| `FEEDYS_BO_MOT_DE_PASSE` | un mot de passe qui fuit chez un client ouvre les retours de tous |
+| `FEEDYS_MCP_JETON` | pareil, par une API qui rend le fil brut |
+| `POSTGRES_PASSWORD`, et le mot de passe de `feedys_service` | pareil, et sans qu’aucune session de back-office en garde trace |
+| `SMTP_URL` | un relais partagé fait qu’une instance compromise envoie du courrier au nom de toutes |
+| `ANTHROPIC_API_KEY` | le seul dont la fuite se paie en argent, et il a sa propre décision : [D-029](../00-Projet/DECISIONS_LOG.md) |
+
+⛔ **La raison est unique et elle vaut pour les six : un secret partagé transforme un incident chez
+un client en incident chez tous.** L’étanchéité entre clients est la seule chose que cette topologie
+donne gratuitement — et la réutilisation d’un secret est la seule façon de la perdre.
+
+### Installer chez un client — la liste de vérification
+
+⚠️ Elle suppose **un VPS où un proxy tourne déjà**, ce qui est le cas ordinaire : la machine héberge
+le logiciel métier. Dans l’ordre, et chaque ligne se coche pour de vrai.
+
+- [ ] **1 · Le contrat est signé**, et il porte la phrase du §1 ci-dessus. ⛔ Avant l’installation,
+      pas après : après, la parole de quelqu’un est déjà en base ;
+- [ ] **2 · Le DNS** : `feedys.<domaine-du-client>` → l’IP du VPS ;
+- [ ] **3 · Les fichiers**, dans `/srv/feedys` sur le VPS : `docker-compose.production.yml` et les
+      deux scripts de `scripts/`. ⚠️ Le dépôt n’a pas à y être et rien ne se compile sur place —
+      **l’image est publiée** (§Construire et déployer) ;
+- [ ] **4 · `.env.production`**, écrit sur place, jamais recopié d’un autre client (§4). Les deux
+      à fabriquer :
+      ```bash
+      node -e 'console.log(require("node:crypto").randomBytes(32).toString("base64url"))'  # FEEDYS_CLE_CHIFFREMENT
+      node -e 'console.log(require("node:crypto").randomBytes(24).toString("base64url"))'  # FEEDYS_MCP_JETON
+      ```
+      ⛔ `FEEDYS_VERSION` vaut **la version publiée** : c’est elle qui choisit l’image *et* qui rend
+      le pied de back-office conforme à l’article 13 ;
+- [ ] **5 · Le premier démarrage**, puis §Le rôle de connexion — le rôle de service se crée à la
+      main, **une fois**, et les deux `DATABASE_URL` sont renseignées ensuite. ⛔ Tant que la ligne
+      de journal ne dit pas « membre de feedys_app, propriétaire d’aucune des N tables », les GRANT
+      ne mordent pas ;
+- [ ] **6 · Le vhost dans le proxy DÉJÀ EN PLACE** —
+      [`deploiement/nginx-feedys.conf.exemple`](../deploiement/nginx-feedys.conf.exemple), ou
+      §Le cas Kamal si le VPS est déployé par Kamal. ⛔ Pas de second proxy, et les trois réglages
+      de §Le proxy et TLS ne sont pas décoratifs ;
+- [ ] **7 · La restauration, une fois, pour de vrai** — §La pose chez un hôte · 2. ⛔ Avant la
+      pose, pas après ;
+- [ ] **8 · Le produit, sa clé, la ligne de `<script>`, le CSP, l’identité, et les dix minutes
+      dans un vrai navigateur** — c’est **§La pose chez un hôte**, points 3 à 7, qui ne change pas
+      d’un iota : à ce stade, le fait que l’instance soit chez le client n’a plus d’effet ;
+- [ ] **9 · Consigner** ce qui a été vu dans `03-Bugs/MISE_EN_SERVICE.md`. ⛔ Aucun nom de client,
+      aucun domaine réel, aucune clé : le dépôt est public.
+
 ## Le démarrage
 
 Dans l’ordre, et un échec à n’importe quelle étape **empêche le serveur de servir** :
@@ -234,10 +382,44 @@ injoignable ou un schéma qui a divergé.
 
 ## Construire et déployer
 
+### L’image publiée — ce qu’on installe chez un client
+
+```bash
+docker pull ghcr.io/prfctv/feedys:1.4.0
+```
+
+⛔ **Sans image publiée, installer chez un client voudrait dire cloner le dépôt et compiler sur sa
+machine.** C’est la seule raison d’être de la publication, et elle décide de sa forme :
+
+- **Sur tag de version uniquement**, jamais à chaque commit vers `main`. Publier une image, c’est
+  **distribuer** au sens de l’AGPL : elle doit pouvoir désigner la révision exacte de sa source, et
+  un commit sans tag ne le peut pas ([D-028](../00-Projet/DECISIONS_LOG.md)) ;
+- ⛔ **le tag EST la version, verbatim** — `1.4.0`, jamais `v1.4.0`. Le même mot sert de nom de tag,
+  de `FEEDYS_VERSION`, d’étiquette d’image, et de cible au lien `…/tree/<version>` affiché en pied
+  de back-office. Une transformation, même d’une lettre, fait un lien mort : c’est-à-dire un
+  manquement à l’article 13, pas une coquille. La CI refuse un tag qui n’est pas un semver nu, et
+  **retire l’image publiée pour lui demander sa version** avant de déclarer le travail fait ;
+- ⛔ **pas d’étiquette `latest`.** Une installation qui la suivrait changerait de version toute
+  seule au prochain `docker compose pull` — or ce qui décide de mettre à jour le serveur de
+  quelqu’un d’autre, c’est un humain (§Une installation par client · 2) ;
+- **`linux/amd64` seulement**, et c’est mesuré : [D-028](../00-Projet/DECISIONS_LOG.md).
+
+⚠️ **Un paquet GHCR est PRIVÉ à sa première publication, même depuis un dépôt public.** Un paquet
+hérite des droits d’accès du dépôt lié, **pas de sa visibilité**. Il faut donc, **une fois**, aller
+le passer en public dans les réglages du dépôt → *Packages*. Sans ça, le `docker pull` d’un client
+échoue sur un refus d’authentification, le jour de l’installation, sur un message qui ne dit pas
+que c’est un réglage de visibilité.
+
+### Construire soi-même — le repli, et il est prouvé
+
 ```bash
 docker build -t feedys:1.4.0 --build-arg FEEDYS_VERSION=1.4.0 .
 docker compose -f docker-compose.production.yml up -d
 ```
+
+⚠️ C’est ce que fait un client sur une machine **arm64**, où il n’y a pas d’image à tirer : rien
+dans le `Dockerfile` n’est propre à une architecture, et la construction native y aboutit
+([D-028](../00-Projet/DECISIONS_LOG.md)).
 
 L’image est une Alpine avec le serveur autonome de Next (`output: 'standalone'`), le widget
 construit, les deux prompts et les migrations — **environ 320 Mo**, sans `pnpm`, sans le dépôt et
@@ -259,6 +441,9 @@ page chiffrée. Sans certificat, **le widget ne se charge pas du tout**.
 **La machine héberge déjà les logiciels métier.** Elle a donc déjà un proxy. ⛔ On n’en pose pas un
 second — les deux se battraient pour les ports 80 et 443. On ajoute un vhost :
 [`deploiement/nginx-feedys.conf.exemple`](../deploiement/nginx-feedys.conf.exemple).
+
+⚠️ **C’est le cas ordinaire chez un client** (§Une installation par client). Et si ce proxy est
+celui de Kamal, le vhost se remplace par dix lignes de `deploy.yml` : §Le cas Kamal.
 
 **Feedys est seul sur sa machine.** Alors le plus court est Caddy, en superposition :
 
@@ -293,6 +478,138 @@ défaut, il n’y a rien à y faire.
 **3. Pas de compression au proxy.** Feedys compresse `widget.js` lui-même et pose un **ETag qui
 dépend de l’encodage** (`apps/serveur/app/_actifs/servir.ts`). Un proxy qui re-compresse ou réécrit
 l’en-tête casse les `304` — et le budget de 60 Ko se mesure sur le fichier **tel qu’il est servi**.
+
+## Le cas Kamal — Feedys en accessoire
+
+Le logiciel métier du client est déployé par [Kamal](https://kamal-deploy.org). Le VPS a donc déjà
+un proxy : **`kamal-proxy`, qui tient les ports 80 et 443**. ⚠️ C’est le premier des deux cas
+ci-dessus, pas un troisième. ⛔ **On ne pose pas de second proxy** — ni un nginx, ni le Caddy de
+`docker-compose.tls.yml`, qui se battraient avec lui pour les mêmes ports.
+
+Kamal a exactement le mot qu’il faut : un **accessoire**. Les accessoires « sont gérés séparément du
+service principal — ils ne sont pas mis à jour quand vous déployez, et ils n’ont pas de déploiement
+sans coupure ». C’est la propriété qu’on veut : `kamal deploy` du logiciel métier ne doit **rien**
+faire à Feedys, et mettre Feedys à jour est une décision distincte, prise par un humain
+(§Une installation par client · 2).
+
+⚠️ **Vérifié le 2026-09-09 contre Kamal 2.12.0**, sur la configuration de référence et sur le code.
+`accessories.<nom>.proxy` **n’existe que depuis Kamal 2.4.0** : avant, un accessoire ne pouvait pas
+être publié par `kamal-proxy` et ce mode d’emploi ne s’applique pas. `kamal accessory boot <nom>`
+enregistre l’accessoire auprès du proxy lorsque le bloc `proxy` est présent.
+
+### Les deux accessoires
+
+Dans le `config/deploy.yml` **du logiciel métier du client** — ce n’est pas un fichier à nous :
+
+```yaml
+accessories:
+  # ── Feedys ─────────────────────────────────────────────────────────────────
+  feedys:
+    # ⛔ La version publiée, épinglée. Jamais `latest` : ce qui met à jour le
+    #    serveur de quelqu’un d’autre, c’est un humain.
+    image: ghcr.io/prfctv/feedys:1.4.0
+    host: <l’hôte qui porte déjà le logiciel métier>
+
+    # ⛔ CE BLOC REMPLACE LE VHOST NGINX. kamal-proxy termine TLS et joint le
+    #    conteneur par le réseau `kamal` : Feedys ne publie AUCUN port sur la
+    #    machine — c’est encore plus fermé que le 127.0.0.1 du compose.
+    proxy:
+      host: feedys.exemple.fr
+      # ⚠️ Le port INTERNE du conteneur. Le défaut de kamal-proxy est 80.
+      app_port: 3000
+      # ⚠️ Certificat Let’s Encrypt automatique. Prérequis identiques au Caddy :
+      #    le DNS pointe cette machine, et les ports 80 et 443 sont ouverts.
+      ssl: true
+
+    env:
+      clear:
+        FEEDYS_URL_PUBLIQUE: https://feedys.exemple.fr
+        FEEDYS_MODELE: claude-sonnet-5
+        # ⛔ La même chaîne que l’étiquette de `image:` ci-dessus. Un écart fait
+        #    mentir le pied de back-office — article 13 de l’AGPL, pas cosmétique.
+        FEEDYS_VERSION: '1.4.0'
+        FEEDYS_EMAIL_DE: feedys@exemple.fr
+        FEEDYS_EMAIL_A: dev@exemple.fr
+      # ⚠️ Kamal ne met pas ceux-ci dans la ligne de commande : il les écrit sur
+      #    l’hôte dans un fichier d’environnement en 0600. Leurs valeurs vivent
+      #    dans `.kamal/secrets`, hors de git.
+      # ⛔ Et elles sont propres à CETTE installation (§Une installation par
+      #    client · 4).
+      secret:
+        - DATABASE_URL
+        - DATABASE_URL_MIGRATIONS
+        - ANTHROPIC_API_KEY
+        - FEEDYS_BO_MOT_DE_PASSE
+        - FEEDYS_CLE_CHIFFREMENT
+        - FEEDYS_MCP_JETON
+        - SMTP_URL
+
+    # ⚠️ Les captures. Kamal crée le dossier sur l’hôte avant de le monter.
+    directories:
+      - stockage:/stockage
+
+  # ── Son Postgres, à lui ────────────────────────────────────────────────────
+  feedys_postgres:
+    image: postgres:18-alpine
+    host: <le même hôte>
+    # ⚠️ Le nom du conteneur EST le nom de service, et c’est lui que le DNS du
+    #    réseau `kamal` résout : c’est donc l’hôte à écrire dans les deux
+    #    DATABASE_URL. Sans ce `service:`, il vaudrait `<service>-feedys_postgres`
+    #    — devinable, mais pas à deviner.
+    service: feedys-postgres
+    # ⛔ AUCUN `port:`. La base ne sort pas de la machine ; Feedys la joint par le
+    #    réseau `kamal`, auquel les accessoires sont attachés par défaut.
+    env:
+      clear:
+        POSTGRES_USER: feedys
+        POSTGRES_DB: feedys
+      secret:
+        - POSTGRES_PASSWORD
+    directories:
+      # ⚠️ /var/lib/postgresql, et non .../data : depuis Postgres 18 l’image range
+      #    les données dans un sous-dossier par version majeure.
+      - data:/var/lib/postgresql
+```
+
+Puis, une fois :
+
+```bash
+kamal accessory boot feedys_postgres
+kamal accessory boot feedys
+```
+
+⚠️ **`kamal deploy` ne les touchera plus.** Mettre Feedys à jour, c’est changer les deux `1.4.0`
+ci-dessus puis `kamal accessory reboot feedys` — une commande explicite, pour cette installation-là.
+
+### ⛔ Les trois réglages, revus pour kamal-proxy
+
+Ce sont les mêmes trois que §Le proxy et TLS, et **deux d’entre eux se règlent tout seuls ici** :
+
+| Réglage | Avec kamal-proxy |
+|---|---|
+| **1. L’en-tête d’IP** | ✅ **rien à faire, et surtout rien à ajouter** — voir juste en dessous |
+| **2. La taille du corps** | ✅ rien à faire : le tampon accepte **1 Gio** par défaut, très au-dessus des 4 Mio que l’API borne elle-même. C’est le contraire de nginx et de son 1 Mio |
+| **3. Pas de compression** | ✅ rien à faire : kamal-proxy ne re-compresse pas, les `304` et le budget de 60 Ko sont saufs |
+
+⛔ **Et surtout : ne posez PAS `forward_headers: true`.** C’est le piège de ce montage, parce que la
+documentation de Kamal se lit à l’envers de ce qu’on cherche.
+
+`kamal-proxy` pose **toujours** `X-Forwarded-For` avec l’IP réelle de qui se connecte
+(`Target#forwardHeaders`, qui appelle `SetXForwarded()` dans tous les cas). Le drapeau
+`forward_headers` ne décide pas *si* l’en-tête est posé — il décide si l’en-tête **entrant** est
+conservé avant qu’on y ajoute cette IP.
+
+Or Feedys lit **la première valeur** de la liste (`ipDe`, `apps/serveur/app/api/retours/_reponses.ts`).
+Donc :
+
+- `forward_headers` **absent** — le défaut quand `ssl: true` — la liste ne contient que l’IP réelle.
+  ✅ C’est ce qu’il faut ;
+- `forward_headers: true` **sans rien devant kamal-proxy** : ⛔ la liste commence par ce que le
+  client a bien voulu envoyer. N’importe qui choisit alors son propre seau de débit, et la
+  limitation par IP ne limite plus rien.
+
+⚠️ **Il ne se met à `true` que s’il y a un proxy de confiance DEVANT kamal-proxy** — un CDN, un
+répartiteur de charge. C’est le seul cas, et il n’est pas celui d’un VPS ordinaire.
 
 ## La pose chez un hôte — la liste de vérification
 

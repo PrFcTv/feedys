@@ -11,7 +11,19 @@
 
 services:
   feedys:
-    image: feedys:${FEEDYS_VERSION:-dev}
+    # ⚠️ L’IMAGE PUBLIÉE, pas un nom local. C’est ce qui permet d’installer chez
+    #    un client sans y cloner le dépôt ni rien y compiler :
+    #
+    #      docker pull ghcr.io/prfctv/feedys:1.4.0
+    #      docker compose -f docker-compose.production.yml up -d
+    #
+    # ⛔ FEEDYS_VERSION est donc obligatoire en production, et vaut EXACTEMENT
+    #    l’étiquette publiée. Elle choisit l’image ET s’affiche en pied de
+    #    back-office avec le lien vers la source — article 13 de l’AGPL (D-028).
+    #
+    # ⚠️ Le repli « dev » ne désigne rien sur GHCR : il ne sert qu’au `build`
+    #    ci-dessous, sur le poste ou sur une machine arm64, où l’on construit.
+    image: ghcr.io/prfctv/feedys:${FEEDYS_VERSION:-dev}
     build:
       context: .
       args:
