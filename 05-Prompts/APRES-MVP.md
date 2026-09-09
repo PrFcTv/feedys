@@ -682,6 +682,159 @@ en local.
 
 ---
 
+## P-027 · Ce que Feedys impose à son hôte, et ce qu’il lui doit
+
+**Objectif** — deux dettes envers le logiciel qui nous héberge, trouvées en préparant la première
+pose. ⛔ **À jouer AVANT la pose chez un hôte réel** : après, la première devient une négociation.
+
+### ⚠️ Ce qui est déjà MESURÉ — ⛔ ne le remesure pas, ne le rediscute pas
+
+**1. Sous un CSP strict, le widget s’affiche NU.** Mesuré le 2026-09-09, page même origine,
+`default-src 'self'; script-src 'self'; connect-src 'self'`, sans `style-src 'unsafe-inline'` :
+
+| | fond du lanceur | rayon | hauteur | console |
+|---|---|---|---|---|
+| `<style>` (aujourd’hui) | `rgb(240,240,240)` — gris système | `0px` | `59px` | ⛔ `Applying inline style violates…` |
+| + `style-src 'unsafe-inline'` | `rgb(44,62,100)` = `--w-accent` | `999px` | `48px` | vide |
+| **feuille construite** (`new CSSStyleSheet()` + `replaceSync`) | `rgb(44,62,100)` | `999px` | `48px` | **vide, SANS `unsafe-inline`** |
+
+⛔ Le widget **monte et fonctionne** dans les trois cas. Ce n’est pas « la bulle n’apparaît pas » :
+c’est un bouton système gris et carré dans le coin d’un logiciel métier, plus une erreur rouge dans
+sa console. Ça a l’air cassé, et c’est nous.
+
+⛔ **Et ça contredit notre propre doctrine.** [D-011](../00-Projet/DECISIONS_LOG.md) refuse de
+charger snapdom depuis un CDN parce que « lui imposer un tiers au moment de l’exécution, **et la
+règle CSP qui va avec**, n’est pas à nous de le décider ». Exiger `style-src 'unsafe-inline'` pour
+notre propre feuille est la même faute, non appliquée jusqu’au bout.
+
+**2. Le jeton d’identité expire au bout d’une heure, et l’exemple du README l’y encourage.** Dans
+un logiciel métier, un onglet ouvert toute la journée est la norme. Passé une heure, les retours
+arrivent **sans auteur** — rien n’est perdu, mais [P-020](../01-Specs/retour-au-collaborateur.md)
+ne peut plus revenir vers personne, c’est-à-dire la suite que [ROADMAP] classe ①.
+
+```
+Répare les deux dettes de Feedys envers son hôte. ⛔ Les mesures sont dans
+05-Prompts/APRES-MVP.md §P-027 : ne les remesure pas, sers-t’en.
+
+Lis 05-Prompts/APRES-MVP.md §P-027, 00-Projet/DECISIONS_LOG.md D-001, D-003,
+D-005 et D-011, 01-Specs/widget.md §L’intégration, 04-Architecture/licences.md,
+04-Architecture/hebergement.md §La pose chez un hôte, et README.md.
+
+═══ PARTIE 1 — LA FEUILLE DE STYLE NE DOIT PLUS EXIGER DE CSP ═══
+
+packages/widget/src/montage.tsx pose aujourd’hui un <style> dans le shadow DOM.
+Remplace-le par une feuille CONSTRUITE, avec repli sur l’ancien chemin.
+
+⛔ LE REPLI N’EST PAS FACULTATIF. CSSStyleSheet constructible manque sur
+   Safari < 16.4 et Firefox < 101. D-003 assume Chrome/Edge pour la DICTÉE,
+   pas pour le widget : ailleurs, le champ texte doit rester impeccable.
+
+⛔ ET LE REPLI NE DOIT PAS DEVENIR LE CHEMIN ORDINAIRE SANS QUE RIEN NE LE DISE.
+   C’est le vrai piège de cette partie : un try/catch autour d’une
+   implémentation partielle avalerait l’échec, et le widget retomberait pour
+   toujours sur le <style> — en production comme en test, sans un mot. Le
+   chemin réellement pris doit être OBSERVABLE et vérifié dans un vrai
+   navigateur.
+
+⚠️ happy-dom n’implémente peut-être pas adoptedStyleSheets. Si c’est le cas,
+   montage.test.tsx exercerait le REPLI et resterait vert pour toujours en ne
+   prouvant rien du nouveau chemin. ⛔ Vérifie-le explicitement, dis-moi ce
+   qu’il en est, et fais porter la preuve du chemin construit à un parcours
+   e2e — pas à un test unitaire.
+
+LA PREUVE, en e2e, dans un vrai Chromium :
+- une page servie par l’ORIGINE FEEDYS avec un CSP strict en <meta> —
+  « default-src 'self'; script-src 'self'; connect-src 'self' » — et AUCUN
+  unsafe-inline : le lanceur porte var(--w-accent), un rayon de 999px, une
+  hauteur de 48px, et la console est VIDE ;
+- le shadow DOM porte une feuille adoptée et AUCUN élément <style> ;
+- ⛔ et le parcours ne s’arrête pas au chargement : ouvre le panneau, écris,
+  envoie, laisse le tour partir. Une violation CSP peut n’apparaître qu’au
+  premier fetch ou au chargement de snapdom.
+
+═══ PARTIE 1 bis — DIRE CE QU’ON EXIGE VRAIMENT, ET L’AVOIR MESURÉ ═══
+
+⛔ NE DEVINE AUCUNE DIRECTIVE. Mesure-les, une par une, en CROISANT LES DEUX
+   ORIGINES (la page de démonstration est sur un autre port que Feedys — c’est
+   le seul montage qui ressemble à la réalité) :
+   - script-src  : widget.js, ET /snapdom.js chargé à l’ouverture du panneau ;
+   - connect-src : ingestion, tour, fin, et la relève des réponses ;
+   - style-src   : après la partie 1, il ne devrait plus RIEN falloir. Prouve-le ;
+   - img-src     : snapdom manipule des images. Mesure si « data: » est exigé.
+
+⚠️ MESURE AUSSI CE QUI N’EST PAS EXIGÉ, et écris-le. Une liste de directives
+   trop large est aussi nuisible qu’une liste absente : elle fait relâcher une
+   politique sans raison, et personne ne la resserre ensuite.
+
+Écris le résultat dans 04-Architecture/hebergement.md §La pose chez un hôte, en
+liste de vérification, avec la ligne de CSP minimale à donner à un intégrateur.
+
+═══ PARTIE 2 — LE JETON QUI EXPIRE ═══
+
+packages/widget/src/identite.ts lit « window.feedys.identite » à chaque envoi —
+le mécanisme de rafraîchissement EXISTE déjà, mais l’hôte doit poser une
+nouvelle chaîne lui-même, et l’exemple du README lui donne une heure.
+
+Fais accepter aussi une FONCTION :
+
+    window.feedys = { identite: () => monJetonCourant }
+
+- ⛔ SYNCHRONE, et pas de promesse. Une fonction asynchrone ferait attendre le
+  chemin d’envoi sur du code de l’hôte : une lenteur ou un blocage chez lui
+  coûterait la parole de quelqu’un. ⛔ « On ne perd jamais une parole pour un
+  problème d’identité » (P-012) — écris ce refus dans le code, avec sa raison,
+  sinon quelqu’un ajoutera l’await dans six mois.
+- ⛔ Une fonction qui LÈVE est traitée comme une identité absente. L’exception
+  ne remonte jamais : un bug chez l’hôte ne casse pas l’envoi.
+- ⛔ Une fonction qui rend autre chose qu’une chaîne non vide : identité absente.
+- ⚠️ La forme chaîne continue de marcher, à l’identique. Aucun hôte existant
+  n’a à bouger.
+
+Puis l’exemple, dans README.md ET 01-Specs/widget.md :
+- « exp » à une journée de travail, pas à une heure, AVEC la raison écrite —
+  et le compromis dit franchement (un jeton fuité vaut jusqu’à son expiration) ;
+- montre la forme fonction comme la manière RECOMMANDÉE dès qu’une page peut
+  rester ouverte longtemps, ce qui est le cas ordinaire d’un logiciel métier.
+
+═══ CE QUE TU NE FAIS PAS ═══
+
+⛔ Aucun changement côté serveur : il reçoit le même en-tête, il vérifie la
+   même signature. Si tu te retrouves à toucher domaine/identite/, arrête-toi.
+⛔ Aucune couleur, aucun token, aucune règle de style modifiés : la partie 1
+   change COMMENT la feuille est posée, jamais ce qu’elle contient.
+⛔ Pas de version, pas de negociation de capacités, pas de drapeau de
+   configuration pour choisir le chemin. Le widget essaie le bon, se replie, et
+   se tait.
+⛔ Ne touche pas au cache de /widget.js (entetes.ts) : c’est un autre sujet, et
+   il a son ticket.
+
+═══ DOCUMENTATION, DANS LE MÊME COMMIT ═══
+
+- 01-Specs/widget.md : §L’intégration (forme fonction), et la feuille adoptée ;
+- 04-Architecture/hebergement.md : la liste CSP mesurée ;
+- README.md : les deux exemples corrigés ;
+- 00-Projet/DECISIONS_LOG.md : une entrée — « le widget n’exige aucune
+  relaxation du CSP de son hôte, et l’identité peut être une fonction
+  synchrone ». Elle doit porter ce qui la renverserait ;
+- 03-Bugs/BUGS_LOG.md : une entrée pour la feuille bloquée — elle a été
+  CONSTATÉE, mesurée, et elle serait arrivée chez un vrai hôte.
+
+⛔ Les six checks en local, intégralement, et tu colles la sortie.
+```
+
+**Acceptation** — sous un CSP strict **sans aucun `unsafe-inline`**, le lanceur porte
+`var(--w-accent)`, un rayon de 999px, une hauteur de 48px, et la console reste vide **du
+chargement jusqu’à l’envoi d’un retour** · le shadow DOM ne contient aucun `<style>` dans un
+navigateur qui sait faire · le repli existe et est prouvé · `window.feedys.identite` accepte une
+chaîne **et** une fonction, et une fonction qui lève n’empêche pas un envoi · `hebergement.md`
+porte la ligne de CSP **mesurée**, ni plus large ni plus étroite · le bundle tient sous 60 Ko gzip.
+
+⚠️ **Hors périmètre, à ouvrir en ticket** : l’invariant « le serveur tolère un `widget.js` vieux
+d’un jour », conséquence du `stale-while-revalidate` de 86 400 s. Réel, mais c’est un autre sujet
+que ce que Feedys impose à son hôte.
+
+---
+
 # Ce qui n’est pas encore un prompt
 
 ⚠️ Ces sujets sont ouverts et **n’ont volontairement pas de prompt** : leur déclencheur n’est pas

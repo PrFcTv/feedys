@@ -46,6 +46,7 @@ référence du MVP marche de bout en bout.**
 | P-020 · le retour au collaborateur | ✅ fait — notification in-widget sobre et à sens unique ([retour-au-collaborateur.md](../01-Specs/retour-au-collaborateur.md), [D-021](DECISIONS_LOG.md)) |
 | P-024 · la traçabilité du correctif | ✅ fait — hors séquence, dans la foulée de P-020 : « traité » exige désormais ce qui a corrigé, et `lire_retour` le rend ([tracabilite-du-correctif.md](../01-Specs/tracabilite-du-correctif.md), [D-024](DECISIONS_LOG.md)) |
 | P-025 · la citation qui n’en est pas une | ✅ fait — le fil porte `geste`, et une correction de carte n’est plus citable ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 016) |
+| P-027 · ce que Feedys impose à son hôte | ⏳ écrit — sous un CSP strict le widget s’affiche **nu**, et le jeton d’identité expire en une heure. ⛔ **Avant la pose chez un hôte réel** |
 | P-026 · la réponse d’un clic | ✅ fait — le modèle déclare un axe fermé, le dépôt écrit les valeurs, et la réponse FIXE `impact` ou `recurrence` ([D-025](DECISIONS_LOG.md)) |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
