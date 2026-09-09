@@ -404,11 +404,27 @@ machine.** C’est la seule raison d’être de la publication, et elle décide 
   quelqu’un d’autre, c’est un humain (§Une installation par client · 2) ;
 - **`linux/amd64` seulement**, et c’est mesuré : [D-028](../00-Projet/DECISIONS_LOG.md).
 
-⚠️ **Un paquet GHCR est PRIVÉ à sa première publication, même depuis un dépôt public.** Un paquet
-hérite des droits d’accès du dépôt lié, **pas de sa visibilité**. Il faut donc, **une fois**, aller
-le passer en public dans les réglages du dépôt → *Packages*. Sans ça, le `docker pull` d’un client
-échoue sur un refus d’authentification, le jour de l’installation, sur un message qui ne dit pas
-que c’est un réglage de visibilité.
+### ⚠️ La visibilité du paquet — à vérifier une fois, pas à régler d’avance
+
+**Mesuré le 2026-09-09, à la première publication de `1.0.0` : le paquet est sorti PUBLIC tout
+seul.** Publié depuis un dépôt public par le `GITHUB_TOKEN` du workflow, il est lié au dépôt et en
+prend la visibilité ; la page *Package settings* affiche « This package is currently public ». Il
+n’y a donc **rien à faire**.
+
+⛔ **Mais la documentation de GitHub dit l’inverse** — « the default visibility is private » — et
+c’est pour ça que cette section existe plutôt que de faire confiance à l’un ou à l’autre. Un paquet
+privé fait échouer le `docker pull` d’un client **le jour de l’installation**, sur un refus
+d’authentification qui ne dit pas un mot de visibilité. Ça se vérifie en deux commandes, sans aucun
+identifiant — ⚠️ pas avec `docker pull`, dont l’assistant de connexion peut resservir un jeton en
+cache et rendre un paquet privé accessible :
+
+```bash
+jeton=$(curl -s 'https://ghcr.io/token?scope=repository:prfctv/feedys:pull&service=ghcr.io' | node -p 'JSON.parse(require("node:fs").readFileSync(0,"utf8")).token')
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $jeton" https://ghcr.io/v2/prfctv/feedys/tags/list
+```
+
+**200** = public, un client peut tirer l’image. **401** ou **403** = privé : le passer en public
+dans *Package settings* → *Danger Zone* → *Change package visibility*.
 
 ### Construire soi-même — le repli, et il est prouvé
 
