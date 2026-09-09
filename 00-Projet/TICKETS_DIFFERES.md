@@ -64,6 +64,13 @@ survive. Mais c’est **notre** page hostile, écrite en imaginant ce qui pourra
 réelle vaut recette. ⚠️ C’est le trou de couverture le plus large du MVP, et il est assumé
 sciemment.
 
+⚠️ **Mis à jour le 2026-09-09 (P-026)** : `tests/e2e/widget-propositions.spec.ts` exerce désormais
+les réponses d’un clic **dans un vrai Chromium**, à l’intérieur de la page hostile — styles
+héritables, empilement au-dessus de la modale, clavier, et le payload réellement envoyé sur le fil.
+Le parcours vérifie d’abord que la page est **encore hostile** avant de conclure à l’isolation.
+⛔ Ce ticket n’est pas clos pour autant : c’est toujours NOTRE page, écrite en imaginant ce qui
+pourrait casser. Ce qui manque reste un hôte réel.
+
 ---
 
 ## ~~T-004 — La séparation des rôles Postgres n’est pas outillée~~ · ✅ clos
