@@ -102,6 +102,36 @@ Un par retour. Ce que le widget joint tout seul, et **la liste est close** — v
 `viewport_h` · `capture_chemin` · `fuseau` · `agent_brut` (`jsonb`, le seul champ légitimement non
 structuré).
 
+### `indices`
+
+Ce que le navigateur a relevé avant l’ouverture de la bulle — **trois au plus par retour**. Voir
+[D-026](../00-Projet/DECISIONS_LOG.md) et [01-Specs/widget.md].
+
+| Colonne | Type | Note |
+|---|---|---|
+| `retour_id` | `text` FK | ⛔ `no action`, comme partout — pas de cascade |
+| `ordre` | `integer` | 0 à 2. ⚠️ Trié là-dessus, jamais sur `cree_le` : les trois lignes sont écrites dans la même transaction |
+| `genre` | `genre_indice` | `js` ou `http` |
+| `nom` | `text` NULL | le **nom** d’une exception — `TypeError` |
+| `trame` | `text` NULL | sa **première** trame, normalisée |
+| `statut` / `chemin` | `integer` / `text` NULL | pour `http` — le chemin a ses segments identifiants remplacés par `:id` |
+| `methode` | `text` NULL | ⚠️ NULL sur un indice passif : `PerformanceObserver` ne la donne pas |
+| `reference` | `text` NULL | l’identifiant de corrélation de l’outil de l’hôte. ⛔ Opaque, jamais interprété, jamais appelé |
+| `ecart_ms` | `integer` NULL | ⚠️ Un **écart**, pas un horodatage : une horloge de poste peut être fausse |
+
+⛔ **IL N’Y A PAS DE COLONNE `message`, ET C’EST STRUCTUREL.** `error.message` est du texte libre
+écrit par le code de l’hôte, il porte des noms de personnes et de dossiers, et ce dépôt est public.
+La colonne n’existe pas : on ne peut donc pas l’y écrire par accident le jour où quelqu’un
+trouvera ça pratique.
+
+⛔ **Une table, pas un `jsonb` sur `contextes`.** Un indice est parfaitement structuré, et `jsonb`
+est réservé au réellement non structuré (§Les règles). Et c’est une **liste** : elle ne rentre pas
+en colonnes.
+
+⚠️ Le plafond de trois est appliqué par le **contrat de transport**, donc par le serveur. Le CHECK
+`indices_ordre_borne` est la ceinture : il empêche qu’un futur chemin d’écriture — un import, un
+rejeu, une main sur `psql` — transforme un retour en déversoir de journal sans que rien ne le dise.
+
 ### `syntheses`
 
 | Colonne | Type | Note |
@@ -140,6 +170,7 @@ create type source_retour      as enum ('voix','texte');
 create type role_message       as enum ('collaborateur','bot');
 create type confiance_synthese as enum ('haute','moyenne','basse');
 create type canal_notification as enum ('email');
+create type genre_indice       as enum ('js','http');
 ```
 
 ⛔ **Il n’y a ni priorité, ni sévérité, ni score**, et il n’y en aura pas. Arbitrer est le travail
@@ -153,6 +184,7 @@ create index on retours (produit_id, statut, cree_le desc);  -- la liste du back
 create index on retours (produit_id, type, cree_le desc);    -- le filtre du MCP
 create index on messages (retour_id, ordre);                 -- le fil, dans l’ordre
 create unique index on produits (cle_publique);              -- vérifié à chaque requête widget
+create unique index on indices (retour_id, ordre);           -- les indices d’un retour, dans l’ordre
 ```
 
 ## Les privilèges

@@ -19,6 +19,7 @@ import type {
 import { identifiant } from '../identifiants'
 
 import type { Bassin } from './depot-retours'
+import { chargerIndices } from './indices'
 
 const CHARGER = `
   select r.id,
@@ -128,6 +129,10 @@ export function creerDepotSyntheses(bassin: Bassin): PortDepotSyntheses {
             auteurNom: ouNul(ligne['auteur_nom']),
             auteurRole: ouNul(ligne['auteur_role']),
             recuLe: recuLe instanceof Date ? recuLe.toISOString() : ouNul(recuLe),
+            // ⚠️ La synthèse les voit pour la MÊME raison que l’entretien : ne
+            //    pas écrire « on ignore ce qui s’est passé techniquement »
+            //    quand la machine l’a relevé. ⛔ Elle ne les cite pas davantage.
+            indices: await chargerIndices(connexion, String(ligne['id'])),
           },
         }
       } finally {

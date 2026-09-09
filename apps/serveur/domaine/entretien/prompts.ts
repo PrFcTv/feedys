@@ -76,6 +76,27 @@ export interface ContexteEntretien {
   readonly auteurRole?: string | null
   /** L’heure d’arrivée du retour, en ISO. */
   readonly recuLe?: string | null
+  /**
+   * Ce que le navigateur a relevé avant l’ouverture (P-028, D-026).
+   *
+   * ⛔ ILS SONT LÀ POUR QUE LE BOT SE TAISE, PAS POUR QU’IL PARLE. Leur seul
+   *    emploi légitime est de ne pas demander ce qu’on sait déjà — « est-ce que
+   *    vous avez eu un message d’erreur ? » quand on a l’exception sous les
+   *    yeux. Les citer, les commenter ou en tirer une cause serait un
+   *    diagnostic, et le bot n’en pose aucun (01-Specs/entretien.md §règle 4).
+   */
+  readonly indices?: readonly IndiceEntretien[]
+}
+
+/** Un indice, tel que le prompt le voit. ⛔ Il n’y a pas de `message`. */
+export interface IndiceEntretien {
+  readonly genre: string
+  readonly nom?: string | null
+  readonly trame?: string | null
+  readonly statut?: number | null
+  readonly chemin?: string | null
+  readonly methode?: string | null
+  readonly ecartMs?: number | null
 }
 
 export interface DemandeTour {
@@ -97,6 +118,7 @@ export interface MessageModele {
 
 const MARQUE_CONTEXTE = '{{contexte}}'
 const MARQUE_METIER = '{{metier}}'
+const MARQUE_INDICES = '{{indices}}'
 const MARQUE_RELANCES = '{{relances}}'
 const MARQUE_FIN = '{{fin}}'
 
@@ -113,6 +135,7 @@ export function assemblerSysteme(gabarit: string, demande: DemandeTour): string 
   return gabarit
     .replace(MARQUE_CONTEXTE, rendreContexte(demande.contexte))
     .replace(MARQUE_METIER, metier)
+    .replace(MARQUE_INDICES, rendreIndices(demande.contexte))
     .replace(MARQUE_RELANCES, consigneRelances(demande.relancesRestantes))
     .replace(/\n{3,}/g, '\n\n')
 }
@@ -151,6 +174,69 @@ export function rendreContexte(contexte: ContexteEntretien): string {
   return lignes.length === 0
     ? '- (le navigateur n’a rien pu joindre)'
     : lignes.join('\n')
+}
+
+/**
+ * Les indices techniques, en texte.
+ *
+ * ⚠️ SÉPARÉS DU CONTEXTE, et pas fondus dedans. Le contexte est ce que le bot
+ *    sait de la SITUATION ; les indices sont ce que la machine a relevé, et ils
+ *    appellent une consigne qui leur est propre — celle du gabarit, juste sous
+ *    la marque. Les mêler ferait perdre cette consigne de vue.
+ *
+ * ⚠️ L’écart est rendu en clair parce que c’est l’information la plus utile de
+ *    la ligne : « il y a 3 s » et « il y a 2 h » ne pèsent pas pareil, et le
+ *    modèle doit pouvoir en tenir compte pour décider de ne PAS poser une
+ *    question plutôt que d’en poser une.
+ *
+ * ⛔ Rend une chaîne vide quand il n’y a rien : une ligne « aucun indice »
+ *    apprendrait au modèle qu’il y a là quelque chose à demander, ce qui est
+ *    exactement l’inverse du but — même raisonnement que `rendreContexte`.
+ */
+export function rendreIndices(contexte: ContexteEntretien): string {
+  const indices = contexte.indices ?? []
+  if (indices.length === 0) return ''
+
+  const lignes = indices.map((indice) => {
+    const quand = indice.ecartMs === undefined || indice.ecartMs === null ? '' : ` (${depuis(indice.ecartMs)})`
+
+    if (indice.genre === 'http') {
+      const methode = indice.methode ? `${indice.methode} ` : ''
+      return `- requête ${indice.statut ?? '?'} sur ${methode}${indice.chemin ?? '?'}${quand}`
+    }
+
+    return `- exception ${indice.nom ?? '?'}${indice.trame ? ` dans ${indice.trame}` : ''}${quand}`
+  })
+
+  return `CE QUE LE NAVIGATEUR A RELEVÉ AVANT L’OUVERTURE
+${lignes.join('\n')}
+${CONSIGNE}`
+}
+
+/**
+ * ⛔ LA CONSIGNE EST COLLÉE AUX DONNÉES, DANS LA MÊME CHAÎNE, ET C’EST
+ *    STRUCTUREL. Elle aurait pu vivre dans `prompts/systeme.md` comme le reste
+ *    de la prose — mais alors quelqu’un pourrait un jour retoucher le gabarit
+ *    et laisser les lignes techniques sans leur garde-fou, sans que rien ne
+ *    l’avertisse. Ici, **on ne peut pas avoir les indices sans la règle** : le
+ *    même `return` produit les deux, et `prompts.test.ts` le vérifie.
+ *
+ * ⚠️ Le précédent existe : `consigneRelances` fabrique déjà de la prose ici
+ *    plutôt que dans le gabarit, pour la même raison — elle dépend de l’état.
+ */
+const CONSIGNE = `⛔ Ces lignes ne se citent pas, ne se commentent pas et ne se diagnostiquent pas.
+Tu ne dis JAMAIS à la personne ce qui a été relevé : ni « j’ai vu une erreur », ni
+« le serveur a répondu 500 », ni « c’est un problème de… ». Elles ne servent qu’à
+UNE chose : ne pas demander ce qu’on sait déjà. Si elles rendent ta question
+inutile, pose-en une autre, ou n’en pose aucune.`
+
+/** ⚠️ Approximatif et assumé : la seconde exacte ne dit rien de plus. */
+function depuis(ecartMs: number): string {
+  const secondes = Math.round(ecartMs / 1000)
+  if (secondes < 60) return `il y a ${secondes} s`
+
+  const minutes = Math.round(secondes / 60)
+  return minutes < 60 ? `il y a ${minutes} min` : `il y a ${Math.round(minutes / 60)} h`
 }
 
 /**

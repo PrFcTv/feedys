@@ -1081,6 +1081,162 @@ libellés en dur deviendrait le mauvais outil.
 
 ---
 
+## D-026 — Le navigateur relève des indices, et Feedys corrèle plutôt qu’il ne recopie
+
+**2026-09-09**
+
+### Le problème
+
+Un collaborateur dit « j’ai cliqué sur valider et rien ne s’est passé ». La note part comme ça, et
+le développeur passe une heure à reproduire à l’aveugle — alors que le navigateur, lui, savait :
+une exception avait été levée, ou une requête était revenue en 500, quelques secondes plus tôt.
+
+`01-Specs/widget.md` excluait explicitement « aucune trace de console ni de réseau ».
+
+### ⚠️ Ce que cette décision RENVERSE, et qu’il faut dire
+
+**La règle d’occupation n°1** — « *aucun travail avant l’interaction. Le premier appel réseau a lieu
+quand on clique* ». Un collecteur qui n’écoute qu’à partir du clic n’a rien à raconter : c’est tout
+son objet d’avoir écouté avant. Le renversement est réel et assumé.
+
+Ce qu’il coûte vraiment : deux `addEventListener` passifs et un `PerformanceObserver`. ⛔ Aucune
+requête réseau, aucun `setInterval`, aucune écriture, aucun travail au fil de l’eau — les
+gestionnaires poussent dans un tableau borné à trois entrées. **La seconde moitié de la règle —
+« le premier appel réseau a lieu quand on clique » — reste vraie mot pour mot.** Mesuré le
+2026-09-09 : le collecteur pèse **2,3 Ko gzip**, et le bundle passe de 29,4 à 31,8 Ko sur 60.
+
+Et une limite qui vient avec, qu’aucune astuce ne lève : le script est en `defer`, donc il
+s’exécute après l’analyse du document. Ce qui casse pendant le démarrage de l’hôte est hors de
+portée du relevé passif. `PerformanceObserver` avec `buffered: true` en rattrape la part réseau ;
+la part exceptions, non.
+
+### Les trois chemins, dans l’ordre de valeur par octet
+
+1. **La corrélation** — un `reference` opaque (id Sentry, `trace_id`, `request_id`) que le
+   back-office rend cliquable via `produits.url_observabilite`. ⛔ **Feedys n’appelle jamais
+   l’outil de l’hôte**, exactement comme il n’appelle jamais la forge (D-024). C’est le champ le
+   plus léger et le plus utile : il emmène le développeur vers **sa** pile démappée, avec sa
+   version et son contexte serveur — tout ce que recopier l’erreur ne donne pas.
+2. **L’API poussée** — `window.feedys.indice({…})`, et une file `window.feedys.indices` vidée au
+   montage pour ce qui précède le chargement. ⚠️ Elle existe parce qu’**une error boundary React
+   avale l’exception** : en React 18 comme en 19, une erreur de rendu attrapée par une boundary ne
+   remonte pas à `window`. Dans une application métier correctement écrite, l’écran blanc ne
+   produit donc **aucun** indice passif. C’est aussi le seul chemin qui porte une `reference` et une
+   méthode HTTP.
+3. **Le relevé passif** — `addEventListener('error')`, `'unhandledrejection'`, et
+   `PerformanceObserver`. Il marche sans aucune intégration, et c’est sa seule supériorité.
+
+### ⛔ Ce que le relevé ne prend pas, et pourquoi
+
+- **Le message d’une exception.** `error.message` est du texte libre écrit par le code de l’hôte.
+  « *Le dossier de M. Dupont (n° 4417) est verrouillé par Marie Lefèvre* » est une phrase qu’un
+  logiciel métier lève tous les jours ; elle finirait en base, dans un email, puis dans une note
+  lue par un agent de code — **dans un dépôt public**. On garde `error.name` et la **première
+  trame** : ce qui localise, et qui est structurellement stable.
+
+  ⚠️ Second motif, moins visible : `domaine/entretien/prompts.ts` justifie par écrit l’absence de
+  risque d’injection par le fait que le contexte est « *une DONNÉE STRUCTURÉE […] pas une phrase
+  qu’on a dictée* ». Un message d’exception peut contenir de la saisie utilisateur ; le joindre
+  invaliderait un argument de sécurité déjà consigné dans le code. `nom` + `trame` le laisse intact.
+
+- **Le chemin brut d’une requête.** `POST /api/dossiers/4417/valider` porte un numéro de dossier ;
+  `/api/clients/jean.dupont@exemple.fr/relances` porte une adresse. Les segments identifiants sont
+  remplacés par `:id` — avec **la liste de `contexte/ecran.ts`, importée et pas recopiée** — et la
+  requête est retirée entièrement.
+
+- **La console.** `console.error` n’est pas une exception, et une application métier en écrit des
+  dizaines par jour.
+
+- **`window.onerror`, `fetch` et `XMLHttpRequest`.** On n’assigne ni n’enveloppe rien.
+  `window.onerror = …` écraserait le gestionnaire de l’hôte sans un mot ; envelopper son `fetch`
+  quand on est un invité, c’est entrer dans sa chaîne de wrappers — Sentry, Datadog et Apollo en
+  posent déjà —, fausser ses traces et devenir le suspect n°1 de son prochain bug.
+
+- **Nos propres erreurs.** Tout ce dont la trame vient de l’origine Feedys est jeté. Sans ce
+  filtre, le premier indice affiché serait Feedys accusant Feedys : `snapdom` écrit déjà dans la
+  console de l’hôte (T-005).
+
+⚠️ **`PerformanceResourceTiming.responseStatus` n’existe que sur Chromium**, et c’est exactement
+l’univers que D-003 a déjà arrêté pour la dictée. La contrainte qui rend la parole possible rend ce
+collecteur propre. Ailleurs, aucun indice `http` n’est relevé et rien ne se casse. ⚠️ **La méthode
+HTTP n’est pas disponible par ce chemin** : un indice passif n’en porte pas. Limite honnête, pas
+oubli.
+
+### Ce qui borne : l’écran, pas la durée
+
+⛔ **Le seuil de soixante secondes envisagé au départ était le mauvais axe.** Un poste de bureau
+garde un onglet ouvert huit heures. Quelqu’un clique sur « Valider », rien ne se passe, il relit,
+réessaie, appelle un collègue, **puis** ouvre la bulle — quatre minutes plus tard : le seuil aurait
+jeté l’erreur. Et dans les soixante secondes précédant l’ouverture, il y a surtout le bruit
+provoqué par l’ouverture elle-même.
+
+Donc : **on ne jette rien sur l’âge, on date.** Les trois derniers indices survenus **depuis le
+dernier changement d’écran**, chacun avec son `ecart_ms`. « il y a 3 s » et « il y a 2 h » ne pèsent
+pas pareil, et c’est au développeur d’en juger, pas à un seuil codé en dur.
+
+### Actif par défaut, montré, décochable
+
+⛔ **Actif par défaut, et c’est un arbitrage.** En option d’adhésion, personne ne l’activerait et la
+fonctionnalité serait morte née. Ce qui rend le défaut défendable est ailleurs :
+
+- **le panneau le dit et le laisse décocher** — « Joindre 2 indices techniques relevés · voir »,
+  dépliable sur exactement ce qui part. C’est le principe déjà posé pour l’écran déduit : « *la
+  collecte est visible plutôt que subie* ». ⚠️ Un relevé joint sans être montré serait son exact
+  inverse : le widget saurait de la personne quelque chose qu’elle ne sait pas.
+- ⚠️ **Et il y a un gain qu’on n’attendait pas** : lire « une erreur technique a été relevée » dit à
+  quelqu’un que **ce n’est pas sa faute**. Dans un logiciel métier, où l’on se soupçonne d’abord
+  d’avoir mal cliqué, c’est un moment réel.
+- `data-indices="non"` sur la balise coupe tout, sans redéploiement de notre part.
+
+⚠️ Décocher **retire le champ**, il ne l’envoie pas vide : « le navigateur n’a rien relevé » et
+« quelqu’un a refusé de joindre » ne se confondent pas, et la seconde ne nous regarde pas.
+
+### Le bot s’en sert pour se taire, jamais pour parler
+
+Un modèle à qui l’on donne « requête 500 sur `/api/factures` » **veut** le dire, et ce serait une
+violation frontale de la règle 4 de `01-Specs/entretien.md`. Les indices entrent quand même dans le
+prompt, parce que leur valeur est de **supprimer des questions** — mais la consigne de
+non-diagnostic est produite par le **même `return`** que les données (`rendreIndices`), et pas
+posée dans le gabarit. ⛔ On ne peut donc pas obtenir les lignes techniques sans le garde-fou, et
+`prompts.test.ts` le vérifie.
+
+### Le rangement
+
+Une **table `indices`**, pas une colonne `jsonb` sur `contextes` : un indice est parfaitement
+structuré, et `jsonb` est réservé au réellement non structuré. ⛔ **Il n’y a pas de colonne
+`message`** — elle n’existe pas, donc on ne peut pas l’y écrire par accident le jour où quelqu’un
+trouvera ça pratique. Le plafond de trois est appliqué par le contrat (donc par le serveur), pas par
+le seul widget — même raisonnement que la limite de deux relances (D-006).
+
+Le mot est **indice**, jamais « erreur » ni « log » : il dit *piste*, pas *cause*. Il est donc
+non diagnostique par construction, ce qui l’aligne sur la règle 4 jusque dans le vocabulaire
+([02-Metier/glossaire.md](../02-Metier/glossaire.md)).
+
+### Ce qu’on n’a pas fait
+
+- **Aucun rattrapage des exceptions d’avant le chargement**, hors `buffered` réseau. Un stub à
+  poser dans le `<head>` de l’hôte casserait la promesse de l’intégration en une ligne.
+- **Ni iframes ni web workers** : un écouteur du document parent ne les voit pas. Écrit en non-but
+  plutôt que découvert en défaut ([TICKETS_DIFFERES](TICKETS_DIFFERES.md) T-011).
+- **Aucune détection de « rien ne s’est passé »** — une requête qui n’est jamais partie est un
+  signal réel, mais le mesurer demanderait de savoir ce que l’hôte aurait dû appeler.
+
+### Ce qui la renverserait
+
+La prémisse — « la plupart des bugs s’accompagnent d’une exception ou d’une erreur HTTP » — **n’est
+pas mesurée**, et cette décision renverse un invariant. Elle doit donc porter sa mesure : la part
+des retours qui arrivent avec au moins un indice, disponible sans travail
+(`select count(distinct retour_id) from indices`, rapporté au nombre de retours).
+
+**Sous 20 %, on retire le collecteur passif et on garde la corrélation** — qui ne coûte rien et ne
+renverse aucune règle. Au-dessus de 60 %, le renversement de la règle 1 est payé.
+
+L’inverse la renverserait aussi : un hôte dont les indices se révéleraient porteurs de données
+métier malgré la normalisation. La réponse serait alors le retrait du relevé passif, pas un tamis
+de plus.
+
+---
+
 ## D-027 — Le widget n’exige rien du CSP de son hôte, et l’identité peut être une fonction
 
 **2026-09-09**

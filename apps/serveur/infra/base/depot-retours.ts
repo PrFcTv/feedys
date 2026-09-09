@@ -55,6 +55,18 @@ const ECRIRE_CONTEXTE = `
   values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14)
 `
 
+/**
+ * ⚠️ Une ligne par indice, dans la MÊME transaction que la parole (P-028).
+ *    Un indice qui survivrait à l’échec de son retour serait une trace
+ *    technique sans le récit qui lui donne un sens.
+ */
+const ECRIRE_INDICE = `
+  insert into indices (
+    id, retour_id, ordre, genre, nom, trame, statut, chemin, methode, reference, ecart_ms
+  )
+  values ($1, $2, $3, $4::genre_indice, $5, $6, $7, $8, $9, $10, $11)
+`
+
 export function creerDepotRetours(bassin: Bassin): PortDepotRetours {
   return {
     async produitParCle(cle: string): Promise<ProduitConnu | null> {
@@ -130,6 +142,25 @@ export function creerDepotRetours(bassin: Bassin): PortDepotRetours {
           contexte.agentBrut === null ? null : JSON.stringify(contexte.agentBrut),
           contexte.situation,
         ])
+
+        // ⚠️ En série et pas en `Promise.all` : une connexion Postgres traite
+        //    une requête à la fois, et trois lignes ne valent pas un
+        //    `insert … values` construit à la main.
+        for (const indice of retour.indices) {
+          await connexion.query(ECRIRE_INDICE, [
+            identifiant(),
+            idRetour,
+            indice.ordre,
+            indice.genre,
+            indice.nom,
+            indice.trame,
+            indice.statut,
+            indice.chemin,
+            indice.methode,
+            indice.reference,
+            indice.ecartMs,
+          ])
+        }
 
         await connexion.query('commit')
         return idRetour

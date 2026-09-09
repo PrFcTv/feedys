@@ -3,7 +3,7 @@
 Ces mots sont ceux du code. Une table, un type, une variable ou un libellé qui parle d’autre
 chose est un bug de vocabulaire — et il coûte cher, parce qu’il se propage.
 
-## Les six mots
+## Les sept mots
 
 ### Retour
 
@@ -82,6 +82,27 @@ Le contexte est ce qui rend l’entretien court : **tout ce qui est dans le cont
 qu’on ne pose pas.**
 
 Table `contextes`.
+
+### Indice
+
+**Ce que le navigateur a relevé tout seul, avant qu’on ouvre la bulle** : une exception non
+capturée, ou une requête revenue en erreur.
+
+⛔ **Pas « erreur »** — ambigu avec les erreurs de Feedys lui-même, et surtout affirmatif : une
+erreur *est* le problème, un indice ne fait que le suggérer. ⛔ Pas « log », pas « trace », pas
+« breadcrumb » : trois mots qui appellent un journal, et un journal ne se lit pas dans une fiche
+de retour.
+
+⚠️ **Le mot porte la règle.** Un indice dit *piste*, jamais *cause* : c’est au développeur de faire
+le lien, et l’écart affiché — « il y a 3 s », « il y a 2 h » — est ce qui l’y aide. Le bot, lui, ne
+le fait jamais : il s’en sert pour **ne pas demander** ce qu’on sait déjà, jamais pour diagnostiquer
+([entretien.md](../01-Specs/entretien.md) règle 4).
+
+⛔ **Un indice ne porte pas le message d’une exception**, seulement son nom et sa première trame.
+Un message est du texte libre écrit par le logiciel hôte, et il y met des noms de personnes
+([D-026](../00-Projet/DECISIONS_LOG.md)).
+
+Table `indices`. Trois au plus par retour.
 
 ### Auteur
 

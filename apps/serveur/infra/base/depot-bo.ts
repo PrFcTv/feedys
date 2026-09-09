@@ -20,11 +20,13 @@ import { auditStatut } from '../../domaine/backoffice/correction'
 import type { Filtres, Statut, TypeRetour } from '../../domaine/backoffice/filtres'
 import { depuisDe } from '../../domaine/backoffice/filtres'
 import { lienCorrectif } from '../../domaine/retours/correctif'
+import { lienIndice } from '../../domaine/retours/indice'
 import type { Synthese } from '../../domaine/synthese/schema'
 import { analyserSynthese } from '../../domaine/synthese/schema'
 import { identifiant } from '../identifiants'
 
 import type { Bassin } from './depot-retours'
+import { chargerIndices } from './indices'
 import { ecritureStatut } from './sql-statut'
 
 /** ⚠️ Deux visites par jour, dix personnes : la liste n’a pas besoin de pagination. */
@@ -65,6 +67,27 @@ export interface ContexteFiche {
 }
 
 /**
+ * Un indice technique tel que la fiche l’affiche.
+ *
+ * ⛔ Il n’y a pas de champ `message`, et ce n’est pas une omission : la colonne
+ *    n’existe pas en base (D-026). Le développeur a la trame, qui localise, et
+ *    la référence, qui l’emmène chez son propre outil — où le message est, avec
+ *    la pile démappée et la version.
+ */
+export interface IndiceFiche {
+  readonly genre: string
+  readonly nom: string | null
+  readonly trame: string | null
+  readonly statut: number | null
+  readonly chemin: string | null
+  readonly methode: string | null
+  readonly reference: string | null
+  readonly ecartMs: number | null
+  /** ⚠️ `null` quand le produit n’a pas déclaré d’outil : la référence reste lisible. */
+  readonly url: string | null
+}
+
+/**
  * Ce qui a corrigé le retour.
  *
  * ⛔ Le back-office l’AFFICHE, il ne le saisit pas : le correctif se consigne
@@ -102,6 +125,8 @@ export interface Fiche {
   readonly modele: string | null
   readonly fil: readonly TourFiche[]
   readonly contexte: ContexteFiche | null
+  /** Ce que le navigateur a relevé avant l’ouverture (P-028). ⚠️ Liste vide si rien. */
+  readonly indices: readonly IndiceFiche[]
   readonly notification: { readonly statut: string; readonly erreur: string | null } | null
 }
 
@@ -126,7 +151,7 @@ const FICHE = `
          r.auteur_nom, r.auteur_role, r.identite_verifiee, r.cree_le, r.envoye_le,
          r.reponse_texte, r.reponse_envoyee_le, r.reponse_lue_le,
          r.correctif_ref, r.correctif_note, r.correctif_le,
-         p.nom as produit_nom, p.url_forge,
+         p.nom as produit_nom, p.url_forge, p.url_observabilite,
          s.contenu, s.modele,
          c.url, c.titre_page, c.ecran, c.selecteur_dom, c.navigateur, c.systeme,
          c.viewport_l, c.viewport_h, c.fuseau, c.capture_chemin,
@@ -303,6 +328,15 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
                 captureChemin: ouNul(ligne['capture_chemin']),
               }
 
+        // ⚠️ Le lien est composé ICI, à la lecture, et jamais stocké : le
+        //    gabarit du produit peut changer, et une URL figée en base
+        //    pointerait vers l’outil d’hier. Même choix que `lienCorrectif`.
+        const urlObservabilite = ouNul(ligne['url_observabilite'])
+        const indices = (await chargerIndices(connexion, retourId)).map((indice) => ({
+          ...indice,
+          url: lienIndice(urlObservabilite, indice.reference),
+        }))
+
         const notificationStatut = ouNul(ligne['notification_statut'])
 
         const correctifRef = ouNul(ligne['correctif_ref'])
@@ -344,6 +378,7 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
             transcriptBrut: ouNul(tour['transcript_brut']),
           })),
           contexte,
+          indices,
           notification:
             notificationStatut === null
               ? null

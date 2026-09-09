@@ -99,9 +99,12 @@ pnpm widget:demo      # page de démonstration : le widget dans une fausse app h
                       # sur un autre port. C’est LÀ qu’on recette le widget, jamais
                       # dans le back-office — voir §Le widget ne se recette pas chez lui
 pnpm produit:creer -- --nom "VictorIA" --domaine victoria.example [--forge https://…]
+                      #                                  [--observabilite "https://…?q={{ref}}"]
                       # crée un produit et imprime sa clé publique + son secret UNE fois.
                       # --forge est l’URL du dépôt : c’est elle qui rend cliquable le SHA
                       # d’un correctif consigné par MCP. Feedys ne l’appelle jamais.
+                      # --observabilite joue le même rôle pour la référence d’un indice
+                      # technique, et Feedys ne l’appelle pas davantage (D-026).
 pnpm entretien:rejouer -- --retour <id> [--synthese] [--prompt] [--modele <id>]
                       # rejoue la boucle d’entretien sur un retour existant, sans widget.
                       # C’est l’outil de mise au point du prompt : on change le prompt,
@@ -164,7 +167,12 @@ file d’attente et un numéro — trois choses que Feedys n’a pas. La règle 
 les messages, la documentation, et **les noms de variables, de types et de tables**.
 
 Le vocabulaire complet est dans [02-Metier/glossaire.md] : **retour**, **entretien**,
-**synthèse**, **produit**, **contexte**, **auteur**. Les tables et les types suivent ces mots.
+**synthèse**, **produit**, **contexte**, **auteur**, **indice**. Les tables et les types suivent
+ces mots.
+
+⛔ **Un « indice » n’est pas une « erreur ».** C’est ce que le navigateur a relevé avant l’ouverture
+de la bulle — une piste, jamais une cause. Le mot est non diagnostique par construction, et c’est
+ce qui l’aligne sur la règle 4 du bot ([D-026]).
 
 ### Architecture — frontières non négociables
 

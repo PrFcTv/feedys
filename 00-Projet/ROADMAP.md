@@ -48,6 +48,7 @@ référence du MVP marche de bout en bout.**
 | P-025 · la citation qui n’en est pas une | ✅ fait — le fil porte `geste`, et une correction de carte n’est plus citable ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 016) |
 | P-027 · ce que Feedys impose à son hôte | ✅ fait — la feuille est **construite** et n’exige plus rien du CSP de l’hôte ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 018), et `window.feedys.identite` accepte une **fonction** ([D-027](DECISIONS_LOG.md)). ⚠️ La capture, elle, coûte encore deux directives — [T-010](TICKETS_DIFFERES.md) |
 | P-026 · la réponse d’un clic | ✅ fait — le modèle déclare un axe fermé, le dépôt écrit les valeurs, et la réponse FIXE `impact` ou `recurrence` ([D-025](DECISIONS_LOG.md)) |
+| P-028 · les indices techniques | ✅ fait — le navigateur relève ce qu’il a vu avant l’ouverture, et Feedys **corrèle plutôt qu’il ne recopie** ([D-026](DECISIONS_LOG.md), [widget.md](../01-Specs/widget.md) §Les indices techniques). ⚠️ Renverse la règle d’occupation n°1 — et porte sa mesure : sous 20 % de retours avec indice, on retire le relevé passif. ⛔ Ni iframes, ni workers, ni avant-chargement — [T-011](TICKETS_DIFFERES.md) |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 

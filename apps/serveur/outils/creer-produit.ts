@@ -5,6 +5,11 @@
  *    cliquable le SHA d’un correctif consigné par MCP (P-024). Sans elle, la
  *    référence reste affichée, simplement pas cliquable.
  *
+ * ⚠️ `--observabilite "https://outil.exemple.fr/recherche?q={{ref}}"` joue le
+ *    MÊME rôle pour la référence de corrélation d’un indice technique : elle
+ *    emmène le développeur vers sa propre pile démappée (P-028, D-026). ⛔ Et,
+ *    comme la forge, Feedys ne l’appelle jamais.
+ *
  * Crée un produit et imprime sa clé publique et son secret. ⛔ UNE fois : le
  * secret n’est stocké qu’en argon2, et rien ne peut le réafficher ensuite.
  *
@@ -31,12 +36,15 @@ try {
 
 const ECRIRE = `
   insert into produits
-    (id, nom, domaine, cle_publique, secret_hash, secret_chiffre, contexte_metier, url_forge)
-  values ($1, $2, $3, $4, $5, $6, $7, $8)
+    (id, nom, domaine, cle_publique, secret_hash, secret_chiffre, contexte_metier, url_forge,
+     url_observabilite)
+  values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 async function principal(): Promise<void> {
-  const { nom, domaine, metier, forge } = lireArgumentsProduit(process.argv.slice(2))
+  const { nom, domaine, metier, forge, observabilite } = lireArgumentsProduit(
+    process.argv.slice(2),
+  )
 
   const url = process.env['DATABASE_URL']
   if (!url) {
@@ -79,6 +87,7 @@ async function principal(): Promise<void> {
       chiffrer(secret, clef),
       metier ?? null,
       forge ?? null,
+      observabilite ?? null,
     ])
   } finally {
     await client.end()
@@ -92,7 +101,7 @@ Produit créé · ${nom} — ${domaine}
   Clé publique   ${cle}
   Secret         ${secret}${metier ? `\n  Métier         ${metier}` : ''}${
     forge ? `\n  Dépôt          ${forge}` : ''
-  }
+  }${observabilite ? `\n  Observabilité  ${observabilite}` : ''}
 
 À coller dans le logiciel hôte :
 

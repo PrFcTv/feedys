@@ -36,11 +36,39 @@ if (lecture.ok) {
   const montage = monter(lecture.configuration)
   const global = globalThis as Global
 
+  // ⚠️ LA FILE D’ATTENTE SE VIDE AVANT TOUT LE RESTE. Le script est en `defer` :
+  //    il s’exécute APRÈS l’analyse du document, c’est-à-dire après le
+  //    démarrage de l’hôte — précisément le moment où une application métier
+  //    casse. Un hôte qui veut nous parler de ce moment-là n’a que ce chemin :
+  //
+  //      ;(window.feedys = window.feedys || {}).indices ||= []
+  //      window.feedys.indices.push({ genre: 'js', nom: 'TypeError' })
+  //
+  //    ⛔ Rien n’est cru sur parole : chaque entrée repasse par le même tamis
+  //       que le reste (`lireIndicePousse`), et une entrée mal formée est jetée
+  //       sans un mot plutôt que de faire refuser le retour entier.
+  const enAttente = global.feedys?.['indices']
+  if (Array.isArray(enAttente)) {
+    for (const brut of enAttente) montage.poserIndice(brut)
+  }
+
   global.feedys = {
     ...global.feedys,
     version: VERSION,
     ouvrir: () => montage.commandes.ouvrir(),
     fermer: () => montage.commandes.fermer(),
+    indice: (brut: unknown) => montage.poserIndice(brut),
+    /**
+     * ⚠️ La file reste APPELABLE après le chargement, et c’est ce qui la rend
+     *    utilisable : l’hôte écrit `window.feedys.indices.push(…)` une fois pour
+     *    toutes, sans avoir à savoir si le widget est déjà là. Le tableau est
+     *    remplacé par un objet qui pousse directement — motif `dataLayer`.
+     */
+    indices: {
+      push: (...entrees: unknown[]) => {
+        for (const brut of entrees) montage.poserIndice(brut)
+      },
+    },
   }
 } else {
   // ⚠️ Le seul message que le widget écrira jamais dans la console de l’hôte, et

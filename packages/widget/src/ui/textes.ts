@@ -71,6 +71,30 @@ export const TEXTES = {
 } as const
 
 /**
+ * Ce qu’on dit des indices techniques joints (D-026).
+ *
+ * ⛔ AUCUN DE CES MOTS NE DIAGNOSTIQUE. Ni « erreur détectée sur les factures »,
+ *    ni « le serveur a répondu une erreur ». On énumère ce qui part, en termes
+ *    neutres — la règle 4 de l’entretien vaut aussi pour l’interface.
+ *
+ * ⚠️ « relevé » et pas « détecté » : détecter suppose qu’on a compris quelque
+ *    chose. Relever, c’est constater. C’est aussi le mot du glossaire
+ *    (02-Metier/glossaire.md §indice).
+ */
+export const INDICES = {
+  /** ⚠️ Au singulier comme au pluriel : personne ne lit « 1 indices ». */
+  resume: (nombre: number): string =>
+    nombre === 1 ? 'Joindre 1 indice technique relevé' : `Joindre ${nombre} indices techniques relevés`,
+  voir: 'voir',
+  masquer: 'masquer',
+  /** ⚠️ Préfixe d’une ligne réseau. ⛔ Pas « erreur serveur » : on n’en sait rien. */
+  reseau: 'Requête',
+  /** Le repli quand l’exception n’a même pas de nom. */
+  exception: 'Exception',
+  ilYA: 'il y a',
+} as const
+
+/**
  * Les réponses d’un clic — ce que portent les boutons sous la question.
  *
  * ⛔ ÉCRITS ICI, ET PAS DEMANDÉS AU MODÈLE. C’est le point de

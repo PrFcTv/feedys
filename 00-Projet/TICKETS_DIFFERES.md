@@ -291,3 +291,42 @@ la capture est écrit à part, avec son prix.
 ⚠️ Une piste, si le sujet se rouvre : ne tenter la capture **qu’une fois**, et se souvenir d’un
 échec par `securitypolicyviolation` pour ne plus jamais la retenter dans la page. Ça ferait passer
 de deux lignes par ouverture à deux lignes par chargement de page. Ça ne les supprime pas.
+
+---
+
+## T-011 — Le relevé d’indices ne voit ni les iframes, ni les workers, ni l’avant-chargement
+
+**Ouvert le 2026-09-09** (P-028)
+
+Le collecteur d’indices ([D-026](DECISIONS_LOG.md), `packages/widget/src/contexte/indices.ts`)
+écoute le document de l’hôte. Trois angles morts en découlent, et ils sont **écrits ici pour ne pas
+revenir en défauts** :
+
+1. **Les iframes.** `addEventListener('error')` sur le document parent ne voit pas ce qui casse
+   dans un `<iframe>`. Un logiciel métier en pose régulièrement — rapport embarqué, tunnel de
+   paiement, éditeur tiers —, et c’est souvent là que ça casse.
+2. **Les web workers.** Même raison : ils ont leur propre portée globale.
+3. **Ce qui précède le chargement du widget.** Le script est en `defer` : il s’exécute après
+   l’analyse du document, donc après le démarrage de l’hôte — précisément le moment où une
+   application métier casse. ⚠️ `PerformanceObserver` avec `buffered: true` rattrape la part
+   **réseau** ; la part **exceptions**, non.
+
+⚠️ **Le contournement existe déjà et il est documenté** : `window.feedys.indices.push({…})` depuis
+l’hôte, vidé au montage ([widget.md](../01-Specs/widget.md) §Ce que l’hôte peut pousser lui-même).
+Un hôte qui tient à ces trois cas a un chemin ; il demande juste une ligne de sa part.
+
+### Ce qu’on n’a pas fait, et pourquoi
+
+⛔ **Aucun stub à poser dans le `<head>` de l’hôte.** Ce serait le seul moyen d’attraper les
+exceptions du démarrage sans intégration — et ça casserait la promesse de l’intégration en **une**
+ligne, qui est un argument de vente autant qu’une règle.
+
+⛔ **Aucune injection dans les iframes.** Le widget est un invité ; aller poser des écouteurs dans
+les cadres d’autrui, dont certains sont d’une autre origine, dépasse largement son mandat.
+
+### Le déclencheur de reprise
+
+Un retour réel où le développeur constate que l’indice manquait **parce qu’il venait d’un iframe ou
+du démarrage**. Alors seulement, et pour ce cas-là, on documentera le stub d’hôte comme intégration
+optionnelle — jamais comme intégration par défaut.
+

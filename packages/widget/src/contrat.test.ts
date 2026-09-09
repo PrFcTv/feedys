@@ -146,3 +146,83 @@ describe('⛔ analyserCorpsTour — l’axe et sa valeur vont ensemble (D-025)',
     expect(analyserCorpsTour({ axe: 'recurrence', valeurAxe: 'À chaque fois' }).ok).toBe(false)
   })
 })
+
+/**
+ * ⛔ LE CONTRAT EST CE QUI BORNE RÉELLEMENT, PARCE QUE C’EST LE SERVEUR QUI
+ *    L’APPLIQUE. Le widget en garde trois de son côté par politesse ; un widget
+ *    forgé, lui, ne passe que par ici — même raisonnement que la limite de deux
+ *    relances, qui n’est pas confiée au navigateur (D-006, D-026).
+ */
+describe('les indices techniques (P-028)', () => {
+  const avec = (indices: unknown) =>
+    analyserCorpsRetour({ texte: 'le tri se remet à zéro', contexte: { ...CONTEXTE, indices } })
+
+  it('accepte un relevé complet', () => {
+    const resultat = avec([
+      { genre: 'http', statut: 500, chemin: '/api/dossiers/:id/valider', methode: 'POST', ecartMs: 3_000 },
+      { genre: 'js', nom: 'TypeError', trame: 'valider (app.js:12:34)', reference: 'a1b2c3' },
+    ])
+
+    expect(resultat.ok).toBe(true)
+  })
+
+  it('accepte l’absence — la collecte est en échec-doux, et l’hôte peut refuser', () => {
+    expect(avec(undefined).ok).toBe(true)
+    expect(avec([]).ok).toBe(true)
+  })
+
+  it('⛔ refuse au-delà de trois : un retour n’est pas un déversoir de journal', () => {
+    const un = { genre: 'js', nom: 'TypeError' }
+
+    expect(avec([un, un, un]).ok).toBe(true)
+    expect(avec([un, un, un, un]).ok).toBe(false)
+  })
+
+  /**
+   * ⛔ LE TEST QUI TIENT D-026. `error.message` est du texte libre écrit par le
+   *    code de l’hôte ; il porte des noms de personnes et de dossiers, et le
+   *    dépôt est public. `.strict()` fait que le champ n’est pas ignoré : il
+   *    fait REFUSER le retour entier, en 400. La règle n’est pas une intention.
+   */
+  it('⛔ refuse tout champ `message` — il n’y a pas de place pour un message', () => {
+    const resultat = avec([
+      { genre: 'js', nom: 'TypeError', message: 'Le dossier de M. Dupont est verrouillé' },
+    ])
+
+    expect(resultat.ok).toBe(false)
+  })
+
+  it('⛔ refuse un genre inventé', () => {
+    expect(avec([{ genre: 'console', nom: 'X' }]).ok).toBe(false)
+  })
+
+  it('⛔ refuse un js sans nom, et un http sans statut ou sans chemin', () => {
+    expect(avec([{ genre: 'js' }]).ok).toBe(false)
+    expect(avec([{ genre: 'js', trame: 'f (a.js:1:1)' }]).ok).toBe(false)
+    expect(avec([{ genre: 'http', statut: 500 }]).ok).toBe(false)
+    expect(avec([{ genre: 'http', chemin: '/api' }]).ok).toBe(false)
+  })
+
+  it('⛔ refuse un statut hors de la plage HTTP', () => {
+    expect(avec([{ genre: 'http', statut: 99, chemin: '/api' }]).ok).toBe(false)
+    expect(avec([{ genre: 'http', statut: 600, chemin: '/api' }]).ok).toBe(false)
+  })
+
+  it('⛔ refuse ce qui dépasse les bornes', () => {
+    expect(avec([{ genre: 'js', nom: 'X'.repeat(BORNES.indiceNom + 1) }]).ok).toBe(false)
+    expect(
+      avec([{ genre: 'js', nom: 'X', trame: 'y'.repeat(BORNES.indiceTrame + 1) }]).ok,
+    ).toBe(false)
+    expect(
+      avec([{ genre: 'js', nom: 'X', reference: 'r'.repeat(BORNES.indiceReference + 1) }]).ok,
+    ).toBe(false)
+    expect(
+      avec([{ genre: 'js', nom: 'X', ecartMs: BORNES.indiceEcartMs + 1 }]).ok,
+    ).toBe(false)
+  })
+
+  it('⛔ refuse un écart négatif ou fractionnaire', () => {
+    expect(avec([{ genre: 'js', nom: 'X', ecartMs: -1 }]).ok).toBe(false)
+    expect(avec([{ genre: 'js', nom: 'X', ecartMs: 1.5 }]).ok).toBe(false)
+  })
+})

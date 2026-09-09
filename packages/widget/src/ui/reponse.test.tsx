@@ -20,6 +20,7 @@ const CONFIGURATION: Configuration = {
   cle: 'fdy_pub_a1b2c3',
   origine: 'https://feedys.exemple.fr',
   position: 'bas-droite',
+  indices: true,
 }
 
 const vraiAttachShadow = Element.prototype.attachShadow

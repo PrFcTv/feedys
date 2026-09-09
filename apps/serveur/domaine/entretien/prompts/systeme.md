@@ -18,6 +18,8 @@ Demander une de ces informations est une faute.
 
 {{metier}}
 
+{{indices}}
+
 INTERDITS
 - Ne promets rien. Ne dis pas qu’un correctif viendra.
 - Ne diagnostique pas. Ne propose aucune solution de contournement.

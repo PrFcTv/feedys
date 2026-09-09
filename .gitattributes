@@ -9,4 +9,17 @@
 *.pdf binary
 *.woff2 binary
 
+# ⛔ LES MIGRATIONS SONT HACHÉES, DONC LEURS OCTETS SONT PORTEURS.
+#    `infra/base/migrations.ts` enregistre le sha256 du FICHIER et refuse de
+#    démarrer quand il a changé — c’est le garde-fou qui empêche de réécrire une
+#    migration déjà appliquée. Mais `* text=auto` rend le fichier CRLF sur un
+#    poste Windows, alors que le conteneur Linux l’a appliqué en LF : même
+#    commit, deux empreintes, et `pnpm db:migrate` refuse de tourner en local
+#    contre la base du conteneur.
+#
+# ⚠️ Constaté le 2026-09-09 sur 0007_correctif.sql : empreinte CRLF
+#    03c327d46574…, empreinte LF 80539d70f993…, et c’est la seconde qui est en
+#    base. `eol=lf` force le même octet des deux côtés.
+db/migrations/*.sql text eol=lf
+
 pnpm-lock.yaml linguist-generated=true

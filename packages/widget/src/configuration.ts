@@ -26,6 +26,19 @@ export interface Configuration {
   /** L’origine Feedys, sans slash final. */
   readonly origine: string
   readonly position: Position
+  /**
+   * Le relevé des indices techniques (D-026). **Actif par défaut.**
+   *
+   * ⛔ ACTIF PAR DÉFAUT, ET C’EST UN ARBITRAGE, PAS UNE FACILITÉ. En option
+   *    d’adhésion, personne ne l’activerait et la fonctionnalité serait morte
+   *    née. Ce qui rend le défaut acceptable est ailleurs : le panneau **dit**
+   *    ce qu’il joint et laisse le décocher, et le collecteur ne relève ni
+   *    message d’exception, ni requête, ni corps de réponse.
+   *
+   * ⚠️ `data-indices="non"` le coupe entièrement, sans rien changer d’autre au
+   *    parcours. Un hôte n’a pas à nous redéployer pour refuser.
+   */
+  readonly indices: boolean
 }
 
 /**
@@ -88,8 +101,23 @@ export function lireConfiguration(script: HTMLScriptElement | null | undefined, 
 
   return {
     ok: true,
-    configuration: { cle, origine, position: positionDe(script.dataset.position) },
+    configuration: {
+      cle,
+      origine,
+      position: positionDe(script.dataset.position),
+      indices: indicesDe(script.dataset.indices),
+    },
   }
+}
+
+/**
+ * ⚠️ Seul `non` coupe, et l’absence d’attribut vaut `true`. Un attribut mal
+ *    orthographié — `data-indices="off"`, `data-indice="non"` — laisse donc le
+ *    relevé actif. C’est délibéré : le contraire ferait qu’une faute de frappe
+ *    désactive silencieusement une fonctionnalité que la fiche montre.
+ */
+function indicesDe(valeur: string | undefined): boolean {
+  return valeur?.trim().toLowerCase() !== 'non'
 }
 
 /**
