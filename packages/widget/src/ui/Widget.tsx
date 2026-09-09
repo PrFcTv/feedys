@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 
-import type { Axe, Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour, ReponseCollaborateur, TourRendu, ValeurAxe } from '../contrat'
+import type { Axe, Comprehension, Contexte, CorpsFin, CorpsRetour, CorpsTour, IndiceContexte, ReponseCollaborateur, TourRendu, ValeurAxe } from '../contrat'
 import { dicteeDisponible } from '../dictee/reconnaissance'
 import type { Resultat } from '../envoi'
 import type { ResultatTour } from '../entretien'
@@ -28,6 +28,7 @@ import { rendreCorrections } from '../entretien'
 import { Carte } from './Carte'
 import { Ecoute } from './Ecoute'
 import { piegerFocus } from './focus'
+import { Indices } from './Indices'
 import { Micro } from './Micro'
 import { Propositions } from './Propositions'
 import { TEXTES, TOUR_SANS_SUITE, inviteChamp, titreNotification } from './textes'
@@ -104,6 +105,21 @@ type Phase = 'repos' | 'envoi' | 'entretien' | 'envoye'
  */
 type Source = 'voix' | 'texte'
 
+/**
+ * Le contexte, privé de ses indices quand la case a été décochée.
+ *
+ * ⛔ ON RETIRE LE CHAMP, ON NE L’ENVOIE PAS VIDE. Un `indices: []` se lirait en
+ *    base comme « le navigateur n’a rien relevé », alors que la vérité est
+ *    « quelqu’un a refusé de le joindre ». Les deux ne se confondent pas, et la
+ *    seconde ne nous regarde pas : décocher doit tout effacer, y compris la
+ *    trace d’avoir décoché (D-026).
+ */
+function sansIndicesSiRefuses(contexte: Contexte, joints: boolean): Contexte {
+  if (joints) return contexte
+  const { indices: _refuses, ...reste } = contexte
+  return reste
+}
+
 export function Widget(ports: Ports) {
   const [ouvert, setOuvert] = useState(false)
   /** ⚠️ Le brouillon vit ICI, en mémoire. ⛔ Ni localStorage, ni cookie. */
@@ -124,6 +140,18 @@ export function Widget(ports: Ports) {
   const [attente, setAttente] = useState(false)
   /** Les réponses non lues pour ce collaborateur (P-020). */
   const [reponses, setReponses] = useState<readonly ReponseCollaborateur[]>([])
+
+  /**
+   * Ce que le navigateur a relevé, tel qu’il sera joint (D-026).
+   *
+   * ⚠️ En état et pas seulement dans la promesse de contexte : il faut le
+   *    MONTRER, et on ne rend pas une promesse.
+   */
+  const [indices, setIndices] = useState<readonly IndiceContexte[]>([])
+  /** ⛔ Décoché, rien ne part. Le défaut est « joint », et il est montré. */
+  const [indicesJoints, setIndicesJoints] = useState(true)
+  /** ⚠️ Replié par défaut : trois lignes techniques ne sont pas le sujet. */
+  const [indicesDeplies, setIndicesDeplies] = useState(false)
 
   const lanceur = useRef<HTMLButtonElement | null>(null)
   const panneau = useRef<HTMLDivElement | null>(null)
@@ -178,7 +206,11 @@ export function Widget(ports: Ports) {
       // ⚠️ La collecte démarre au premier mot du geste, pas au rendu : l’URL
       //    d’une application à routeur peut changer sous nos pieds.
       if (!deja) {
-        contexte.current = ports.collecter()
+        const pris = ports.collecter()
+        contexte.current = pris
+        // ⚠️ En échec doux, comme la collecte elle-même : un contexte qui rate
+        //    laisse la liste vide, le bloc ne s’affiche pas, et l’envoi part.
+        void pris.then((collecte) => setIndices(collecte.indices ?? [])).catch(() => setIndices([]))
         void verifierReponses()
       }
       return true
@@ -359,7 +391,10 @@ export function Widget(ports: Ports) {
       // ⚠️ Ce que le moteur a entendu, avant toute correction. On garde les
       //    hésitations : elles portent du sens (conventions-db.md).
       ...(transcriptBrut === '' ? {} : { transcriptBrut }),
-      contexte: (await contexte.current) ?? (await ports.collecter()),
+      contexte: sansIndicesSiRefuses(
+        (await contexte.current) ?? (await ports.collecter()),
+        indicesJoints,
+      ),
     })
 
     if (resultat.ok) {
@@ -377,7 +412,7 @@ export function Widget(ports: Ports) {
     // ⚠️ On garde le brouillon et on repart tout seul à la reconnexion, sans
     //    rien demander (01-Specs/widget.md §Ce que le widget ne fait jamais).
     enAttente.current = resultat.reessayable && !(ports.enLigne ?? parDefautEnLigne)()
-  }, [jouer, oublierApport, ports, texte, source, transcriptBrut])
+  }, [jouer, oublierApport, ports, texte, source, transcriptBrut, indicesJoints])
 
   /** Répondre à la question du bot — ou simplement lui envoyer une correction. */
   /**
@@ -622,6 +657,28 @@ export function Widget(ports: Ports) {
                       }}
                     />
                   </>
+                )}
+
+                {/*
+                  ⛔ MONTRÉ AVANT L’ENVOI, ET SEULEMENT AVANT. Passé l’envoi, la
+                     parole ET son contexte sont en base : une case à cocher
+                     laisserait croire qu’on peut encore retirer ce qui est
+                     parti. On ne ment pas sur ce qu’on a déjà (D-026).
+
+                  ⚠️ Ici, en bas, et pas en tête du panneau : le panneau s’ouvre
+                     sur « Qu’est-ce qui se passe ? » et sur le micro. Trois
+                     lignes techniques posées au-dessus prendraient la place de
+                     l’invitation à parler, qui est le geste du produit.
+                */}
+                {dictee.ecoute === null && (phase === 'repos' || phase === 'envoi') && (
+                  <Indices
+                    indices={indices}
+                    joints={indicesJoints}
+                    surBascule={setIndicesJoints}
+                    deplie={indicesDeplies}
+                    surDeplier={setIndicesDeplies}
+                    fige={phase === 'envoi'}
+                  />
                 )}
 
                 <div class="avis" role="status">

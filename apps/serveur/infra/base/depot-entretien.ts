@@ -19,6 +19,7 @@ import type {
 import { identifiant } from '../identifiants'
 
 import type { Bassin } from './depot-retours'
+import { chargerIndices } from './indices'
 
 /**
  * ⚠️ Le contexte est joint ici plutôt que dans une seconde requête : il est en
@@ -132,6 +133,9 @@ export function creerDepotEntretien(bassin: Bassin): PortDepotEntretien {
             auteurNom: ouNul(ligne['auteur_nom']),
             auteurRole: ouNul(ligne['auteur_role']),
             recuLe: recuLe instanceof Date ? recuLe.toISOString() : ouNul(recuLe),
+            // ⛔ Pour que le bot SE TAISE, pas pour qu’il parle : ils lui
+            //    évitent de demander ce que la machine a déjà relevé (D-026).
+            indices: await chargerIndices(connexion, retourId),
           },
         }
       } finally {

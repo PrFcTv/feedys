@@ -9,7 +9,8 @@ import { parseArgs } from 'node:util'
 
 export const USAGE_PRODUIT =
   'Usage : pnpm produit:creer -- --nom "VictorIA" --domaine victoria.exemple.fr ' +
-  '[--metier "Contexte métier"] [--forge https://github.com/org/depot]'
+  '[--metier "Contexte métier"] [--forge https://github.com/org/depot] ' +
+  '[--observabilite "https://outil.exemple.fr/recherche?q={{ref}}"]'
 
 /**
  * ⛔ `--forge` doit être une URL https, et on le dit MAINTENANT plutôt que de
@@ -20,6 +21,22 @@ export const USAGE_PRODUIT =
 export const USAGE_FORGE =
   '--forge attend l’URL https du dépôt, par exemple https://github.com/org/depot. ' +
   'Elle ne sert qu’à rendre un SHA de correctif cliquable — Feedys ne l’appelle jamais.'
+
+/**
+ * ⛔ `--observabilite` doit être une URL https ET porter la marque `{{ref}}`,
+ *    et les deux sont refusés MAINTENANT pour la même raison que `--forge` :
+ *    un gabarit sans marque produirait un lien qui n’est pas nul mais qui
+ *    n’emmène nulle part, et ce lien-là ment. On préfère refuser à la création
+ *    qu’afficher plus tard une référence cliquable vers une page vide.
+ *
+ * ⚠️ Un gabarit et non un préfixe : les outils d’observabilité ne s’accordent
+ *    sur aucune forme d’URL — Sentry veut `/issues/?query=<ref>`, un
+ *    agrégateur de journaux veut la référence dans une recherche.
+ */
+export const USAGE_OBSERVABILITE =
+  '--observabilite attend une URL https portant la marque {{ref}}, par exemple ' +
+  'https://sentry.io/organizations/org/issues/?query={{ref}}. Elle ne sert qu’à rendre ' +
+  'cliquable la référence d’un indice — Feedys n’appelle jamais cet outil.'
 
 export const USAGE_REJOUER =
   'Usage : pnpm entretien:rejouer -- --retour <id> [--modele <id>] [--prompt] [--synthese]'
@@ -34,6 +51,7 @@ export function lireArgumentsProduit(argv: readonly string[]): {
   domaine: string
   metier?: string
   forge?: string
+  observabilite?: string
 } {
   const args = [...argv]
   while (args[0] === '--') args.shift()
@@ -45,6 +63,7 @@ export function lireArgumentsProduit(argv: readonly string[]): {
       domaine: { type: 'string' },
       metier: { type: 'string' },
       forge: { type: 'string' },
+      observabilite: { type: 'string' },
     },
   })
 
@@ -52,11 +71,24 @@ export function lireArgumentsProduit(argv: readonly string[]): {
   const domaine = values.domaine?.trim()
   const metier = values.metier?.trim() || undefined
   const forge = values.forge?.trim() || undefined
+  const observabilite = values.observabilite?.trim() || undefined
 
   if (!nom || !domaine) throw new Error(USAGE_PRODUIT)
   if (forge !== undefined && !forge.startsWith('https://')) throw new Error(USAGE_FORGE)
+  if (
+    observabilite !== undefined &&
+    (!observabilite.startsWith('https://') || !observabilite.includes('{{ref}}'))
+  ) {
+    throw new Error(USAGE_OBSERVABILITE)
+  }
 
-  return { nom, domaine, ...(metier ? { metier } : {}), ...(forge ? { forge } : {}) }
+  return {
+    nom,
+    domaine,
+    ...(metier ? { metier } : {}),
+    ...(forge ? { forge } : {}),
+    ...(observabilite ? { observabilite } : {}),
+  }
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   consigneRelances,
   messagesDuFil,
   rendreContexte,
+  rendreIndices,
   rendreMetier,
 } from './prompts'
 import type { DemandeTour } from './prompts'
@@ -26,6 +27,8 @@ CE QUE TU SAIS DÉJÀ — ne le demande jamais
 {{contexte}}
 
 {{metier}}
+
+{{indices}}
 
 {{relances}}
 `
@@ -218,3 +221,91 @@ describe('le contexte métier et situationnel (P-02X)', () => {
   })
 })
 
+
+/**
+ * ⛔ LES INDICES SONT LÀ POUR QUE LE BOT SE TAISE, PAS POUR QU’IL PARLE.
+ *
+ * C’est la règle 4 de 01-Specs/entretien.md — ne rien diagnostiquer — appliquée
+ * à une donnée qui invite précisément au diagnostic. Un modèle à qui l’on donne
+ * « requête 500 sur /api/factures » veut le dire ; la consigne le lui interdit,
+ * et ces tests vérifient que la consigne est là, collée aux données, et qu’elle
+ * ne peut pas en être séparée (P-028, D-026).
+ */
+describe('les indices techniques (P-028)', () => {
+  const INDICES = [
+    { genre: 'http', statut: 500, chemin: '/api/dossiers/:id/valider', ecartMs: 3_000 },
+    { genre: 'js', nom: 'TypeError', trame: 'valider (app.js:12:34)', ecartMs: 7_200_000 },
+  ]
+
+  it('rend chaque indice avec son écart — 3 s et 2 h ne pèsent pas pareil', () => {
+    const rendu = rendreIndices({ ...CONTEXTE, indices: INDICES })
+
+    expect(rendu).toContain('requête 500 sur /api/dossiers/:id/valider')
+    expect(rendu).toContain('il y a 3 s')
+    expect(rendu).toContain('exception TypeError dans valider (app.js:12:34)')
+    expect(rendu).toContain('il y a 2 h')
+  })
+
+  it('⚠️ ne rend RIEN quand il n’y a pas d’indice — comme le contexte', () => {
+    // Une ligne « aucun indice » apprendrait au modèle qu’il y a là quelque
+    // chose à demander, ce qui est l’inverse du but.
+    expect(rendreIndices({ ...CONTEXTE, indices: [] })).toBe('')
+    expect(rendreIndices(CONTEXTE)).toBe('')
+  })
+
+  /**
+   * ⛔ LE TEST QUI TIENT LA RÈGLE 4. La consigne et les données sortent du même
+   *    `return` : on ne peut pas obtenir les lignes techniques sans le
+   *    garde-fou qui va avec.
+   */
+  it('⛔ la consigne de non-diagnostic est INSÉPARABLE des données', () => {
+    const rendu = rendreIndices({ ...CONTEXTE, indices: INDICES })
+
+    expect(rendu).toContain('ne se citent pas')
+    expect(rendu).toContain('ne se diagnostiquent pas')
+    expect(rendu).toContain('ne pas demander ce qu’on sait déjà')
+  })
+
+  it('est SUBSTITUÉ dans le gabarit — un marqueur oublié se verrait ici', () => {
+    const systeme = assemblerSysteme(GABARIT, {
+      ...demande([]),
+      contexte: { ...CONTEXTE, indices: INDICES },
+    })
+
+    expect(systeme).not.toContain('{{indices}}')
+    expect(systeme).toContain('CE QUE LE NAVIGATEUR A RELEVÉ AVANT L’OUVERTURE')
+    expect(systeme).toContain('ne se diagnostiquent pas')
+  })
+
+  it('⚠️ sans indice, le marqueur disparaît sans laisser de trou', () => {
+    const systeme = assemblerSysteme(GABARIT, demande([]))
+
+    expect(systeme).not.toContain('{{indices}}')
+    expect(systeme).not.toContain('CE QUE LE NAVIGATEUR A RELEVÉ')
+    // ⚠️ Pas de ligne vide en cascade là où le bloc aurait été.
+    expect(systeme).not.toMatch(/\n{3,}/)
+  })
+
+  /**
+   * ⛔ IL N’Y A AUCUN CHEMIN POUR UN MESSAGE D’EXCEPTION JUSQU’AU PROMPT.
+   *    Le type ne le porte pas, la base n’a pas la colonne, le contrat le
+   *    refuse. Ce test le vérifie au bout de la chaîne : même si quelqu’un
+   *    en glissait un dans l’objet, il ne serait pas rendu.
+   */
+  it('⛔ ne rend jamais un message d’exception, même glissé dans l’objet', () => {
+    const rendu = rendreIndices({
+      ...CONTEXTE,
+      indices: [
+        {
+          genre: 'js',
+          nom: 'TypeError',
+          message: 'Le dossier de M. Dupont est verrouillé par Marie Lefèvre',
+        } as unknown as (typeof INDICES)[number],
+      ],
+    })
+
+    expect(rendu).toContain('TypeError')
+    expect(rendu).not.toContain('Dupont')
+    expect(rendu).not.toContain('Lefèvre')
+  })
+})

@@ -167,6 +167,24 @@
           <button type="button" id="ouvrir-modale">Ouvrir une modale à z-index 9999</button>
         </p>
 
+        <!--
+          ⚠️ LES TROIS BOUTONS QUI FABRIQUENT UN INDICE (P-028, D-026). Le
+             collecteur écoute la page de l’hôte ; on ne peut donc pas le
+             recetter dans le back-office, seulement ici, où l’on peut
+             réellement faire casser quelque chose.
+
+          ⛔ Le message des exceptions porte volontairement un nom de personne
+             et un numéro de dossier — fictifs. C’est LE point à vérifier à
+             l’œil : le panneau et le corps de la requête doivent montrer
+             `TypeError` et une trame, JAMAIS cette phrase.
+        -->
+        <p class="incidents">
+          <button type="button" id="casser-js">Lever une exception non capturée</button>
+          <button type="button" id="casser-promesse">Rejeter une promesse</button>
+          <button type="button" id="casser-http">Appeler une API en 500</button>
+          <button type="button" id="pousser-indice">Pousser un indice avec référence</button>
+        </p>
+
         <table id="liste-dossiers">
           <thead>
             <tr>
@@ -202,7 +220,18 @@
             <li>Tout le parcours au clavier : <kbd>Tab</kbd> jusqu’au lanceur, <kbd>Entrée</kbd>, le focus part dans le
               champ, il ne sort plus du panneau, <kbd>Échap</kbd> ferme et rend le focus au lanceur.</li>
             <li>Un retour écrit part vraiment : <code>201</code> sur <code>POST /api/retours</code>, puis l’accusé.</li>
-            <li>La console n’a pas une seule erreur — c’est un résultat de test.</li>
+            <li>La console n’a pas une seule erreur — c’est un résultat de test.
+              ⚠️ Sauf celles que les boutons ci-dessus provoquent exprès : elles
+              sont le sujet de la ligne suivante.</li>
+            <li><strong>Les indices techniques (P-028).</strong> Cliquez un des
+              boutons « casser », puis ouvrez la bulle. Le pied du panneau doit
+              dire « Joindre 1 indice technique relevé », et
+              <code>voir</code> doit montrer <code>TypeError · …</code> avec un
+              écart. ⛔ <strong>Le nom « Dupont », le mot « verrouillé » et le
+              nombre 4417 ne doivent apparaître NULLE PART</strong> — ni dans le
+              panneau, ni dans le corps de <code>POST /api/retours</code> que
+              l’onglet Réseau montre. Décochez : le champ
+              <code>indices</code> doit disparaître entièrement du corps.</li>
           </ol>
           <p>
             Le widget est chargé depuis <code>__FEEDYS_URL__</code>. Lancez <code>pnpm dev</code> à côté, et créez un
@@ -229,6 +258,52 @@
       })
       document.getElementById('fermer-modale').addEventListener('click', function () {
         document.getElementById('modale').dataset.ouverte = 'non'
+      })
+
+      /*
+        ⛔ CE QUE CES QUATRE BOUTONS METTENT À L’ÉPREUVE, et que rien d’autre ne
+           met à l’épreuve : le message des deux exceptions porte un nom de
+           personne et un numéro de dossier. Après avoir cliqué puis ouvert la
+           bulle, le panneau doit afficher « TypeError · … » et JAMAIS cette
+           phrase — et l’onglet Réseau doit le confirmer dans le corps envoyé.
+      */
+      document.getElementById('casser-js').addEventListener('click', function () {
+        // ⚠️ Différé : une exception levée dans le gestionnaire lui-même serait
+        //    attrapée par le navigateur au même endroit et n’atteindrait pas
+        //    `window`. Un `setTimeout` la rend réellement non capturée.
+        setTimeout(function () {
+          throw new TypeError('Le dossier de M. Dupont (n° 4417) est verrouillé par Marie Lefèvre')
+        }, 0)
+      })
+
+      document.getElementById('casser-promesse').addEventListener('click', function () {
+        Promise.reject(new RangeError('Le solde du compte de Mme Bernard est hors bornes'))
+      })
+
+      document.getElementById('casser-http').addEventListener('click', function () {
+        // ⚠️ `/api/…/4417/…` : le chemin doit ressortir en `/api/dossiers/:id/valider`.
+        //    Si le 4417 apparaît dans le panneau, la normalisation est cassée.
+        fetch('/demo/api/dossiers/4417/valider?token=secret-a-ne-pas-joindre', {
+          method: 'POST',
+        }).catch(function () {
+          /* ⚠️ Avalé : ce qu’on veut, c’est la trace, pas une seconde erreur. */
+        })
+      })
+
+      document.getElementById('pousser-indice').addEventListener('click', function () {
+        /*
+          ⚠️ LE CHEMIN QU’UN HÔTE UTILISE VRAIMENT. Une error boundary React
+             attrape l’exception de rendu : elle ne remonte JAMAIS à `window`,
+             et le collecteur passif ne verra rien. C’est depuis
+             `componentDidCatch` — ou un intercepteur axios — que l’hôte pousse,
+             et c’est le seul chemin qui porte une référence de corrélation.
+        */
+        window.feedys.indice({
+          genre: 'js',
+          nom: 'TypeError',
+          trame: 'TableauDossiers (dossiers.tsx:88:12)',
+          reference: 'demo-7f3a91c2',
+        })
       })
     </script>
 

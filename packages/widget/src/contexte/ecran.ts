@@ -33,7 +33,16 @@ const IDENTIFIANTS: readonly RegExp[] = [
   /^[a-z0-9]{20,}$/i,
 ]
 
-function estIdentifiant(segment: string): boolean {
+/**
+ * Ce segment désigne-t-il une ligne plutôt qu’un écran ?
+ *
+ * ⚠️ EXPORTÉ, et pas seulement pour la commodité : `indices.ts` normalise les
+ *    chemins d’API avec exactement cette liste. Sans elle,
+ *    `POST /api/dossiers/4417/valider` partirait avec son numéro de dossier —
+ *    le chemin serait alors de la donnée métier, pas une adresse (D-026).
+ *    Deux listes divergeraient au premier ajout ; il n’y en a qu’une.
+ */
+export function estIdentifiant(segment: string): boolean {
   return IDENTIFIANTS.some((forme) => forme.test(segment))
 }
 

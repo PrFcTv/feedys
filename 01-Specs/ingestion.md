@@ -44,7 +44,11 @@ l’importe — jamais l’inverse ([licences.md](../04-Architecture/licences.md
     "fuseau": "Europe/Paris",
     "horodatage": "2026-09-04T11:32:00.000Z",
     "agentBrut": { "langue": "fr-FR" },
-    "capture": { "type": "image/webp", "donnees": "<base64>" }
+    "capture": { "type": "image/webp", "donnees": "<base64>" },
+    "indices": [
+      { "genre": "http", "statut": 500, "chemin": "/api/dossiers/:id/valider", "ecartMs": 3200 },
+      { "genre": "js", "nom": "TypeError", "trame": "trier (dossiers.js:88:12)", "ecartMs": 4100 }
+    ]
   }
 }
 ```
@@ -56,6 +60,17 @@ plus tenable, sans réécriture ni migration.
 ⛔ **Les deux listes de champs sont closes**, et le schéma refuse tout champ inconnu. La liste du
 contexte est celle de [widget.md](widget.md) §Ce que le widget joint tout seul, mot pour mot. Le
 dépôt est public : elle doit pouvoir être lue par n’importe qui sans gêne.
+
+⛔ **`indices` est plafonné à TROIS par le serveur** ([D-026](../00-Projet/DECISIONS_LOG.md)), pas
+par le widget : un widget forgé ne doit pas pouvoir transformer un retour en déversoir de journal —
+même raisonnement que la limite de deux relances, qui n’est pas confiée au navigateur non plus.
+Un `js` doit porter son `nom`, un `http` son `statut` **et** son `chemin` ; le reste est refusé.
+
+⛔ **Et un indice n’a PAS de champ `message`.** Un corps qui en porterait un est refusé en `400` —
+pas ignoré, refusé. `error.message` est écrit par le code de l’hôte et porte régulièrement des noms
+de personnes et de dossiers ; le `.strict()` du schéma est ce qui transforme cette règle en mur
+plutôt qu’en intention. Les trois lignes sont rangées dans la table `indices`, dans la même
+transaction que la parole.
 
 ⚠️ **`source` est déclaré par le widget**, parce qu’un transcript Web Speech est de la voix **sans
 fichier audio** — le serveur ne peut pas le deviner. Avec un audio, il vaut `voix` quoi qu’il

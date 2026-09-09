@@ -43,6 +43,8 @@ const TABLES_METIER = [
   'retours',
   'messages',
   'contextes',
+  /** Ce que le navigateur a relevé avant l’ouverture (P-028, D-026). */
+  'indices',
   'syntheses',
   'notifications',
   'audit',
@@ -51,6 +53,7 @@ const TABLES_METIER = [
 const ENUMS = [
   'canal_notification',
   'confiance_synthese',
+  'genre_indice',
   'geste_message',
   'role_message',
   'source_retour',
@@ -59,6 +62,7 @@ const ENUMS = [
 ] as const
 
 const INDEX = [
+  'indices_retour_ordre_uniq',
   'messages_retour_ordre_idx',
   'produits_cle_publique_uniq',
   'retours_produit_statut_cree_idx',
@@ -136,7 +140,7 @@ describe('le socle, appliqué sur une base vierge', () => {
     expect(resultat.deja).toEqual([])
   })
 
-  it('crée les sept tables métier, et rien d’autre que le registre en plus', async () => {
+  it('crée les huit tables métier, et rien d’autre que le registre en plus', async () => {
     const { rows } = await base.client.query<{ table_name: string }>(
       `select table_name from information_schema.tables
        where table_schema = 'public' and table_type = 'BASE TABLE'
@@ -154,7 +158,7 @@ describe('le socle, appliqué sur une base vierge', () => {
     )
   })
 
-  it('crée les sept enums, avec leurs valeurs — ⛔ ni priorité, ni sévérité, ni score', async () => {
+  it('crée les huit enums, avec leurs valeurs — ⛔ ni priorité, ni sévérité, ni score', async () => {
     const { rows } = await base.client.query<{ nom: string; valeurs: string[] }>(
       `select t.typname as nom, array_agg(e.enumlabel::text order by e.enumsortorder) as valeurs
        from pg_type t
@@ -273,7 +277,7 @@ describe('le socle, appliqué sur une base vierge', () => {
       `select count(*)::text as n from information_schema.tables
        where table_schema = 'public' and table_type = 'BASE TABLE'`,
     )
-    expect(tables[0]?.n).toBe('8')
+    expect(tables[0]?.n).toBe('9')
   })
 })
 

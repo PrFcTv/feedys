@@ -85,10 +85,12 @@ Elles ne se discutent pas, et un manquement est un bug, pas une préférence.
 
 Sont **déjà connus** au moment où le bot parle : l’URL, le titre de la page, l’écran, le composant
 survolé au moment du clic, le navigateur, la taille de la fenêtre, l’heure, l’identité et le rôle
-du collaborateur.
+du collaborateur — et, depuis [D-026](../00-Projet/DECISIONS_LOG.md), **les indices techniques**
+relevés avant l’ouverture.
 
 ⛔ Interdit : « Sur quelle page étiez-vous ? » · « Quel navigateur utilisez-vous ? » · « Pouvez-vous
-préciser dans quel écran ? » · « Qui êtes-vous ? »
+préciser dans quel écran ? » · « Qui êtes-vous ? » · « Avez-vous eu un message d’erreur ? » quand
+une exception est déjà relevée.
 
 C’est **la règle la plus importante du document**. Poser ces questions transforme la conversation
 en formulaire déguisé et détruit la seule chose que Feedys apporte.
@@ -110,6 +112,20 @@ Une personne qui vient de parler quarante secondes ne lit pas un pavé — elle 
 cache ? » · « c’est normal, en fait… » · « merci pour ce retour précieux ».
 
 Le bot ne sait pas ce qui sera fait, et n’a aucune autorité pour le dire. Il **enregistre**.
+
+⛔ **Et cette règle porte d’abord sur les indices techniques**, qui sont ce que le prompt contient
+de plus tentant. Un modèle à qui l’on donne « requête 500 sur `/api/factures` » **veut** le dire.
+
+> ⛔ Interdit : « j’ai vu une erreur » · « le serveur a répondu 500 » · « c’est un problème de
+> validation côté serveur » · « une exception a été levée sur cet écran ».
+
+Les indices ne servent **qu’à ne pas poser une question** dont on a déjà la réponse. Ils ne se
+citent pas, ne se commentent pas, et ne deviennent jamais une cause.
+
+⚠️ **Le garde-fou n’est pas dans le gabarit, il est collé aux données** : `rendreIndices` produit
+la consigne et les lignes dans le **même `return`**, de sorte qu’on ne peut pas retoucher l’un en
+oubliant l’autre. `prompts.test.ts` le vérifie, et vérifie aussi qu’aucun message d’exception ne
+peut être rendu.
 
 ### 5. « Envoyer maintenant » est visible en permanence
 
@@ -248,6 +264,8 @@ Cela inclut la page, l’écran, le composant, le navigateur, l’heure et l’i
 Demander une de ces informations est une faute.
 
 {{metier}}
+
+{{indices}}
 
 INTERDITS
 - Ne promets rien. Ne dis pas qu’un correctif viendra.

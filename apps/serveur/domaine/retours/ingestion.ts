@@ -10,7 +10,7 @@
  * ⛔ Module pur : ni base, ni réseau, ni horloge, ni disque. Tout ce qui a un
  *    effet de bord entre par un port (04-Architecture/architecture.md §3).
  */
-import type { CorpsRetour, Fichier } from '../../../../packages/widget/src/contrat'
+import type { CorpsRetour, Fichier, GenreIndice } from '../../../../packages/widget/src/contrat'
 import {
   BORNES,
   PREFIXE_CLE_PUBLIQUE,
@@ -70,6 +70,32 @@ export interface RetourAEnregistrer {
     readonly agentBrut: Record<string, unknown> | null
     readonly situation: string | null
   }
+  /**
+   * Ce que le navigateur a relevé avant l’ouverture (P-028, D-026).
+   *
+   * ⚠️ À CÔTÉ du contexte et pas dedans : c’est une LISTE, et `contextes` est
+   *    une ligne. Le dépôt écrit les deux dans la même transaction que le
+   *    retour — un indice qui survivrait à l’échec de sa parole n’aurait aucun
+   *    sens.
+   *
+   * ⛔ Vide quand la personne a décoché, et vide aussi quand rien n’a été
+   *    relevé. Le serveur ne fait pas la différence, et n’a pas à la faire :
+   *    « j’ai refusé de joindre » ne se journalise pas.
+   */
+  readonly indices: readonly IndiceAEnregistrer[]
+}
+
+/** Un indice, prêt à écrire. ⛔ Il n’y a pas de champ `message` (D-026). */
+export interface IndiceAEnregistrer {
+  readonly ordre: number
+  readonly genre: GenreIndice
+  readonly nom: string | null
+  readonly trame: string | null
+  readonly statut: number | null
+  readonly chemin: string | null
+  readonly methode: string | null
+  readonly reference: string | null
+  readonly ecartMs: number | null
 }
 
 export interface PortDepotRetours {
@@ -286,5 +312,34 @@ function composer(
       agentBrut: contexte.agentBrut ?? null,
       situation: ouNul(contexte.situation ?? contexte.contexteMetier),
     },
+    indices: composerIndices(contexte.indices),
   }
+}
+
+/**
+ * Les indices, mis à plat pour l’écriture.
+ *
+ * ⛔ AUCUNE VALIDATION ICI, ET C’EST VOULU. Le contrat a déjà tout borné : le
+ *    genre appartient à l’énumération, le plafond de trois est appliqué, un
+ *    `js` a son nom et un `http` son statut. Revalider ici donnerait deux
+ *    endroits où la règle vit, et le second finirait par diverger du premier.
+ *
+ * ⚠️ L’ordre est celui du tableau — le plus ancien d’abord, tel que le
+ *    collecteur l’a retenu. Il porte du sens : deux indices dans l’ordre
+ *    racontent une séquence, mélangés ils ne racontent rien.
+ */
+function composerIndices(
+  indices: NonNullable<CorpsRetour['contexte']['indices']> | undefined,
+): readonly IndiceAEnregistrer[] {
+  return (indices ?? []).map((indice, ordre) => ({
+    ordre,
+    genre: indice.genre,
+    nom: ouNul(indice.nom),
+    trame: ouNul(indice.trame),
+    statut: indice.statut ?? null,
+    chemin: ouNul(indice.chemin),
+    methode: ouNul(indice.methode),
+    reference: ouNul(indice.reference),
+    ecartMs: indice.ecartMs ?? null,
+  }))
 }

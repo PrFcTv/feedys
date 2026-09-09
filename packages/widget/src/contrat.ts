@@ -16,7 +16,15 @@
  */
 import { z } from 'zod'
 
-import { AXES, BORNES, TYPES_AUDIO, TYPES_CAPTURE, valeurDAxe } from './transport'
+import {
+  AXES,
+  BORNES,
+  GENRES_INDICE,
+  INDICES_MAX,
+  TYPES_AUDIO,
+  TYPES_CAPTURE,
+  valeurDAxe,
+} from './transport'
 
 /**
  * ⚠️ Les constantes vivent dans `transport.ts`, SANS zod, et sont réexportées
@@ -31,6 +39,8 @@ export {
   CHEMIN_RETOURS,
   EN_TETE_CLE,
   EN_TETE_IDENTITE,
+  GENRES_INDICE,
+  INDICES_MAX,
   PREFIXE_CLE_PUBLIQUE,
   PREFIXE_SECRET,
   TYPES_AUDIO,
@@ -42,7 +52,7 @@ export {
   valeurDAxe,
 } from './transport'
 
-export type { Axe, ValeurAxe } from './transport'
+export type { Axe, GenreIndice, ValeurAxe } from './transport'
 
 /**
  * Un fichier joint, en base64.
@@ -55,6 +65,62 @@ const fichier = <T extends readonly [string, ...string[]]>(types: T) =>
     type: z.enum(types),
     /** Le contenu, sans le préfixe `data:` — le widget le retire. */
     donnees: z.string().min(1),
+  })
+
+/**
+ * Un indice technique relevé avant l’ouverture de la bulle.
+ *
+ * ⛔ IL N’Y A PAS DE CHAMP POUR LE MESSAGE D’UNE EXCEPTION, ET C’EST LE POINT
+ *    DE [D-026](../../../00-Projet/DECISIONS_LOG.md). `error.message` est du
+ *    texte libre écrit par le code de l’hôte, il porte régulièrement des noms de
+ *    personnes et de dossiers, et le dépôt est public. Ce qui entre ici est
+ *    STRUCTUREL : le nom de l’exception et sa première trame.
+ *
+ * ⚠️ `.strict()` fait le reste : un widget qui inventerait `message` verrait le
+ *    retour ENTIER refusé en 400. La règle n’est pas une intention, c’est un mur.
+ *
+ * ⛔ Et les deux genres n’ont pas les mêmes champs obligatoires : un `js` sans
+ *    nom et un `http` sans statut ne disent rien. Le `superRefine` les refuse
+ *    plutôt que d’écrire une ligne vide dans la fiche.
+ */
+export const SchemaIndice = z
+  .object({
+    genre: z.enum(GENRES_INDICE),
+    nom: z.string().max(BORNES.indiceNom).optional(),
+    trame: z.string().max(BORNES.indiceTrame).optional(),
+    statut: z.number().int().min(100).max(599).optional(),
+    chemin: z.string().max(BORNES.indiceChemin).optional(),
+    methode: z.string().max(BORNES.indiceMethode).optional(),
+    /**
+     * L’identifiant de corrélation vers l’outil d’observabilité de l’hôte.
+     *
+     * ⛔ Opaque, et Feedys ne l’interprète JAMAIS. Il est stocké tel quel et
+     *    rendu cliquable par le back-office à partir de `produits.url_observabilite`
+     *    — exactement le motif de `--forge` pour le SHA d’un correctif
+     *    ([D-024](../../../00-Projet/DECISIONS_LOG.md)). ⛔ Le serveur n’appelle
+     *    jamais l’outil de l’hôte, pas plus qu’il n’appelle la forge.
+     */
+    reference: z.string().max(BORNES.indiceReference).optional(),
+    /** ⚠️ Un écart, pas un horodatage : une horloge de poste peut être fausse. */
+    ecartMs: z.number().int().nonnegative().max(BORNES.indiceEcartMs).optional(),
+  })
+  .strict()
+  .superRefine((indice, controle) => {
+    if (indice.genre === 'js' && (indice.nom === undefined || indice.nom.trim() === '')) {
+      controle.addIssue({
+        code: 'custom',
+        message: 'Un indice « js » porte le nom de son exception.',
+        path: ['nom'],
+      })
+    }
+
+    if (indice.genre === 'http' && (indice.statut === undefined || indice.chemin === undefined)) {
+      controle.addIssue({
+        code: 'custom',
+        message: 'Un indice « http » porte un statut et un chemin.',
+        path: ['statut'],
+      })
+    }
   })
 
 /**
@@ -88,6 +154,16 @@ export const SchemaContexte = z
     /** Le contexte navigateur brut — le seul champ légitimement non structuré. */
     agentBrut: z.record(z.string(), z.unknown()).optional(),
     capture: fichier(TYPES_CAPTURE).optional(),
+    /**
+     * Ce que le navigateur a relevé avant l’ouverture (D-026).
+     *
+     * ⛔ LE PLAFOND EST APPLIQUÉ ICI, DONC PAR LE SERVEUR. Le widget en garde
+     *    trois de son côté, mais c’est ce `.max()` qui compte : un widget forgé
+     *    ne doit pas pouvoir transformer un retour en déversoir de journal —
+     *    même raisonnement que la limite de deux relances, qui n’est pas non
+     *    plus confiée au navigateur (D-006).
+     */
+    indices: z.array(SchemaIndice).max(INDICES_MAX).optional(),
   })
   .strict()
 
@@ -335,6 +411,8 @@ export const SchemaFinRendue = z
 
 export type Identite = z.infer<typeof SchemaIdentite>
 export type Contexte = z.infer<typeof SchemaContexte>
+/** Un indice technique, tel qu’il traverse la frontière. */
+export type IndiceContexte = z.infer<typeof SchemaIndice>
 export type CorpsRetour = z.infer<typeof SchemaCorpsRetour>
 export type RetourCree = z.infer<typeof SchemaRetourCree>
 export type Erreur = z.infer<typeof SchemaErreur>

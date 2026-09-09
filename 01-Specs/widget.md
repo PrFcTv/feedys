@@ -28,6 +28,7 @@ Deux attributs, et rien d’autre :
 |---|---|
 | `data-cle` | **obligatoire** — la clé publique du produit. ⛔ Un secret (`fdy_sec_…`) posé ici fait **refuser le démarrage** : il est lisible par tout le monde, il faut le révoquer, pas s’en servir |
 | `data-position` | `bas-droite` (défaut) ou `bas-gauche` |
+| `data-indices` | `non` coupe le relevé des indices techniques ([D-026]). Absent = actif — voir §Les indices techniques |
 
 ⚠️ **Le widget complète `window.feedys`, il ne l’écrase pas.** L’hôte y a posé son jeton d’identité
 avant que le script ne s’exécute ; le widget y ajoute `version`, `ouvrir()` et `fermer()`. C’est sa
@@ -44,9 +45,13 @@ sait pourquoi.
 
 Le widget est un invité. Cinq obligations :
 
-1. ⛔ **Il ne bloque jamais le chargement de l’hôte.** `defer`, aucune requête synchrone, aucun
-   travail avant l’interaction. Le premier appel réseau a lieu quand on **clique**, pas au
-   chargement.
+1. ⛔ **Il ne bloque jamais le chargement de l’hôte.** `defer`, aucune requête synchrone. Le
+   premier appel réseau a lieu quand on **clique**, pas au chargement.
+   ⚠️ **« Aucun travail avant l’interaction » a été renversé par [D-026]**, et il faut le dire :
+   le relevé des indices techniques pose deux écouteurs passifs et un `PerformanceObserver` au
+   montage, parce qu’un collecteur qui n’écoute qu’à partir du clic n’a rien à raconter. ⛔ Il ne
+   fait **aucune** requête, aucune écriture, aucun travail au fil de l’eau. Voir §Les indices
+   techniques.
 2. ⛔ **Il vit dans un shadow DOM fermé.** Aucun style ne fuit dans les deux sens, aucune globale
    n’est posée hors de `window.feedys`.
 3. ⛔ **Il ne capte aucun raccourci clavier de l’hôte** tant qu’il est fermé. `Échap` ne lui
@@ -262,6 +267,7 @@ ce qui rend la collecte visible plutôt que subie :
 | Capture d’écran | `@zumer/snapdom`, au moment de l’ouverture | `capture` |
 | Identité, rôle | le jeton signé fourni par l’hôte ([D-005]) sur `window.feedys.identite` | en-tête `x-feedys-identite` |
 | Horodatage, fuseau | client, revérifié serveur | `horodatage`, `fuseau` |
+| Indices techniques | exceptions et requêtes en erreur relevées avant l’ouverture ([D-026]) | `indices` |
 
 ⚠️ **Le jeton d’identité est relu à chaque envoi**, jamais mémorisé au chargement : une
 application métier qui rafraîchit la session de quelqu’un remplace son jeton en cours de route.
@@ -271,8 +277,13 @@ en-tête. Signer côté navigateur demanderait le secret du produit dans la page
 arrive simplement sans auteur ([ingestion.md](ingestion.md) §L’identité signée).
 
 ⛔ **Rien d’autre.** Pas de cookies, pas de stockage local persistant au-delà du brouillon en
-cours, pas de suivi entre les sessions, aucun pixel. Le dépôt est public : cette liste doit
-pouvoir être lue par n’importe qui sans gêne.
+cours, pas de suivi entre les sessions, aucun pixel, **aucune trace de console**. Le dépôt est
+public : cette liste doit pouvoir être lue par n’importe qui sans gêne.
+
+⚠️ **« Aucune trace de réseau » a été renversé par [D-026]**, et la nuance est tout : ce qui entre
+est le **statut** et le **chemin normalisé** d’une requête revenue en erreur — jamais sa requête,
+jamais son corps, jamais ses en-têtes. Et côté exceptions, jamais le message. §Les indices
+techniques dit ce que le collecteur s’interdit, et pourquoi.
 
 ⛔ **La liste est close des deux côtés** : le contrat de transport
 (`packages/widget/src/contexte`, `packages/widget/src/contrat.ts`) refuse tout champ inconnu, et
@@ -301,6 +312,89 @@ de l’hôte. Voir [D-011](../00-Projet/DECISIONS_LOG.md).
 
 ⚠️ **Ce qu’on garde de l’élément survolé est un CHEMIN, pas du contenu** : ni son texte, ni celui
 de ses voisins, ni sa valeur. Le développeur a la capture pour voir ce qu’il y avait dedans.
+
+## Les indices techniques
+
+**Ce que le navigateur a relevé avant qu’on ouvre la bulle**, parce que « j’ai cliqué sur valider
+et rien ne s’est passé » se résout en trente secondes quand on voit le 500 qui l’accompagnait, et
+en une heure sinon. La décision entière, avec ses contreparties : [D-026](../00-Projet/DECISIONS_LOG.md).
+
+⚠️ **Ceci renverse la règle d’occupation n°1 ci-dessus** — « aucun travail avant l’interaction ».
+Un collecteur qui n’écoute qu’à partir du clic n’a rien à raconter. Ce qu’il coûte réellement :
+deux `addEventListener` passifs et un `PerformanceObserver`, **2,3 Ko gzip** (relevé le
+2026-09-09). ⛔ La seconde moitié de la règle reste vraie mot pour mot : **le premier appel réseau
+a toujours lieu au clic.**
+
+| Ce qui est relevé | Ce qui est joint |
+|---|---|
+| Exception non capturée, rejet de promesse | `genre: js`, le **nom** (`TypeError`) et la **première trame** (`valider (app.js:12:34)`) |
+| Requête revenue en 4xx/5xx | `genre: http`, le statut et le **chemin normalisé** (`/api/dossiers/:id/valider`) |
+| Ce que l’hôte pousse lui-même | en plus : la méthode, et une **référence de corrélation** |
+
+⛔ **Jamais le message d’une exception.** `error.message` est écrit par le code de l’hôte, et
+« *Le dossier de M. Dupont (n° 4417) est verrouillé par Marie Lefèvre* » est une phrase qu’un
+logiciel métier lève tous les jours. Le contrat n’a pas de champ où la mettre, la base n’a pas de
+colonne, et un corps qui en porterait un est **refusé en 400** — pas ignoré.
+
+⛔ **Jamais la requête d’une URL, jamais un corps de réponse, jamais la console.** Et les segments
+identifiants du chemin sont remplacés par `:id`, avec la liste de `contexte/ecran.ts` : sans ça, le
+chemin serait de la donnée métier, pas une adresse.
+
+⛔ **Ni `window.onerror`, ni `fetch` enveloppé.** On écoute en `addEventListener`, qui est additif —
+beaucoup d’applications métier posent déjà le leur. Et on lit `PerformanceObserver`, qui n’altère
+rien : envelopper le `fetch` de son hôte quand on est un invité, c’est entrer dans sa chaîne de
+wrappers et devenir le suspect n°1 de son prochain bug.
+
+⚠️ **Trois au plus, bornés par l’ÉCRAN et non par une durée**, chacun daté de son écart
+(« il y a 3 s »). Un poste de bureau garde un onglet ouvert huit heures : un seuil de soixante
+secondes jetterait l’erreur de quelqu’un qui a hésité quatre minutes. Le plafond de trois est
+appliqué **par le serveur**, comme la limite de deux relances.
+
+⚠️ **`responseStatus` n’existe que sur Chromium** — l’univers déjà arrêté par [D-003] pour la
+dictée. Ailleurs, aucun indice `http` n’est relevé, et rien ne se casse.
+
+### Montré, décochable, et refusable par l’hôte
+
+⛔ **Le panneau dit ce qu’il joint** : « Joindre 2 indices techniques relevés · voir », dépliable
+sur exactement ce qui part, décochable. C’est le même principe que l’écran déduit affiché sur la
+carte — **la collecte se voit, elle ne se subit pas**. Un relevé joint sans être montré serait son
+exact inverse.
+
+⚠️ Décocher **retire le champ**, il ne l’envoie pas vide : « rien n’a été relevé » et « quelqu’un a
+refusé de joindre » ne se confondent pas, et la seconde ne nous regarde pas.
+
+⚠️ **`data-indices="non"`** sur la balise coupe tout, sans redéploiement de notre part. Seul `non`
+coupe : une faute de frappe ne doit pas désactiver en silence ce que la fiche montre.
+
+### Ce que l’hôte peut pousser lui-même
+
+⛔ **Nécessaire, pas facultatif** : une error boundary React **avale** l’exception de rendu, qui ne
+remonte alors jamais à `window`. Dans une application métier correctement écrite, l’écran blanc ne
+produit **aucun** indice passif.
+
+```js
+// Depuis componentDidCatch, un intercepteur axios, un onError…
+window.feedys.indice({ genre: 'js', nom: 'TypeError', reference: 'a1b2c3' })
+
+// Avant même que widget.js soit chargé — il est en `defer` :
+;(window.feedys = window.feedys || {}).indices ||= []
+window.feedys.indices.push({ genre: 'http', statut: 500, chemin: '/api/factures', methode: 'POST' })
+```
+
+⚠️ **La `reference` est le champ le plus utile, et le plus léger.** C’est l’identifiant de
+corrélation de l’outil de l’hôte — id Sentry, `trace_id`, `request_id` —, rendu cliquable dans le
+back-office par `pnpm produit:creer -- --observabilite "https://…?q={{ref}}"`. Elle emmène le
+développeur vers **sa** pile démappée. ⛔ Et Feedys ne l’appelle jamais, pas plus qu’il n’appelle
+la forge ([D-024]).
+
+⛔ **Rien de ce qui est poussé n’est cru** : genre inconnu, statut hors plage, pile de 40 Ko,
+objet absurde — tout est relu, borné ou jeté, sans exception et sans faire refuser le retour.
+
+### ⛔ Ce que les indices ne couvrent pas
+
+Écrit ici pour que ça ne revienne pas en bug : **les iframes et les web workers** (un écouteur du
+document parent ne les voit pas), **les exceptions d’avant le chargement** du widget, et **la
+console**. Voir [TICKETS_DIFFERES](../00-Projet/TICKETS_DIFFERES.md) T-010.
 
 ## Accessibilité — non négociable
 

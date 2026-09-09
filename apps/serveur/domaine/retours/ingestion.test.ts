@@ -251,6 +251,10 @@ describe('ce qui est écrit', () => {
         agentBrut: { langue: 'fr-FR' },
         situation: null,
       },
+      // ⚠️ Liste VIDE et non absente : le corps n’en portait pas, et l’absence
+      //    de relevé se range comme un relevé vide. Le dépôt écrit alors zéro
+      //    ligne dans `indices`.
+      indices: [],
     })
   })
 

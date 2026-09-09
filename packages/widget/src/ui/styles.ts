@@ -563,6 +563,80 @@ button, textarea {
   outline-offset: 2px;
 }
 
+/* ── Les indices techniques joints (D-026) ─────────────────────────────────
+   ⚠️ DÉLIBÉRÉMENT DISCRET : c’est de la donnée machine, en pied de panneau,
+      sous l’invitation à parler. Un bloc qui attire l’œil ferait croire que le
+      sujet du panneau est l’erreur, alors que le sujet est ce que la personne
+      a à dire. Aucune couleur en dur — tokens uniquement (DESIGN.md). */
+.indices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--w-1);
+  font-size: 12px;
+  color: var(--w-encre-3);
+}
+
+.indices__entete {
+  display: flex;
+  align-items: center;
+  gap: var(--w-2);
+}
+
+.indices__bascule {
+  display: flex;
+  align-items: center;
+  gap: var(--w-2);
+  cursor: pointer;
+}
+
+.indices__bascule input { cursor: pointer; margin: 0 }
+
+.indices__bascule input:focus-visible {
+  outline: 2px solid var(--w-accent);
+  outline-offset: 2px;
+}
+
+.indices__voir {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--w-encre-3);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.indices__voir:hover { color: var(--w-encre-2) }
+
+.indices__voir:focus-visible {
+  outline: 2px solid var(--w-accent);
+  outline-offset: 2px;
+  border-radius: var(--w-rayon-s);
+}
+
+.indices__liste {
+  margin: 0;
+  padding: var(--w-2);
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon-s);
+  background: var(--w-fond-2);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--w-1);
+}
+
+/* ⚠️ Mono, et coupé n’importe où : un chemin d’API n’a pas d’espace où se
+      couper, et un panneau de 360 px ne doit jamais défiler horizontalement. */
+.indices__ligne {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--w-encre-2);
+  overflow-wrap: anywhere;
+}
+
 /* ⚠️ top: -2px / right: -2px la posait dans le VIDE : le lanceur est un galet
       de 48 px à border-radius 999px, et le coin de sa boîte n’est pas dessiné.
       À 6 px, le disque entier tombe à l’intérieur de l’arc — son centre est à

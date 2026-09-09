@@ -17,8 +17,39 @@ describe('lireConfiguration', () => {
 
     expect(lecture).toEqual({
       ok: true,
-      configuration: { cle: 'fdy_pub_a1b2c3', origine: 'https://feedys.exemple.fr', position: 'bas-droite' },
+      configuration: {
+        cle: 'fdy_pub_a1b2c3',
+        origine: 'https://feedys.exemple.fr',
+        position: 'bas-droite',
+        // ⚠️ Le relevé est ACTIF par défaut (D-026) : en option d’adhésion il
+        //    serait mort né. Ce qui le rend défendable est que le panneau le
+        //    montre et le laisse décocher.
+        indices: true,
+      },
     })
+  })
+
+  /**
+   * ⛔ Seul `non` coupe. Une faute de frappe — `data-indices="off"` — laisse le
+   *    relevé actif, et c’est délibéré : le contraire ferait qu’un attribut mal
+   *    orthographié désactive silencieusement ce que la fiche montre.
+   */
+  it('coupe le relevé sur data-indices="non", et sur rien d’autre', () => {
+    const releve = (indices?: string): boolean | undefined => {
+      const lecture = lireConfiguration(
+        balise(indices === undefined ? VALIDE : { ...VALIDE, 'data-indices': indices }),
+      )
+      return lecture.ok ? lecture.configuration.indices : undefined
+    }
+
+    expect(releve('non')).toBe(false)
+    expect(releve('NON')).toBe(false)
+    expect(releve(' non ')).toBe(false)
+
+    expect(releve('off')).toBe(true)
+    expect(releve('false')).toBe(true)
+    expect(releve('oui')).toBe(true)
+    expect(releve()).toBe(true)
   })
 
   it('accepte un src relatif, en s’appuyant sur l’URL de la page', () => {

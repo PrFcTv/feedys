@@ -96,9 +96,13 @@ afterAll(async () => {
 beforeEach(async () => {
   await client.query('delete from audit')
   await client.query('delete from syntheses')
+  await client.query('delete from indices')
   await client.query('delete from contextes')
   await client.query('delete from messages')
   await client.query('delete from retours')
+  // ⚠️ Le produit survit aux tests : ce qu'UN test lui pose doit être repris,
+  //    sinon l'ordre d'exécution devient une dépendance cachée.
+  await client.query(`update produits set url_observabilite = null where id = 'prod_1'`)
 
   retourId = identifiant()
 
@@ -214,5 +218,103 @@ describe('⛔ les corrections, et leur trace', () => {
 
     const { rows } = await client.query('select count(*)::int as n from audit')
     expect(rows[0]?.['n']).toBe(0)
+  })
+})
+
+/**
+ * ⛔ LES INDICES, DE LA BASE JUSQU’À LA FICHE (P-028, D-026).
+ *
+ * ⚠️ Ce qu’un test unitaire ne peut pas prouver et qui compte ici : les
+ *    contraintes de la migration mordent RÉELLEMENT — c’est Postgres qui refuse,
+ *    pas un `if` qu’on aurait pu oublier d’appeler — et le lien de corrélation
+ *    est composé à la lecture, depuis le gabarit du produit.
+ */
+describe('les indices techniques', () => {
+  async function poser(valeurs: Record<string, unknown>): Promise<void> {
+    const colonnes = ['id', 'retour_id', ...Object.keys(valeurs)]
+    const marques = colonnes.map((_, rang) => `$${rang + 1}`)
+    await client.query(
+      `insert into indices (${colonnes.join(', ')}) values (${marques.join(', ')})`,
+      [identifiant(), retourId, ...Object.values(valeurs)],
+    )
+  }
+
+  it('remonte les indices dans l’ordre, avec leur écart', async () => {
+    await poser({ ordre: 1, genre: 'js', nom: 'TypeError', trame: 'trier (app.js:8:2)', ecart_ms: 4_100 })
+    await poser({ ordre: 0, genre: 'http', statut: 500, chemin: '/api/dossiers/:id/valider', ecart_ms: 3_200 })
+
+    const fiche = await depot.fiche(retourId)
+
+    // ⚠️ Trié sur `ordre`, pas sur l’ordre d’insertion : deux indices dans
+    //    l’ordre racontent une séquence.
+    expect(fiche?.indices.map((i) => i.genre)).toEqual(['http', 'js'])
+    expect(fiche?.indices[0]).toMatchObject({ statut: 500, chemin: '/api/dossiers/:id/valider', ecartMs: 3_200 })
+    expect(fiche?.indices[1]).toMatchObject({ nom: 'TypeError', trame: 'trier (app.js:8:2)' })
+  })
+
+  it('rend une liste vide quand rien n’a été relevé', async () => {
+    expect((await depot.fiche(retourId))?.indices).toEqual([])
+  })
+
+  it('compose le lien de corrélation depuis le gabarit du produit', async () => {
+    await client.query(
+      `update produits set url_observabilite = 'https://outil.exemple.fr/t?q={{ref}}' where id = 'prod_1'`,
+    )
+    await poser({ ordre: 0, genre: 'js', nom: 'TypeError', reference: 'a1b2c3' })
+
+    expect((await depot.fiche(retourId))?.indices[0]?.url).toBe(
+      'https://outil.exemple.fr/t?q=a1b2c3',
+    )
+  })
+
+  it('⚠️ laisse la référence lisible et non cliquable quand le produit n’a pas d’outil', async () => {
+    await poser({ ordre: 0, genre: 'js', nom: 'TypeError', reference: 'a1b2c3' })
+
+    const indice = (await depot.fiche(retourId))?.indices[0]
+    expect(indice?.reference).toBe('a1b2c3')
+    expect(indice?.url).toBeNull()
+  })
+
+  /**
+   * ⛔ LES CONTRAINTES SONT LA CEINTURE DU CONTRAT. Le plafond de trois et la
+   *    forme de chaque genre sont appliqués par le schéma de transport, donc par
+   *    le serveur ; ces CHECK empêchent qu’un AUTRE chemin d’écriture — un
+   *    import, un rejeu, une main sur psql — passe à côté sans que rien ne le
+   *    dise.
+   */
+  it('⛔ la base refuse un quatrième indice', async () => {
+    await poser({ ordre: 0, genre: 'js', nom: 'A' })
+    await poser({ ordre: 1, genre: 'js', nom: 'B' })
+    await poser({ ordre: 2, genre: 'js', nom: 'C' })
+
+    await expect(poser({ ordre: 3, genre: 'js', nom: 'D' })).rejects.toThrow()
+  })
+
+  it('⛔ la base refuse un js sans nom, et un http sans statut ni chemin', async () => {
+    await expect(poser({ ordre: 0, genre: 'js' })).rejects.toThrow()
+    await expect(poser({ ordre: 0, genre: 'http', statut: 500 })).rejects.toThrow()
+    await expect(poser({ ordre: 0, genre: 'http', chemin: '/api' })).rejects.toThrow()
+  })
+
+  it('⛔ la base refuse deux indices au même rang', async () => {
+    await poser({ ordre: 0, genre: 'js', nom: 'A' })
+    await expect(poser({ ordre: 0, genre: 'js', nom: 'B' })).rejects.toThrow()
+  })
+
+  /**
+   * ⛔ LE TEST QUI TIENT D-026 AU NIVEAU DU SCHÉMA. La colonne n’existe pas, et
+   *    c’est ce qui rend la règle inviolable : on ne peut pas y écrire un
+   *    message d’exception, même en le voulant.
+   */
+  it('⛔ la colonne `message` n’existe pas', async () => {
+    const { rows } = await client.query<{ column_name: string }>(
+      `select column_name from information_schema.columns
+        where table_name = 'indices' and table_schema = 'public'`,
+    )
+
+    expect(rows.map((r) => r.column_name)).not.toContain('message')
+    await expect(
+      client.query(`update indices set message = 'x' where retour_id = $1`, [retourId]),
+    ).rejects.toThrow()
   })
 })

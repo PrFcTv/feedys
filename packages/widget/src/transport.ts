@@ -96,7 +96,63 @@ export const BORNES = {
    *    de l’appartenance, et lui seul.
    */
   valeurAxe: 40,
+  /** Le nom d’une exception — `TypeError`, `AbortError`. ⛔ Jamais son message. */
+  indiceNom: 120,
+  /** Une trame de pile normalisée — `validerDossier (bundle.js:12:3345)`. */
+  indiceTrame: 300,
+  /** Un chemin d’API, segments identifiants remplacés par `:id`. */
+  indiceChemin: 300,
+  /** La méthode HTTP. ⚠️ Seul un indice POUSSÉ la connaît (D-026). */
+  indiceMethode: 10,
+  /**
+   * L’identifiant de corrélation vers l’outil d’observabilité de l’hôte.
+   *
+   * ⚠️ Une borne large : un `traceparent` W3C fait 55 caractères, un id Sentry
+   *    32, et personne ne sait ce que le prochain outil produira. Ce qui compte
+   *    est que ce soit court ET opaque — Feedys ne le lit jamais.
+   */
+  indiceReference: 200,
+  /**
+   * L’écart entre l’indice et l’ouverture de la bulle, en millisecondes.
+   *
+   * ⚠️ Vingt-quatre heures, et ce n’est pas un filtre : c’est une borne de
+   *    table. ⛔ LE COLLECTEUR NE JETTE RIEN SUR L’ÂGE — il date. Un écart de
+   *    deux heures dit « probablement sans rapport », et c’est au développeur
+   *    d’en juger, pas à un seuil codé en dur (D-026).
+   */
+  indiceEcartMs: 86_400_000,
 } as const
+
+/**
+ * ─── LES INDICES TECHNIQUES ─────────────────────────────────────────────────
+ *
+ * ⛔ CE QUI EST ICI EST UNE FORME. Ce qui décide de ce qu’on collecte — quoi
+ *    écouter, quoi normaliser, quoi refuser — est de la logique et vit dans
+ *    `contexte/indices.ts`, côté MIT lui aussi mais séparément.
+ */
+
+/**
+ * Les genres d’indice. ⛔ Liste close.
+ *
+ * - `js`   — une exception non capturée, ou un rejet de promesse non traité ;
+ * - `http` — une requête de l’hôte revenue en 4xx ou 5xx.
+ */
+export const GENRES_INDICE = ['js', 'http'] as const
+
+export type GenreIndice = (typeof GENRES_INDICE)[number]
+
+/**
+ * Le plafond d’indices joints à un retour.
+ *
+ * ⛔ TROIS, et il est appliqué PAR LE SERVEUR (le contrat le borne), pas
+ *    seulement par le widget — exactement comme la limite de deux relances
+ *    (D-006). Un widget forgé ne doit pas pouvoir transformer un retour en
+ *    déversoir de journal.
+ *
+ * ⚠️ Trois parce qu’au-delà on ne lit plus : une liste de dix erreurs est un
+ *    journal, et un journal ne se lit pas dans une fiche de retour.
+ */
+export const INDICES_MAX = 3
 
 /**
  * ─── LES AXES D’UNE RÉPONSE D’UN CLIC ───────────────────────────────────────

@@ -183,6 +183,7 @@ export default async function FicheRetour({ params }: { params: Promise<{ id: st
       <Section titre="Le contexte technique">
         <BlocContexte
           contexte={fiche.contexte}
+          indices={fiche.indices}
           creeLe={fiche.creeLe}
           capture={fiche.contexte?.captureChemin ? `/bo/r/${fiche.id}/capture` : null}
         />

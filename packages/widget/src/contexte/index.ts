@@ -3,7 +3,8 @@
  *
  * ⛔ LA LISTE EST CLOSE : 01-Specs/widget.md §Ce que le widget joint tout seul.
  *    URL, titre de page, écran déduit, sélecteur de l’élément visé, navigateur,
- *    système, taille de fenêtre, fuseau, horodatage, capture. **Rien d’autre.**
+ *    système, taille de fenêtre, fuseau, horodatage, capture, **indices
+ *    techniques**. **Rien d’autre.**
  *
  *    Le dépôt est public : cette liste doit pouvoir être lue par n’importe qui
  *    sans gêne. Un champ de plus ici est une décision de produit, pas un détail
@@ -19,16 +20,23 @@
  *      · aucun pixel, aucune balise, aucun appel à un tiers ;
  *      · aucun texte de la page, ni celui de l’élément visé ni celui de ses
  *        voisins ;
- *      · aucune trace de console ni de réseau.
+ *      · aucune trace de console.
+ *
+ * ⚠️ « AUCUNE TRACE DE RÉSEAU » A ÉTÉ RENVERSÉ PAR [D-026], et la nuance est
+ *    tout : ce qui entre est le STATUT et le CHEMIN NORMALISÉ d’une requête
+ *    revenue en erreur — jamais son corps, jamais sa requête, jamais ses
+ *    en-têtes. Et côté exceptions, jamais le message. Voir `indices.ts`, dont
+ *    l’en-tête porte les trois choses que le collecteur s’interdit.
  *
  * ⚠️ TOUT EST EN ÉCHEC DOUX. Chaque morceau qui rate vaut `undefined`, et le
  *    retour part quand même. Seule l’URL est obligatoire, et si elle manquait
  *    il n’y aurait plus de page.
  */
 import type { Contexte } from '../contrat'
-import { BORNES } from '../transport'
+import { BORNES, INDICES_MAX } from '../transport'
 
 import { capturer, type OptionsCapture } from './capture'
+import type { Indice } from './indices'
 import { deduireEcran } from './ecran'
 import { lireNavigateur, lireSysteme } from './navigateur'
 import { construireSelecteur } from './selecteur'
@@ -42,12 +50,19 @@ export { construireSelecteur } from './selecteur'
 export { nettoyerUrl } from './url'
 export { suivreSurvol } from './survol'
 export type { OptionsSurvol, Survol } from './survol'
+export { lireIndicePousse, normaliserChemin, premiereTrame, suivreIndices } from './indices'
+export type { Indice, IndicePousse, Indices, OptionsIndices } from './indices'
 
 export interface OptionsCollecte {
   /** L’élément survolé à l’ouverture. Voir `survol.ts`. */
   readonly cible?: Element | null
   /** La fenêtre de l’hôte. Injectable pour les tests. */
   readonly fenetre?: Window
+  /**
+   * Ce que le collecteur d’indices a retenu. ⛔ Jamais lu ici : la collecte
+   * n’écoute rien elle-même, elle reçoit. Voir `indices.ts` et `montage.tsx`.
+   */
+  readonly indices?: readonly Indice[]
   /**
    * ⛔ `false` désactive la capture. Le reste de la collecte ne change pas, et
    *    l’envoi fonctionne exactement pareil.
@@ -96,6 +111,10 @@ export function lireContexte(options: OptionsCollecte = {}): Contexte {
   const doc = fenetre?.document
   const agent = doux(() => fenetre.navigator.userAgent) ?? ''
   const situation = lireSituation(doc)
+  // ⚠️ Retaillé ici aussi, et pas seulement dans le collecteur : `options.indices`
+  //    peut venir d’un appelant qui n’en sait rien. Le contrat refuserait le
+  //    retour ENTIER pour un tableau de quatre entrées, et on perdrait une parole.
+  const indices = options.indices?.slice(0, INDICES_MAX) ?? []
 
   return {
     url: nettoyerUrl(doux(() => fenetre.location.href) ?? ''),
@@ -115,6 +134,11 @@ export function lireContexte(options: OptionsCollecte = {}): Contexte {
     //    être fausse de plusieurs heures, et personne ne s’en aperçoit.
     horodatage: doux(() => new Date().toISOString()),
     agentBrut: agentBrut(fenetre, agent),
+    // ⚠️ Le champ n’existe pas quand il n’y a rien : un tableau vide écrirait
+    //    « indices : [] » dans le corps, et se lirait comme une absence de
+    //    relevé plutôt que comme un relevé vide. `.strict()` accepte les deux ;
+    //    c’est la fiche qui doit rester lisible.
+    ...(indices.length === 0 ? {} : { indices }),
   }
 }
 

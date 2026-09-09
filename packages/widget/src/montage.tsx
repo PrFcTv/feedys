@@ -18,7 +18,7 @@
 import { render } from 'preact'
 
 import type { Configuration } from './configuration'
-import { collecter, definirOrigineFeedys, suivreSurvol } from './contexte'
+import { collecter, definirOrigineFeedys, suivreIndices, suivreSurvol } from './contexte'
 import { envoyer } from './envoi'
 import { identiteHote } from './identite'
 import { demanderTour, terminer } from './entretien'
@@ -72,6 +72,18 @@ const STYLES_HOTE: ReadonlyArray<readonly [string, string]> = [
 
 export interface Montage {
   readonly commandes: Commandes
+  /**
+   * Ce que l’hôte pousse lui-même. ⛔ Ne lève jamais, quoi qu’on lui donne.
+   *
+   * ⚠️ Il existe parce qu’un collecteur passif ne voit PAS ce qu’une error
+   *    boundary React a capturé : en React 18 comme en 19, une exception de
+   *    rendu attrapée par une boundary ne remonte pas à `window`. Dans une
+   *    application métier correctement écrite — donc pourvue de boundaries —,
+   *    l’écran blanc ne produit aucun indice passif. C’est le seul chemin qui
+   *    voit ces erreurs-là, et c’est aussi celui qui porte une `reference`
+   *    ([D-026](../../../00-Projet/DECISIONS_LOG.md)).
+   */
+  poserIndice(brut: unknown): void
   demonter(): void
 }
 
@@ -115,10 +127,18 @@ export function monter(configuration: Configuration, options: OptionsMontage = {
   //    bulle Feedys ne dit rien à personne.
   const survol = suivreSurvol({ document: doc, exclure: hote })
 
+  // ⛔ MIS EN ÉCOUTE AU MONTAGE, donc AVANT toute interaction — c’est le
+  //    renversement assumé de la règle d’occupation n°1 ([D-026]). Coupé net
+  //    quand l’hôte a écrit `data-indices="non"` : on n’installe alors aucun
+  //    gestionnaire du tout, plutôt que d’écouter puis de jeter.
+  const indices = configuration.indices
+    ? suivreIndices({ fenetre: doc.defaultView ?? undefined, origineFeedys: configuration.origine })
+    : undefined
+
   let commandes: Commandes = { ouvrir: () => {}, fermer: () => {} }
 
   const ports: Ports = {
-    collecter: () => collecter({ cible: survol.dernier() }),
+    collecter: () => collecter({ cible: survol.dernier(), indices: indices?.derniers() ?? [] }),
     envoyer: (corps) =>
       envoyer({
         origine: configuration.origine,
@@ -166,8 +186,11 @@ export function monter(configuration: Configuration, options: OptionsMontage = {
       ouvrir: () => commandes.ouvrir(),
       fermer: () => commandes.fermer(),
     },
+    poserIndice: (brut) => indices?.poser(brut),
     demonter: () => {
       survol.arreter()
+      // ⛔ Un widget démonté n’écoute plus rien de la page de son hôte.
+      indices?.arreter()
       render(null, conteneur)
       hote.remove()
     },

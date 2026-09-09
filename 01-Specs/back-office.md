@@ -71,6 +71,28 @@ hésitations, elles portent du sens.
 Mono, retrait, filet à gauche. Ce sont des **pièces**, pas de la prose : le lecteur doit voir au
 premier coup d’œil ce que la personne a dit et ce que le modèle en a fait.
 
+### Les indices techniques — sous le contexte, et jamais présentés comme une cause
+
+Ce que le navigateur a relevé avant l’ouverture ([D-026](../00-Projet/DECISIONS_LOG.md)) s’affiche
+dans le bloc du contexte, en dernier.
+
+⛔ **Le titre dit « relevé », pas « à l’origine de ».** Trois lignes techniques posées à côté d’un
+récit se lisent trop vite comme son explication. C’est au développeur de faire ce lien — et
+**l’écart affiché est ce qui l’y aide** : « 3 s avant », c’est presque sûrement lié ; « 2 h avant »,
+c’est du décor.
+
+⚠️ **La référence de corrélation est le champ le plus utile de la ligne, et le plus léger.** Elle
+est cliquable dès que le produit déclare un outil
+(`pnpm produit:creer -- --observabilite "https://…?q={{ref}}"`), et elle emmène le développeur vers
+**sa** pile démappée, avec sa version et son contexte serveur. Sans outil déclaré, elle reste
+lisible — simplement pas cliquable, exactement comme un SHA de correctif sans dépôt déclaré.
+
+⛔ **Feedys n’appelle jamais cet outil**, pas plus qu’il n’appelle la forge
+([D-024](../00-Projet/DECISIONS_LOG.md)). Il compose une URL et s’arrête là.
+
+⛔ **Et la fiche n’affiche aucun message d’exception**, parce qu’il n’en existe aucun en base : la
+colonne n’a pas été créée. Le message est chez l’outil de l’hôte, là où il a le droit d’être.
+
 ## ⛔ Ce qui se corrige — et ce qui ne se corrige pas
 
 **Trois champs, et pas un de plus.**

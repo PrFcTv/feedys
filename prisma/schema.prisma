@@ -67,6 +67,17 @@ enum GesteMessage {
   @@map("geste_message")
 }
 
+/// Le genre d’un indice technique. ⛔ Liste close, la même que
+/// `GENRES_INDICE` dans le contrat de transport (P-028).
+enum GenreIndice {
+  /// Une exception non capturée, ou un rejet de promesse non traité.
+  js
+  /// Une requête de l’hôte revenue en 4xx ou 5xx.
+  http
+
+  @@map("genre_indice")
+}
+
 enum ConfianceSynthese {
   haute
   moyenne
@@ -103,6 +114,10 @@ model Produit {
   /// L’URL du dépôt du produit — ce qui rend un SHA de correctif cliquable.
   /// ⛔ Feedys ne l’appelle jamais : elle ne sert qu’à composer un lien (P-021).
   urlForge      String?  @map("url_forge")
+  /// Le gabarit d’URL de l’outil d’observabilité de l’hôte, où `{{ref}}` est
+  /// remplacé par la référence d’un indice. ⛔ Feedys ne l’appelle jamais non
+  /// plus : même doctrine que `urlForge` face à la forge (P-028, D-026).
+  urlObservabilite String? @map("url_observabilite")
   actif         Boolean  @default(true)
   creeLe        DateTime @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe         DateTime @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
@@ -142,6 +157,7 @@ model Retour {
   produit       Produit        @relation(fields: [produitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   messages      Message[]
   contexte      Contexte?
+  indices       Indice[]
   synthese      Synthese?
   notifications Notification[]
   audit         Audit[]
@@ -202,6 +218,39 @@ model Contexte {
 
   @@unique([retourId], map: "contextes_retour_uniq")
   @@map("contextes")
+}
+
+/// Ce que le navigateur a relevé avant l’ouverture de la bulle.
+///
+/// ⛔ IL N’Y A PAS DE CHAMP `message`, et c’est le point de [D-026] :
+/// `error.message` est du texte libre de l’hôte, il porte des noms de personnes
+/// et de dossiers, et le dépôt est public. Ce qui est ici est structurel.
+model Indice {
+  id        String      @id
+  retourId  String      @map("retour_id")
+  /// L’ordre du relevé, du plus ancien au plus récent. ⛔ Trois au plus.
+  ordre     Int
+  genre     GenreIndice
+  /// Le NOM de l’exception. ⛔ Jamais son message.
+  nom       String?
+  /// La première trame de pile, normalisée. ⛔ Jamais la pile entière.
+  trame     String?
+  statut    Int?
+  /// Le chemin, segments identifiants remplacés, requête retirée.
+  chemin    String?
+  /// ⚠️ NULL pour un indice relevé passivement : `PerformanceObserver` ne la donne pas.
+  methode   String?
+  /// La référence de corrélation vers l’outil de l’hôte. ⛔ Opaque, jamais appelée.
+  reference String?
+  /// ⚠️ Un écart, pas un horodatage : l’horloge d’un poste peut être fausse.
+  ecartMs   Int?        @map("ecart_ms")
+  creeLe    DateTime    @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe     DateTime    @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  retour Retour @relation(fields: [retourId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([retourId, ordre], map: "indices_retour_ordre_uniq")
+  @@map("indices")
 }
 
 /// La note que le développeur lit.
