@@ -76,6 +76,19 @@ Une ligne dans le logiciel hôte :
 que la licence de Feedys ne déborde sur la vôtre. Voir
 [04-Architecture/licences.md](04-Architecture/licences.md).
 
+**Si vous avez une politique de sécurité de contenu**, deux directives et une seule origine :
+
+```
+script-src  https://feedys.exemple.fr;
+connect-src https://feedys.exemple.fr;
+```
+
+⛔ **Et rien d’autre.** Pas de `style-src 'unsafe-inline'`, pas d’`img-src`, pas d’élargissement du
+`default-src` : le widget construit sa feuille de style plutôt que de la poser en `<style>`,
+précisément pour n’avoir rien à vous demander. La liste **mesurée**, avec ce qui n’est pas exigé et
+le supplément qu’appelle la capture d’écran :
+[04-Architecture/hebergement.md](04-Architecture/hebergement.md) §La pose chez un hôte.
+
 ## Attacher une identité
 
 Le logiciel hôte sait déjà qui est là — autant le dire, plutôt que de poser une question de plus.
@@ -92,6 +105,20 @@ Signer, dans un composant serveur Next.js — `node:crypto`, rien d’autre à i
 ```tsx
 import { createHmac } from 'node:crypto'
 
+/**
+ * ⚠️ UNE JOURNÉE DE TRAVAIL, PAS UNE HEURE. Dans un logiciel métier, un onglet
+ *    ouvert toute la journée est la norme, pas l’exception. Avec une heure, les
+ *    retours de l’après-midi arrivent SANS AUTEUR : rien n’est perdu, mais plus
+ *    personne ne peut revenir vers celui qui a parlé.
+ *
+ * ⛔ Et le compromis, en clair : un jeton qui fuite vaut jusqu’à son expiration.
+ *    Ce qu’il permet, c’est de faire passer un retour pour celui d’un collègue —
+ *    il ne donne accès à rien, ni chez vous ni chez Feedys. Douze heures est le
+ *    bon échange ici ; si ce n’est pas le vôtre, gardez une heure et posez une
+ *    FONCTION (juste en dessous), qui rend le sujet sans objet.
+ */
+const UNE_JOURNEE = 12 * 60 * 60
+
 // ⛔ Le secret vit dans l’environnement de VOTRE serveur. Jamais dans la page.
 function jetonFeedys(utilisateur: { id: string; nom: string; role: string }): string {
   const charge = Buffer.from(
@@ -99,7 +126,7 @@ function jetonFeedys(utilisateur: { id: string; nom: string; role: string }): st
       ref: utilisateur.id,
       nom: utilisateur.nom,
       role: utilisateur.role,
-      exp: Math.floor(Date.now() / 1000) + 3600, // en SECONDES
+      exp: Math.floor(Date.now() / 1000) + UNE_JOURNEE, // en SECONDES
     }),
   ).toString('base64url')
 
@@ -126,6 +153,36 @@ export default async function Layout({ children }) {
   )
 }
 ```
+
+### ⚠️ Une page qui reste ouverte longtemps : posez une **fonction**
+
+Le widget relit l’identité **à chaque envoi**. Avec une chaîne figée, c’est à vous de reposer la
+valeur chaque fois que votre jeton tourne. Avec une fonction, vous rendez celui que vous avez sous
+la main, et il n’y a plus rien à synchroniser — **c’est la forme recommandée** dès qu’un onglet
+peut vivre des heures, c’est-à-dire le cas ordinaire d’un logiciel métier :
+
+```tsx
+'use client'
+
+export function IdentiteFeedys() {
+  useEffect(() => {
+    // ⚠️ `session` vient de votre gestion de session à vous : elle se rafraîchit
+    //    quand elle veut, Feedys lira simplement la valeur du moment.
+    window.feedys = { identite: () => session.jetonFeedys }
+  }, [])
+
+  return null
+}
+```
+
+⛔ **La fonction doit être SYNCHRONE.** Une `async` ne marchera pas : sa promesse est traitée comme
+une identité absente. C’est délibéré — le chemin d’envoi n’attend jamais votre code, parce qu’une
+de vos lenteurs coûterait la parole de quelqu’un. Si votre jeton doit être rafraîchi par le réseau,
+faites-le de votre côté, à votre rythme, et posez le résultat ici.
+
+⚠️ **Elle a le droit de lever, et le droit de rendre n’importe quoi** : dans les deux cas, le
+retour part **sans auteur** et l’exception ne remonte pas. Un bug chez vous ne vous coûtera jamais
+un retour.
 
 ⛔ **Le secret ne traverse jamais le navigateur.** Il est imprimé une seule fois par
 `pnpm produit:creer` et vit sur votre serveur ; c’est le **jeton**, et lui seul, qui descend dans

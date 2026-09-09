@@ -99,9 +99,7 @@ export function monter(configuration: Configuration, options: OptionsMontage = {
 
   const racine = hote.attachShadow({ mode: 'closed' })
 
-  const feuille = doc.createElement('style')
-  feuille.textContent = FEUILLE
-  racine.appendChild(feuille)
+  poserLaFeuille(doc, racine)
 
   // ⚠️ `racine` n’est pas décoratif : c’est LUI qui porte le reset et les
   //    tokens. Posés sur `:host`, ils perdraient contre les règles de l’hôte —
@@ -171,6 +169,85 @@ export function monter(configuration: Configuration, options: OptionsMontage = {
       render(null, conteneur)
       hote.remove()
     },
+  }
+}
+
+/**
+ * La feuille du widget, posée dans la racine fantôme.
+ *
+ * ⛔ PAS DE `<style>` TANT QU’UN CHEMIN MEILLEUR EXISTE. Un `<style>`, même
+ *    enfermé dans un shadow DOM, est du **style en ligne** pour le navigateur :
+ *    il tombe sous `style-src`, et sans `'unsafe-inline'` il est refusé.
+ *    Mesuré le 2026-09-09 sous `default-src 'self'` (05-Prompts/APRES-MVP.md
+ *    §P-027) : le lanceur devient un bouton système **gris et carré**, 59 px de
+ *    haut, et la console de l’hôte porte un « Applying inline style violates… »
+ *    en rouge. Le widget fonctionne, mais il a l’air cassé, et c’est nous.
+ *
+ * ⛔ ET EXIGER `style-src 'unsafe-inline'` SERAIT NOTRE PROPRE DOCTRINE
+ *    RETOURNÉE. [D-011] refuse déjà de charger snapdom depuis un CDN parce que
+ *    « lui imposer un tiers au moment de l’exécution, **et la règle CSP qui va
+ *    avec**, n’est pas à nous de le décider ». Faire relâcher `style-src` à un
+ *    logiciel métier pour notre feuille est la même faute.
+ *
+ * ⚠️ Une feuille **construite** (`new CSSStyleSheet()` + `replaceSync`) n’est
+ *    pas du style en ligne : elle ne passe par aucune directive CSP. C’est tout
+ *    ce que change cette fonction — le CONTENU de la feuille est le même.
+ */
+function poserLaFeuille(doc: Document, racine: ShadowRoot): void {
+  if (adopter(doc, racine)) return
+
+  // ⛔ LE REPLI N’EST PAS FACULTATIF : `CSSStyleSheet` constructible manque sur
+  //    Safari < 16.4 et Firefox < 101. [D-003] exige Chrome ou Edge pour la
+  //    DICTÉE, jamais pour le reste — ailleurs, le champ texte doit rester
+  //    impeccable. Sur ces navigateurs-là, un `<style>` et un CSP strict ne
+  //    peuvent pas être vrais en même temps ; le style l’emporte, parce qu’un
+  //    widget nu se voit et qu’un CSP relâché ne se voit pas.
+  const balise = doc.createElement('style')
+  balise.textContent = FEUILLE
+  racine.appendChild(balise)
+}
+
+/**
+ * ⛔ LE REPLI NE DOIT PAS DEVENIR LE CHEMIN ORDINAIRE SANS QUE RIEN NE LE DISE.
+ *    C’est pour ça que rien ici n’est un `try` posé autour de tout : chaque
+ *    étape est **vérifiée positivement**. Une implémentation partielle — un
+ *    `replaceSync` qui n’analyse rien, un `adoptedStyleSheets` en lecture seule
+ *    qui avale l’affectation — ferait sinon retomber le widget sur le `<style>`
+ *    pour toujours, en production comme en test, sans un mot.
+ *
+ * ⚠️ Et le chemin réellement pris se **lit dans la racine** : une feuille
+ *    adoptée et aucun `<style>`, ou l’inverse. Aucun drapeau, aucune version,
+ *    aucune négociation — le widget essaie le bon chemin, se replie, et se
+ *    tait. La preuve du chemin construit est portée par
+ *    `tests/e2e/widget-csp.spec.ts`, dans un vrai Chromium sous CSP strict :
+ *    happy-dom sait construire une feuille, donc `montage.test.tsx` la
+ *    vérifierait sans jamais prouver qu’un navigateur l’accepte.
+ */
+function adopter(doc: Document, racine: ShadowRoot): boolean {
+  // ⚠️ Une feuille construite appartient au DOCUMENT qui l’a construite :
+  //    adoptée dans la racine d’un autre document, elle lève. `monter()`
+  //    accepte un document injecté — on prend donc le constructeur de CELUI-là,
+  //    jamais celui du global ambiant.
+  const Feuille = doc.defaultView?.CSSStyleSheet
+
+  if (typeof Feuille !== 'function') return false
+
+  try {
+    const feuille = new Feuille()
+
+    if (typeof feuille.replaceSync !== 'function') return false
+    feuille.replaceSync(FEUILLE)
+    // ⛔ La preuve que la feuille a été ANALYSÉE, et pas seulement acceptée.
+    if (feuille.cssRules.length === 0) return false
+
+    racine.adoptedStyleSheets = [feuille]
+    // ⛔ Et la preuve qu’elle a été ADOPTÉE : le tableau peut être absent, gelé,
+    //    ou simplement ignorer ce qu’on lui donne.
+    return racine.adoptedStyleSheets?.[0] === feuille
+  } catch {
+    // ⚠️ Aucune ligne en console : le widget n’écrit jamais dans celle de son
+    //    hôte (01-Specs/widget.md §L’intégration). C’est le DOM qui dit tout.
+    return false
   }
 }
 

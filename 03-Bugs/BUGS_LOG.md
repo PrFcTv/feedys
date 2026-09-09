@@ -699,3 +699,65 @@ nullité**. Remis en panne pour vérification, il rend :
 ```
 messages_axe_est_un_geste — « geste » est nullable et n’est jamais testée pour NULL
 ```
+
+---
+
+## 018 — Sous un CSP strict, le widget s’affiche NU chez l’hôte, et lui écrit une erreur en console
+
+**Statut** : ✅ Résolu (2026-09-09, P-027)
+**Constaté le** : 2026-09-09, en préparant la première pose chez un hôte réel
+**Où** : `packages/widget/src/montage.tsx`
+
+**Symptôme** — sur une page d’hôte portant
+`default-src 'self'; script-src 'self'; connect-src 'self'` — une politique ordinaire, sans rien
+d’exotique —, le lanceur est un **bouton système gris et carré** : fond `rgb(240,240,240)`, rayon
+`0px`, hauteur `59px` au lieu de 48. Et la console de l’hôte porte une erreur rouge :
+
+```
+Applying inline style violates the following Content Security Policy directive 'default-src 'self''.
+```
+
+⛔ **Le widget monte et fonctionne quand même.** Ce n’est pas « la bulle n’apparaît pas » : c’est
+un bouton d’une autre époque dans le coin d’un logiciel métier, plus une erreur qui n’est pas la
+sienne dans sa console. Ça a l’air cassé, et c’est nous.
+
+⚠️ **Il aurait été trouvé chez l’hôte, pas chez nous.** Ni `pnpm widget:demo`, ni aucun parcours,
+ni `montage.test.tsx` ne posaient de CSP : la page hostile de la démonstration est agressive en
+CSS, jamais en politique de sécurité.
+
+**Cause** — **un `<style>` dans un shadow DOM reste du style *en ligne* pour le navigateur.**
+`montage.tsx` posait la feuille avec `doc.createElement('style')`, ce qui paraît inoffensif
+puisque le nœud est isolé. Le shadow DOM isole la **cascade**, pas la **provenance** : c’est le
+document qui porte la politique, et la feuille est refusée comme n’importe quel `<style>` en ligne.
+
+⚠️ Et ça contredisait notre propre doctrine : [D-011](../00-Projet/DECISIONS_LOG.md) refuse déjà de
+charger snapdom depuis un CDN parce qu’imposer « la règle CSP qui va avec » n’est pas à nous de le
+décider.
+
+**Correctif** — la feuille est **construite** : `new CSSStyleSheet()` + `replaceSync`, puis
+`racine.adoptedStyleSheets`. Une feuille construite n’est pas du style en ligne et ne passe par
+**aucune** directive. ⛔ Le contenu de la feuille n’a pas bougé d’une règle : seule la façon de la
+poser a changé.
+
+⚠️ **Un repli sur `<style>` reste**, pour Safari < 16.4 et Firefox < 101 — [D-003] n’exige
+Chrome ou Edge que pour la **dictée**. ⛔ Mais il ne doit pas devenir le chemin ordinaire en
+silence : chaque étape est vérifiée **positivement** — la feuille a-t-elle été analysée
+(`cssRules.length > 0`), a-t-elle été adoptée (`adoptedStyleSheets[0] === feuille`) —, plutôt
+qu’enveloppée dans un `try` global qui avalerait une implémentation partielle et ferait retomber
+le widget sur le `<style>` pour toujours, sans un mot.
+
+**Ce qui l’a laissé passé** — **aucun test ne posait de politique de sécurité de contenu**, nulle
+part. Le trou était entier : `montage.test.tsx` tourne dans happy-dom, qui n’en implémente aucune ;
+`widget-demo.spec.ts` sert une page hostile en CSS et muette en CSP. Et le défaut est invisible
+sans politique — la feuille marche parfaitement quand rien ne l’interdit.
+
+⛔ Il est désormais couvert par [`tests/e2e/widget-csp.spec.ts`](../tests/e2e/widget-csp.spec.ts),
+dans un vrai Chromium, **du chargement jusqu’à l’envoi** — une violation peut n’apparaître qu’au
+premier `fetch`. Cinq parcours : le lanceur habillé sous CSP strict, la racine sans aucun
+`<style>`, la ligne publiée qui suffit depuis une **autre origine**, `connect-src` dont le retrait
+coupe la parole, et `style-src`/`img-src` fermés au plus dur qui ne gênent rien. ⚠️ Et
+`montage.test.tsx` tient l’autre moitié : que le repli existe et pose la **même** feuille.
+
+⚠️ **Ce que le parcours a trouvé en plus, et qui reste ouvert** : la capture d’écran, elle, exige
+encore `style-src 'unsafe-inline'` et `img-src data:` — c’est snapdom, pas nous.
+[T-010](../00-Projet/TICKETS_DIFFERES.md).

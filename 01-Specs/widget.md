@@ -19,6 +19,33 @@ Et, si l’hôte veut attacher une identité — recommandé, voir [D-005](../00
 </script>
 ```
 
+⚠️ **`identite` accepte aussi une FONCTION, et c’est la forme recommandée** dès qu’une page peut
+rester ouverte longtemps — c’est-à-dire le cas ordinaire d’un logiciel métier, où un onglet vit
+une journée :
+
+```html
+<script>
+  window.feedys = { identite: () => monJetonCourant }
+</script>
+```
+
+Le widget relit l’identité **à chaque envoi**. Avec une chaîne, l’hôte doit repasser lui-même une
+nouvelle valeur chaque fois qu’il fait tourner son jeton ; avec une fonction, il rend celui qu’il
+a sous la main, et il n’a plus rien à synchroniser. ⚠️ Passé l’expiration sans rafraîchissement,
+les retours continuent d’arriver — **sans auteur**, et [P-020] ne peut alors revenir vers personne.
+
+⛔ **La fonction est appelée SYNCHRONEMENT, et une fonction `async` ne marchera pas** — sa promesse
+est traitée comme une identité absente. Ce n’est pas un oubli : attendre du code de l’hôte sur le
+chemin d’envoi ferait payer une de ses lenteurs par la parole de quelqu’un. **On ne perd jamais
+une parole pour un problème d’identité.** Un hôte qui doit rafraîchir son jeton le fait de son
+côté, à son rythme, et pose le résultat ici.
+
+⛔ **Et rien de ce que fait l’hôte ne remonte.** Une fonction qui **lève**, ou qui rend autre chose
+qu’une chaîne non vide, vaut **identité absente** : l’exception est avalée, l’envoi part. Un bug
+chez l’hôte ne coûte jamais un retour.
+
+⚠️ **La forme chaîne continue de marcher, à l’identique.** Aucun hôte existant n’a à bouger.
+
 ⛔ **Pas de paquet npm, pas d’import, pas de composant React à monter.** C’est la contrainte de
 licence de [D-001], et elle est structurelle : voir [04-Architecture/licences.md].
 
@@ -49,6 +76,17 @@ Le widget est un invité. Cinq obligations :
    chargement.
 2. ⛔ **Il vit dans un shadow DOM fermé.** Aucun style ne fuit dans les deux sens, aucune globale
    n’est posée hors de `window.feedys`.
+   ⛔ **Et sa feuille de style est CONSTRUITE, jamais posée en `<style>`** — `new CSSStyleSheet()`
+   puis `adoptedStyleSheets`. Un `<style>`, même enfermé dans un shadow DOM, est du **style en
+   ligne** pour le navigateur : il tombe sous `style-src`, et un hôte qui a un CSP strict le
+   refuse. Le lanceur redevenait alors un bouton système gris et carré, avec une erreur rouge dans
+   la console de l’hôte ([03-Bugs/BUGS_LOG.md] 018). ⚠️ Un **repli** sur `<style>` reste en place
+   pour Safari < 16.4 et Firefox < 101, qui ne savent pas construire une feuille : le widget essaie
+   le bon chemin, se replie, et **se tait**. Le chemin réellement pris se lit dans la racine — une
+   feuille adoptée et aucun `<style>`, ou l’inverse.
+   ⛔ **Conséquence, et c’est un engagement** : le widget n’exige **aucune relaxation** du CSP de
+   son hôte. Deux directives, une seule origine, mesurées :
+   [04-Architecture/hebergement.md](../04-Architecture/hebergement.md) §La pose chez un hôte.
 3. ⛔ **Il ne capte aucun raccourci clavier de l’hôte** tant qu’il est fermé. `Échap` ne lui
    appartient que panneau ouvert.
 4. **Budget : 60 Ko gzip pour `widget.js`.** Dépassement = arbitrage explicite, pas un
