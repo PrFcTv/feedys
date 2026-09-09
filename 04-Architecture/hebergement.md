@@ -353,7 +353,72 @@ pnpm produit:creer -- --nom "Nom du logiciel" --domaine app.exemple.fr
 - [ ] posée sur **toutes** les pages où quelqu’un peut buter, pas seulement l’accueil ;
 - [ ] la bulle apparaît, et ⛔ **ne s’ouvre pas toute seule**.
 
-### 5 · L’identité signée
+### 5 · ⛔ La politique de sécurité de contenu — ce que Feedys demande, et rien de plus
+
+⚠️ **Tout ce qui suit est MESURÉ**, le 2026-09-09, pendant P-027, dans Chromium, sur une page
+d’hôte **nue** — sans un seul style ni script en ligne à elle, pour qu’une violation observée
+soit forcément la nôtre — servie sur **un autre port que Feedys**, et jusqu’à l’**envoi** d’un
+retour, pas seulement jusqu’au chargement. ⛔ Rien n’y est déduit. Chaque ligne a son test dans
+[`tests/e2e/widget-csp.spec.ts`](../tests/e2e/widget-csp.spec.ts), et c’est ce fichier qu’on
+rejoue quand on veut la refaire.
+
+**La ligne à donner à un intégrateur** — deux directives, une seule origine :
+
+```
+script-src  https://feedys.exemple.fr;
+connect-src https://feedys.exemple.fr;
+```
+
+C’est-à-dire : **ajoutez l’origine Feedys à ces deux directives-là**, et à aucune autre. Le reste
+de la politique de l’hôte ne bouge pas — un `default-src 'none'` intégral suffit à côté.
+
+| Directive | Exigée ? | Pourquoi, et ce qui l’a montré |
+|---|---|---|
+| `script-src <origine Feedys>` | ✅ **oui** | `widget.js` **et** `/snapdom.js`, qui vient de la même origine et n’ajoute donc rien à écrire ([D-011]). Sans elle, le script est refusé et **la bulle n’apparaît pas du tout** |
+| `connect-src <origine Feedys>` | ✅ **oui** | l’ingestion, le tour, la fin, l’accusé et la relève des réponses — cinq appels, une seule origine. ⛔ Sans elle, **la bulle apparaît quand même** : quelqu’un parle, clique, et rien ne part. C’est le pire des deux |
+| `style-src` | ⛔ **non** | plus rien depuis P-027 : la feuille est **construite** (`new CSSStyleSheet()`), pas posée en `<style>`. Vérifié sous `style-src 'none'` **explicite** — plus dur que `'self'` — lanceur habillé, console vide |
+| `img-src` | ⛔ **non** | vérifié sous `img-src 'none'` explicite : le widget ne charge aucune image. Ses icônes sont du SVG en ligne dans le balisage, pas des ressources |
+| `default-src` | ⛔ **non** | il n’a pas à être élargi. Mesuré avec `default-src 'none'` |
+| `font-src`, `media-src`, `frame-src`, `worker-src`, `object-src`, `base-uri`, `form-action` | ⛔ **non** | aucune violation, dans aucun des sept montages mesurés. Le widget n’a **pas de police à lui** — il prend celle du système |
+
+⚠️ **La moitié la plus utile de ce tableau est la colonne des « non ».** Une liste de directives
+trop large fait relâcher une politique sans raison, et personne ne la resserre ensuite.
+
+#### ⚠️ Et la capture d’écran, elle, coûte deux directives de plus
+
+`@zumer/snapdom` ([D-011]) pose un `<style>` dans le document de l’**hôte** et charge un SVG en
+`data:` pour rendre sa toile. Sous une politique stricte, les deux sont refusés :
+
+```
+style-src 'unsafe-inline';   img-src data:;
+```
+
+- [ ] **si l’hôte peut se le permettre**, il les ajoute et la capture arrive avec le retour ;
+- [ ] **s’il ne peut pas**, on ne change rien : la capture est simplement **absente**, l’entretien
+      et l’envoi se passent exactement pareil (l’échec doux est la règle depuis [D-011]) — mais
+      ⚠️ **sa console porte alors deux lignes rouges par ouverture du panneau**. Ce n’est pas beau,
+      ce n’est pas à nous de le corriger, et c’est écrit :
+      [T-010](../00-Projet/TICKETS_DIFFERES.md).
+
+⛔ **Ne recommandez pas `style-src 'unsafe-inline'` par défaut.** C’est un vrai relâchement de la
+politique d’un logiciel métier, consenti pour un aide-mémoire. Le poser « pour que ce soit propre »
+serait exactement la faute que [D-011] refuse.
+
+#### La vérification, chez soi, avant d’aller chez l’hôte
+
+```bash
+pnpm widget:demo      # puis http://localhost:4321/csp
+```
+
+`/csp` sert la même pose sous une vraie politique, en en-tête, sur une page nue. La politique se
+change dans l’URL : `?politique=default-src 'none'; script-src …`.
+
+- [ ] le lanceur est **rond, bleu, de 48 px de haut** — s’il est gris et carré, la feuille est
+      bloquée ;
+- [ ] la console est **vide** du chargement jusqu’à l’envoi, aux deux lignes de snapdom près ;
+- [ ] un retour d’essai arrive bien au back-office.
+
+### 6 · L’identité signée
 
 ⚠️ Facultative, et **on la branche quand même** : sans elle, un retour arrive sans auteur, et on
 ne peut ni revenir vers la personne ni pondérer selon son métier ([D-005](../00-Projet/DECISIONS_LOG.md)).
@@ -365,7 +430,7 @@ ne peut ni revenir vers la personne ni pondérer selon son métier ([D-005](../0
       ⚠️ `false` n’est pas un rejet — le retour est accepté quand même —, mais c’est le signe
       que la signature ne colle pas.
 
-### 6 · Les dix minutes qui suivent
+### 7 · Les dix minutes qui suivent
 
 C’est la partie qui ne s’automatise pas, et c’est celle qui compte. Dans un vrai navigateur, sur
 une vraie page de l’hôte :

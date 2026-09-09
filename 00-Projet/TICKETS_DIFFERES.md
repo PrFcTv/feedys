@@ -248,3 +248,46 @@ tout**, et on n’en a aucun exemple réel tant que P-019 n’est pas posé.
 
 **En attendant** : la trace dépend de l’appel à `marquer_retour`, et son absence se lit dans la
 liste du back-office — un `bug` corrigé qui traîne en `envoye` depuis trois semaines.
+
+---
+
+## T-010 — La capture d’écran coûte deux directives de CSP à l’hôte
+
+**Différé le** : 2026-09-09, pendant P-027
+**Déclencheur de reprise** : un intégrateur refuse `style-src 'unsafe-inline'` **et** signale les
+deux lignes rouges de sa console, **ou** une version de snapdom qui n’écrit plus dans le document
+de l’hôte
+**Coût si plus tard** : identique — c’est un choix de bibliothèque, pas une dette qui grossit
+
+P-027 a fait en sorte que le **widget** n’exige plus rien du CSP de son hôte : sa feuille est
+construite, plus posée en `<style>`. ⛔ Mais la **capture d’écran** en exige encore deux, et
+mesurées :
+
+| Directive | Ce que snapdom en fait |
+|---|---|
+| `style-src 'unsafe-inline'` | il pose un `<style>` dans le document de l’**hôte** pour mesurer le clone avant de le sérialiser |
+| `img-src data:` | il charge le SVG sérialisé comme une image en `data:` pour le peindre sur la toile |
+
+⚠️ **Ce n’est pas notre code**, et ça ne se contourne pas par une option : les deux `<style>` sont
+posés inconditionnellement dans `@zumer/snapdom` 2.24.15, et le `data:` est le principe même de la
+méthode. Le taire supposerait de patcher la bibliothèque ou d’en changer — et [D-011] l’a retenue
+sur sa vitesse et sa fraîcheur, contre une mesure.
+
+⚠️ **Rien n’est cassé pour autant.** Sans ces deux directives, la capture est **absente** et
+l’entretien se passe exactement pareil — l’échec doux était déjà la règle. Ce qui coûte, c’est que
+la console de l’hôte porte **deux lignes rouges à chaque ouverture du panneau**, et qu’un
+avertissement inexpliqué dans un logiciel métier finit toujours par être imputé au dernier arrivé.
+C’est le même grief que [T-005], un cran plus haut : là c’était un `warn`, ici ce sont des
+erreurs.
+
+⛔ **Ce qu’on ne fait pas en attendant : recommander `style-src 'unsafe-inline'` par défaut.**
+Ce serait un vrai relâchement de la politique d’un logiciel métier, consenti pour un aide-mémoire —
+exactement la faute que [D-011] refuse pour le CDN. `hebergement.md` §La pose chez un hôte pose
+donc le choix à l’intégrateur, et dit ce que chaque branche coûte.
+
+**En attendant** : la ligne publiée ne contient que `script-src` et `connect-src`. Le supplément de
+la capture est écrit à part, avec son prix.
+
+⚠️ Une piste, si le sujet se rouvre : ne tenter la capture **qu’une fois**, et se souvenir d’un
+échec par `securitypolicyviolation` pour ne plus jamais la retenter dans la page. Ça ferait passer
+de deux lignes par ouverture à deux lignes par chargement de page. Ça ne les supprime pas.
