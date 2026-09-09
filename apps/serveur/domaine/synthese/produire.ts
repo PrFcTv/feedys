@@ -149,7 +149,7 @@ export async function produireSynthese(
   }
 
   const contenu: Synthese = {
-    ...rendu.synthese,
+    ...fixerDepuisLesAxes(rendu.synthese, retour.fil),
     citations: gardees,
     confiance: plafonnerConfiance(rendu.synthese.confiance, fin, gardees.length),
   }
@@ -189,6 +189,59 @@ export function plafonnerConfiance(
 ): Confiance {
   if (fin === 'abandon' || citations === 0) return 'basse'
   return rendue
+}
+
+/**
+ * Ce que la personne a répondu d’un clic l’emporte sur ce que le modèle a déduit.
+ *
+ * ⛔ MÊME DOCTRINE QUE `plafonnerConfiance` ET QUE `verbatim.ts` : le prompt
+ *    demande, le code rend vrai. Ici on ne demande même pas — quand quelqu’un a
+ *    cliqué « ça ralentit », `impact` VAUT `ralentit`. Ce n’est pas un indice à
+ *    peser, c’est la réponse à la question qu’on a posée
+ *    ([D-025](../../../../00-Projet/DECISIONS_LOG.md)).
+ *
+ * ⚠️ Le DERNIER clic gagne, et c’est pour ça qu’on parcourt le fil dans l’ordre
+ *    plutôt que de chercher le premier : quelqu’un qui clique « ça bloque » puis
+ *    se ravise en « ça ralentit » a changé d’avis, et la note doit dire le
+ *    second. Le fil est ordonné, il porte donc déjà l’information.
+ *
+ * ⚠️ Un axe non répondu ne touche à rien : le modèle garde la main sur ce que
+ *    personne n’a tranché, `indetermine` compris.
+ */
+export function fixerDepuisLesAxes(synthese: Synthese, fil: readonly TourFil[]): Synthese {
+  let recurrence: Synthese['recurrence'] | undefined
+  let impact: Synthese['impact'] | undefined
+
+  for (const tour of fil) {
+    if (tour.geste !== 'reponse_axe' || !tour.valeurAxe) continue
+
+    if (tour.axe === 'recurrence' && estRecurrence(tour.valeurAxe)) recurrence = tour.valeurAxe
+    if (tour.axe === 'ampleur' && estImpact(tour.valeurAxe)) impact = tour.valeurAxe
+  }
+
+  return {
+    ...synthese,
+    ...(recurrence === undefined ? {} : { recurrence }),
+    ...(impact === undefined ? {} : { impact }),
+  }
+}
+
+const RECURRENCES = ['premiere_fois', 'deja_vu', 'systematique'] as const
+const IMPACTS = ['bloque', 'ralentit', 'agace'] as const
+
+/**
+ * ⚠️ Vérifié plutôt que casté. La valeur vient de la base : une colonne `text`
+ *    peut porter n’importe quoi si une migration future dérape, et un `as`
+ *    ferait entrer la chaîne fautive dans la note — qui échouerait à l’écriture,
+ *    APRÈS la clôture, dans un chemin dont l’échec est avalé. On perdrait la
+ *    note en silence.
+ */
+function estRecurrence(valeur: string): valeur is NonNullable<Synthese['recurrence']> {
+  return (RECURRENCES as readonly string[]).includes(valeur)
+}
+
+function estImpact(valeur: string): valeur is Synthese['impact'] {
+  return (IMPACTS as readonly string[]).includes(valeur)
 }
 
 /** Les étiquettes du retour, tirées de la synthèse. */

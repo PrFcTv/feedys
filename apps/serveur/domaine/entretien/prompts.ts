@@ -40,6 +40,16 @@ export interface TourFil {
    *    d’interface, jamais citable (§`GesteMessage`).
    */
   readonly geste?: GesteMessage | null
+  /**
+   * L’axe répondu d’un clic, et sa valeur (P-026).
+   *
+   * ⚠️ Portés par le FIL et pas à côté : ce qui a été répondu s’est passé à un
+   *    tour précis, et la synthèse doit pouvoir lire le DERNIER état — quelqu’un
+   *    qui clique « ça bloque » puis « ça ralentit » a changé d’avis, et c’est
+   *    le second qui compte.
+   */
+  readonly axe?: string | null
+  readonly valeurAxe?: string | null
 }
 
 /**

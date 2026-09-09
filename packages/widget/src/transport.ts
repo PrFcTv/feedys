@@ -88,7 +88,71 @@ export const BORNES = {
   auteurRole: 120,
   /** Le message facultatif du développeur pour le collaborateur. */
   reponseTexte: 500,
+  /**
+   * La valeur d’un axe répondu d’un clic — `systematique`, `ralentit`…
+   *
+   * ⚠️ Courte et volontairement : ce n’est pas du texte libre, c’est une valeur
+   *    d’énumération. La borne protège la table ; c’est `valeurDAxe` qui décide
+   *    de l’appartenance, et lui seul.
+   */
+  valeurAxe: 40,
 } as const
+
+/**
+ * ─── LES AXES D’UNE RÉPONSE D’UN CLIC ───────────────────────────────────────
+ *
+ * ⛔ CE QUI EST ICI EST UNE FORME, PAS DE LA LOGIQUE. Deux énumérations closes,
+ *    partagées parce que les deux côtés doivent les lire de la même façon : le
+ *    widget pour savoir quoi proposer, le serveur pour refuser le reste.
+ *
+ * ⛔ LES LIBELLÉS NE SONT PAS ICI, ET C’EST LE POINT DE
+ *    [D-025](../../../00-Projet/DECISIONS_LOG.md). Le widget écrit les siens
+ *    (`ui/textes.ts`, côté MIT), le serveur écrit les siens pour le fil
+ *    (`domaine/entretien/axes.ts`, côté AGPL). Ce qui traverse la frontière est
+ *    une valeur — `systematique` —, jamais du texte d’interface.
+ *
+ * ⛔ ET LE MODÈLE N’ÉCRIT AUCUN LIBELLÉ. Il déclare l’axe, le dépôt écrit les
+ *    mots : c’est ce qui empêche une réponse d’un clic de faire entrer la prose
+ *    du bot dans le fil, puis dans les citations
+ *    ([BUGS_LOG](../../../03-Bugs/BUGS_LOG.md) 016).
+ */
+
+/**
+ * Les axes sur lesquels une question se répond d’un clic.
+ *
+ * ⛔ DEUX, et pas un de plus. Ce sont les deux seules lignes fermées du tableau
+ *    §Ce qu’il est utile de demander (01-Specs/entretien.md) : les quatre autres
+ *    appellent un récit, et trois boutons sous une question ouverte
+ *    remplaceraient ce récit par un mot.
+ */
+export const AXES = ['recurrence', 'ampleur'] as const
+
+/**
+ * Ce qu’on peut répondre sur chaque axe.
+ *
+ * ⚠️ Ces valeurs ne sont pas choisies ici : ce sont EXACTEMENT celles que la
+ *    synthèse sait déjà ranger — `Synthese.recurrence` et `Synthese.impact`.
+ *    `axes.test.ts`, côté serveur, refuse qu’elles divergent.
+ *
+ * ⚠️ `indetermine` n’est pas proposable : c’est l’échappatoire du modèle quand
+ *    il ne sait pas, pas une réponse que quelqu’un donne.
+ *
+ * ⛔ Il n’y a pas de valeur « autre ». Elle ferait du bloc un choix obligatoire ;
+ *    le champ texte et le micro SONT l’autre, au même niveau de visibilité.
+ */
+export const VALEURS_AXE = {
+  recurrence: ['premiere_fois', 'deja_vu', 'systematique'],
+  ampleur: ['bloque', 'ralentit', 'agace'],
+} as const
+
+export type Axe = (typeof AXES)[number]
+export type ValeurAxe = (typeof VALEURS_AXE)[Axe][number]
+
+/** La valeur appartient-elle bien à cet axe ? ⚠️ Pure, sans dépendance. */
+export function valeurDAxe(axe: string, valeur: string): boolean {
+  const connues: readonly string[] | undefined = (VALEURS_AXE as Record<string, readonly string[]>)[axe]
+  return connues !== undefined && connues.includes(valeur)
+}
 
 /** Les types de capture acceptés. ⛔ Liste close. */
 export const TYPES_CAPTURE = ['image/webp', 'image/png', 'image/jpeg'] as const

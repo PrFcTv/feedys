@@ -185,6 +185,60 @@ describe('le socle, appliqué sur une base vierge', () => {
     expect(parNom.get('geste_message')).toEqual(['correction', 'reponse_axe'])
   })
 
+  /**
+   * ⛔ LE GARDE-FOU QUI MANQUAIT — un CHECK ne refuse que sur `FALSE`.
+   *
+   * `check (axe is null or geste = 'reponse_axe')` a été écrit, relu, et il
+   * était SANS EFFET : quand `geste` est nul, `geste = 'reponse_axe'` vaut
+   * `NULL`, pas `FALSE`, et la ligne passe. La contrainte laissait donc entrer
+   * exactement ce qu’elle existait pour refuser. Trouvé par hasard, parce qu’un
+   * test d’intégration tentait l’insertion fautive — pas parce que quelque
+   * chose surveillait la classe de défaut.
+   *
+   * ⚠️ Ce test la surveille. La règle : **toute colonne NULLABLE citée par un
+   *    CHECK doit apparaître dans un test de nullité** — `is null`,
+   *    `is not null`, ou `is [not] distinct from`. Sans ça, une comparaison sur
+   *    cette colonne peut rendre `NULL` et désarmer la contrainte entière.
+   *
+   * ⚠️ Il lit `pg_constraint`, pas les fichiers SQL : c’est la contrainte
+   *    RÉELLEMENT posée qu’on interroge, telle que Postgres l’a comprise, et
+   *    pas ce qu’on croit avoir écrit.
+   */
+  it('⛔ aucun CHECK ne peut être désarmé par un NULL', async () => {
+    const { rows } = await base.client.query<{
+      nom: string
+      definition: string
+      nullables: string[] | null
+    }>(
+      `select con.conname as nom,
+              pg_get_constraintdef(con.oid) as definition,
+              array_agg(att.attname::text) filter (where not att.attnotnull) as nullables
+         from pg_constraint con
+         join pg_class rel on rel.oid = con.conrelid
+         join pg_namespace ns on ns.oid = rel.relnamespace
+         join unnest(con.conkey) as k(attnum) on true
+         join pg_attribute att on att.attrelid = rel.oid and att.attnum = k.attnum
+        where con.contype = 'c' and ns.nspname = 'public'
+        group by con.conname, con.oid
+        order by con.conname`,
+    )
+
+    // ⚠️ Si la requête ne rend rien, ce test ne prouve rien. On le dit.
+    expect(rows.length).toBeGreaterThan(0)
+
+    const desarmables = rows.flatMap(({ nom, definition, nullables }) =>
+      (nullables ?? [])
+        .filter((colonne) => !garde(definition, colonne))
+        .map((colonne) => `${nom} — « ${colonne} » est nullable et n’est jamais testée pour NULL`),
+    )
+
+    expect(
+      desarmables,
+      'Un CHECK ne refuse que sur FALSE : une comparaison qui rend NULL le désarme. ' +
+        'Écrire « colonne is not distinct from … », ou garder la colonne par « colonne is null or … ».',
+    ).toEqual([])
+  })
+
   it('crée les quatre index qui comptent', async () => {
     const { rows } = await base.client.query<{ indexname: string }>(
       `select indexname from pg_indexes
@@ -389,3 +443,27 @@ describe('prisma/schema.prisma, le miroir', () => {
     expect(diff.status).toBe(0)
   }, 120_000)
 })
+
+/** ⚠️ Nos colonnes sont en snake_case. Un nom exotique fait échouer, pas passer. */
+const NOM_SIMPLE = /^[a-z][a-z0-9_]*$/
+
+/**
+ * La définition teste-t-elle la nullité de cette colonne ?
+ *
+ * ⚠️ `pg_get_constraintdef` rend une forme NORMALISÉE et parenthésée —
+ *    `((axe IS NULL) OR (geste IS NOT DISTINCT FROM 'x'::geste_message))` —,
+ *    donc chercher l’opérateur juste après le nom est fiable. On n’analyse pas
+ *    ce qu’un humain a tapé, mais ce que Postgres a compris.
+ *
+ * ⛔ La borne de mot n’est pas cosmétique : `axe` est un préfixe de
+ *    `valeur_axe`. Sans elle, une contrainte qui ne garde QUE `valeur_axe`
+ *    ferait croire que `axe` est gardée aussi — et le test passerait en
+ *    laissant le trou ouvert.
+ */
+function garde(definition: string, colonne: string): boolean {
+  if (!NOM_SIMPLE.test(colonne)) return false
+
+  return new RegExp(`\\b${colonne}\\b\\s+is\\s+(not\\s+)?(null|distinct\\s+from)`, 'i').test(
+    definition,
+  )
+}

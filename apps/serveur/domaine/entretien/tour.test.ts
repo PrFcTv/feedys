@@ -104,6 +104,7 @@ function tourAvecQuestion(question: string | null): TourEntretien {
       ecran: 'Liste des dossiers',
     },
     question,
+    axe: null,
     motif: 'La récurrence change ce qu’un développeur ferait.',
   }
 }
@@ -400,6 +401,128 @@ describe('l’accès', () => {
   })
 })
 
+describe('⛔ l’axe : le modèle décide QUAND, le serveur décide SI (D-025)', () => {
+  const avecAxe = (axe: 'recurrence' | 'ampleur' | null, question: string | null): TourEntretien => ({
+    ...tourAvecQuestion(question),
+    axe,
+  })
+
+  it('laisse passer un axe quand la question tient', () => {
+    expect(borner(avecAxe('ampleur', 'Ça vous gêne beaucoup ?'), 2).axe).toBe('ampleur')
+  })
+
+  it('⛔ VERROU 1 — pas de question, pas d’axe : des boutons orphelins', () => {
+    expect(borner(avecAxe('ampleur', null), 2).axe).toBeNull()
+  })
+
+  it('⛔ VERROU 1 — même quand c’est la LIMITE qui a jeté la question', () => {
+    // ⚠️ Le cas qui compte : le modèle a bien posé une question ET déclaré un
+    //    axe, mais il ne restait plus de relance. Sans ce verrou, le widget
+    //    aurait affiché trois boutons sous un entretien qui se termine.
+    const rendu = borner(avecAxe('recurrence', 'une question de trop ?'), 0)
+
+    expect(rendu.question).toBeNull()
+    expect(rendu.axe).toBeNull()
+  })
+
+  it('⛔ VERROU 1 — une question BLANCHE ne porte pas d’axe non plus', () => {
+    expect(borner(avecAxe('recurrence', '   '), 2).axe).toBeNull()
+  })
+
+  it('⛔ VERROU 2 — on ne redemande pas la récurrence quand on l’a déjà', () => {
+    const connue: TourEntretien = {
+      ...avecAxe('recurrence', 'C’est déjà arrivé ?'),
+      comprehension: { ...tourAvecQuestion(null).comprehension, recurrence: 'systematique' },
+    }
+
+    const rendu = borner(connue, 2)
+
+    // ⚠️ La QUESTION reste : jeter un tour entier pour un défaut de forme serait
+    //    plus coûteux que de laisser une question un peu inutile.
+    expect(rendu.question).toBe('C’est déjà arrivé ?')
+    expect(rendu.axe).toBeNull()
+  })
+
+  it('⚠️ mais `ampleur` passe même avec une récurrence connue — ce n’est pas le même axe', () => {
+    const connue: TourEntretien = {
+      ...avecAxe('ampleur', 'Ça vous bloque ?'),
+      comprehension: { ...tourAvecQuestion(null).comprehension, recurrence: 'systematique' },
+    }
+
+    expect(borner(connue, 2).axe).toBe('ampleur')
+  })
+
+  it('le cas ordinaire reste `null` — la plupart des questions appellent un récit', () => {
+    expect(borner(avecAxe(null, 'Qu’est-ce que vous veniez de faire ?'), 2).axe).toBeNull()
+  })
+})
+
+describe('⛔ la réponse d’un clic entre dans le fil sans être de la parole', () => {
+  it('écrit la ligne dans les mots du SERVEUR, marquée, avec sa valeur', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }])
+
+    await jouerTour(
+      { ...ACCES, axe: 'recurrence', valeurAxe: 'systematique' },
+      portsAvec(base, modeleBouchon()),
+    )
+
+    const ligne = base.ecrits.find((m) => m.role === 'collaborateur')
+
+    expect(ligne).toMatchObject({
+      texte: 'Réponse · Récurrence — à chaque fois',
+      // ⛔ LE POINT DE D-025 : ce n’est pas de la parole, donc pas citable.
+      geste: 'reponse_axe',
+      // ⛔ Et c’est la VALEUR qui est stockée, pas le libellé : c’est elle qui
+      //    fixera `recurrence` dans la note.
+      axe: 'recurrence',
+      valeurAxe: 'systematique',
+    })
+  })
+
+  it('⚠️ elle part AVANT ce qui a été tapé : on répond, puis on ajoute', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }])
+
+    await jouerTour(
+      {
+        ...ACCES,
+        axe: 'ampleur',
+        valeurAxe: 'ralentit',
+        corrections: 'Écran — Liste des mandats',
+        texte: 'et surtout le matin',
+      },
+      portsAvec(base, modeleBouchon()),
+    )
+
+    expect(base.ecrits.filter((m) => m.role === 'collaborateur').map((m) => m.texte)).toEqual([
+      'Réponse · Ampleur — ça ralentit',
+      'Correction · Écran — Liste des mandats',
+      'et surtout le matin',
+    ])
+  })
+
+  it('⛔ une paire incohérente est JETÉE, pas écrite — un fil append-only ne se répare pas', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }])
+
+    await jouerTour(
+      // `bloque` appartient à `ampleur`, pas à `recurrence`.
+      { ...ACCES, axe: 'recurrence', valeurAxe: 'bloque', texte: 'ça arrive souvent' },
+      portsAvec(base, modeleBouchon()),
+    )
+
+    expect(base.ecrits.filter((m) => m.role === 'collaborateur').map((m) => m.texte)).toEqual([
+      'ça arrive souvent',
+    ])
+  })
+
+  it('⛔ un axe sans valeur ne s’écrit pas non plus', async () => {
+    const base = baseAvec([{ role: 'collaborateur', texte: PAROLE }])
+
+    await jouerTour({ ...ACCES, axe: 'ampleur' }, portsAvec(base, modeleBouchon()))
+
+    expect(base.ecrits.filter((m) => m.role === 'collaborateur')).toEqual([])
+  })
+})
+
 describe('⛔ la sortie du modèle reste dans les bornes du contrat', () => {
   it('tronque plutôt que de perdre le tour — un caractère de trop n’est pas une panne', () => {
     const rendu = borner(
@@ -411,6 +534,7 @@ describe('⛔ la sortie du modèle reste dans les bornes du contrat', () => {
           ecran: 'z'.repeat(400),
         },
         question: 'q'.repeat(900),
+        axe: 'recurrence',
         motif: 'm'.repeat(900),
       },
       2,

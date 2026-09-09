@@ -15,7 +15,14 @@ import type { TourFil } from '../entretien/prompts'
 import { messagesDuFil } from '../entretien/prompts'
 
 import type { PortDepotSyntheses, PortsSynthese, RetourASynthetiser } from './produire'
-import { etiquettesDe, finDe, parolesDe, plafonnerConfiance, produireSynthese } from './produire'
+import {
+  etiquettesDe,
+  finDe,
+  fixerDepuisLesAxes,
+  parolesDe,
+  plafonnerConfiance,
+  produireSynthese,
+} from './produire'
 import type { Synthese } from './schema'
 import { SchemaSynthese } from './schema'
 
@@ -279,6 +286,84 @@ describe('⛔ les citations sont verbatim, quoi que le modèle produise', () => 
       'Correction · Écran — Liste des mandats',
     )
     expect(messagesDuFil(FIL_AVEC_CORRECTION)).toHaveLength(FIL_AVEC_CORRECTION.length)
+  })
+})
+
+describe('⛔ ce qu’on a demandé et obtenu l’emporte sur ce que le modèle déduit', () => {
+  /** Une réponse d’un clic, telle que `composerApports` l’écrit dans le fil. */
+  const clic = (axe: string, valeur: string): TourFil => ({
+    role: 'collaborateur',
+    texte: `Réponse · ${axe} — ${valeur}`,
+    geste: 'reponse_axe',
+    axe,
+    valeurAxe: valeur,
+  })
+
+  it('fixe `impact` sur la réponse d’un clic, pas sur la déduction', () => {
+    // Le modèle a écrit `ralentit` ; la personne a cliqué « ça me bloque ».
+    const fixee = fixerDepuisLesAxes(BUG, [...FIL, clic('ampleur', 'bloque')])
+
+    expect(BUG.impact).toBe('ralentit')
+    expect(fixee.impact).toBe('bloque')
+  })
+
+  it('fixe `recurrence` de la même façon', () => {
+    const fixee = fixerDepuisLesAxes({ ...BUG, recurrence: 'deja_vu' }, [
+      ...FIL,
+      clic('recurrence', 'premiere_fois'),
+    ])
+
+    expect(fixee.recurrence).toBe('premiere_fois')
+  })
+
+  it('⚠️ le DERNIER clic gagne — quelqu’un qui se ravise a changé d’avis', () => {
+    const fixee = fixerDepuisLesAxes(BUG, [
+      ...FIL,
+      clic('ampleur', 'bloque'),
+      clic('ampleur', 'ralentit'),
+    ])
+
+    expect(fixee.impact).toBe('ralentit')
+  })
+
+  it('⛔ ne touche à rien quand personne n’a cliqué — le modèle garde la main', () => {
+    expect(fixerDepuisLesAxes(BUG, FIL)).toEqual(BUG)
+  })
+
+  it('⛔ `indetermine` reste possible : c’est l’aveu du modèle, pas une réponse', () => {
+    const indetermine: Synthese = { ...BUG, impact: 'indetermine' }
+
+    expect(fixerDepuisLesAxes(indetermine, FIL).impact).toBe('indetermine')
+  })
+
+  it('⛔ une valeur qui n’est pas du schéma est IGNORÉE, pas recopiée', () => {
+    // ⚠️ Le cas qui compte : `valeur_axe` est une colonne `text`. Une valeur
+    //    fautive recopiée telle quelle ferait échouer l’écriture de la note —
+    //    APRÈS la clôture, dans un chemin dont l’échec est avalé. On perdrait la
+    //    note en silence, ce qui est pire que de garder la déduction du modèle.
+    const fixee = fixerDepuisLesAxes(BUG, [...FIL, clic('ampleur', 'catastrophique')])
+
+    expect(fixee.impact).toBe('ralentit')
+    expect(SchemaSynthese.safeParse(fixee).success).toBe(true)
+  })
+
+  it('⚠️ une ligne qui n’est pas un geste d’axe ne fixe rien, même si elle en a l’air', () => {
+    const menteuse: TourFil = {
+      role: 'collaborateur',
+      texte: 'Réponse · Ampleur — ça bloque',
+      geste: null,
+      axe: 'ampleur',
+      valeurAxe: 'bloque',
+    }
+
+    expect(fixerDepuisLesAxes(BUG, [...FIL, menteuse]).impact).toBe('ralentit')
+  })
+
+  it('⛔ et une réponse d’un clic n’est jamais citable — elle porte un geste', () => {
+    expect(parolesDe([...FIL, clic('ampleur', 'bloque')])).toEqual([
+      PAROLE,
+      'non ça a toujours fait ça je crois',
+    ])
   })
 })
 

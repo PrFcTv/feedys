@@ -428,6 +428,55 @@ button, textarea {
   line-height: 1.4;
 }
 
+/* Les réponses d’un clic (D-025).
+
+   ⛔ Elles ne ressemblent PAS au bouton primaire, et c’est délibéré : ce sont des
+      raccourcis, pas l’action attendue. Le micro et le champ texte, juste en
+      dessous, gardent leur poids visuel — le produit propose de cliquer, il ne
+      pousse pas à cliquer.
+
+   ⚠️ Un retour à la ligne et non un défilement : trois libellés en français
+      peuvent dépasser 320 px, et une réponse hors de l’écran n’est pas une
+      réponse. */
+.propositions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--w-2);
+  margin: 0 0 var(--w-3);
+}
+
+.proposition {
+  padding: var(--w-2) var(--w-3);
+  border: 1px solid var(--w-bord);
+  border-radius: var(--w-rayon-s);
+  background: var(--w-fond-2);
+  color: var(--w-encre-2);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+  /* ⚠️ 44 px de haut au doigt : c’est la cible tactile minimale, et ces boutons
+        existent précisément pour être touchés vite. */
+  min-height: 44px;
+}
+
+.proposition:hover:not(:disabled) {
+  border-color: var(--w-encre-3);
+  color: var(--w-encre);
+}
+
+/* ⛔ Le focus reste visible : ces boutons sont dans le piège à focus, et on y
+      arrive au clavier comme partout ailleurs. */
+.proposition:focus-visible {
+  outline: 2px solid var(--w-accent);
+  outline-offset: 2px;
+}
+
+.proposition:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
 /* ⚠️ Le bot qui lit : une ligne, pas un squelette animé. On attend une seconde,
       pas un chargement de page. */
 .attente {

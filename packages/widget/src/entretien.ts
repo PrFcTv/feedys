@@ -10,7 +10,7 @@
  *    26 Ko gzip sur un budget de 60. `budget.test.ts` empêche la rechute.
  */
 import type { Comprehension, CorpsFin, CorpsTour, TourRendu } from './contrat'
-import { EN_TETE_CLE, cheminFin, cheminTour } from './transport'
+import { AXES, EN_TETE_CLE, cheminFin, cheminTour } from './transport'
 
 export type ResultatTour =
   | { readonly ok: true; readonly tour: TourRendu }
@@ -115,6 +115,10 @@ function interpreter(corps: Record<string, unknown>): TourRendu | undefined {
   return {
     comprehension,
     question,
+    // ⚠️ Relu plutôt que cru : le serveur valide, mais le widget ne doit pas
+    //    rendre trois boutons sur un axe qu’il ne connaît pas — il ne saurait
+    //    pas quoi écrire dessus.
+    axe: AXES.find((connu) => connu === corps['axe']) ?? null,
     motif: typeof corps['motif'] === 'string' ? corps['motif'] : '',
   }
 }

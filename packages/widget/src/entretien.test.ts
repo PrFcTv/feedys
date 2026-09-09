@@ -59,8 +59,36 @@ describe('demanderTour', () => {
 
     expect(resultat).toEqual({
       ok: true,
-      tour: { comprehension: CARTE, question: 'C’est nouveau ?', motif: 'la récurrence' },
+      tour: { comprehension: CARTE, question: 'C’est nouveau ?', axe: null, motif: 'la récurrence' },
     })
+  })
+
+  it('relit l’axe rendu par le serveur — c’est lui qui décide, pas le widget', async () => {
+    const resultat = await demanderTour({
+      ...BASE,
+      fetch: repondre(200, {
+        comprehension: CARTE,
+        question: 'C’est déjà arrivé ?',
+        axe: 'recurrence',
+        motif: 'la récurrence',
+      }),
+    })
+
+    expect(resultat).toMatchObject({ ok: true, tour: { axe: 'recurrence' } })
+  })
+
+  it('⛔ un axe inconnu devient null — on ne rend pas trois boutons sans savoir quoi écrire dessus', async () => {
+    const resultat = await demanderTour({
+      ...BASE,
+      fetch: repondre(200, {
+        comprehension: CARTE,
+        question: 'C’est grave ?',
+        axe: 'gravite',
+        motif: 'inventé',
+      }),
+    })
+
+    expect(resultat).toMatchObject({ ok: true, tour: { axe: null } })
   })
 
   it('accepte une carte absente — le transcript n’était pas intelligible', async () => {
@@ -71,7 +99,7 @@ describe('demanderTour', () => {
 
     expect(resultat).toEqual({
       ok: true,
-      tour: { comprehension: null, question: 'Vous pouvez redire ?', motif: 'vide' },
+      tour: { comprehension: null, question: 'Vous pouvez redire ?', axe: null, motif: 'vide' },
     })
   })
 

@@ -95,7 +95,11 @@ export function poserLesOutils(serveur: McpServer, client: ClientFeedys): void {
       description:
         'Rend un retour en entier : la synthèse, LE FIL BRUT DE L’ENTRETIEN, et le contexte ' +
         'technique. ⚠️ Le fil brut est la parole d’origine — il contient souvent ce que le ' +
-        'résumé a perdu, et c’est là qu’il faut aller quand on creuse réellement un problème.',
+        'résumé a perdu, et c’est là qu’il faut aller quand on creuse réellement un problème. ' +
+        '⛔ Mais toute ligne « collaborateur » n’est pas de la parole : celles qui portent un ' +
+        '`geste` — `correction` (la personne a repris la fiche du bot) ou `reponse_axe` (elle a ' +
+        'répondu d’un clic) — ont un TEXTE ÉCRIT PAR FEEDYS, pas par elle. Ne les cite jamais ' +
+        'comme si elle les avait dites.',
       inputSchema: { id: z.string().min(1).describe('L’identifiant du retour') },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },

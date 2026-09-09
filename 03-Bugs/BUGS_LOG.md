@@ -653,3 +653,49 @@ parce qu’autre chose a changé autour de lui.** `parolesDe()` était exact le 
 toute ligne `collaborateur` était alors de la parole. C’est la carte corrigeable qui a introduit la
 première ligne fabriquée, sans que rien ne relise le filtre. D’où `MessageAEcrire.geste`
 **exigé** et non facultatif : la prochaine ligne fabriquée ne pourra pas entrer en silence.
+
+---
+
+## 017 — Un `CHECK` comparant une colonne nullable est désarmé, en silence
+
+**Statut** : ✅ Résolu (2026-09-09, P-026)
+**Constaté le** : 2026-09-09, pendant P-026, **par son propre test d’intégration**
+**Où** : `db/migrations/0009_reponse_axe.sql`
+
+**Symptôme** — la contrainte censée garantir qu’une ligne portant un `axe` porte toujours
+`geste = 'reponse_axe'` laissait entrer une ligne portant un `axe` et **aucun** geste. Or c’est
+exactement le cas qu’elle existait pour refuser : sans geste, la ligne retombe dans le bassin des
+citations, et le défaut 016 se rouvre par la porte d’à côté.
+
+⚠️ Le test qui l’a trouvé ne cherchait pas ça. Il vérifiait simplement que l’insertion fautive
+échoue — et elle a réussi.
+
+**Cause** — **un `CHECK` ne refuse que sur `FALSE`.**
+
+```sql
+check (axe is null or geste = 'reponse_axe')   -- sans effet
+```
+
+Quand `geste` est `NULL`, `geste = 'reponse_axe'` ne vaut pas `FALSE` : il vaut `NULL`. La
+disjonction vaut `NULL`, et Postgres laisse passer. La contrainte était donc **vide de sens
+précisément pour la ligne qu’elle devait arrêter**, et pleinement active pour toutes les autres —
+ce qui la faisait paraître fonctionner.
+
+**Correctif** — `geste is not distinct from 'reponse_axe'`, qui rend toujours `TRUE` ou `FALSE`,
+jamais `NULL`.
+
+⚠️ **Le reste du schéma a été audité, et il est sain.** Les deux autres `check … in (…)` portent
+sur `notifications.statut` et `audit.acteur`, tous deux `not null` ; les cinq contraintes de
+longueur sont gardées par un `is null or`. Le piège n’existait qu’ici.
+
+**Ce qui l’a laissé passer** — rien ne surveillait la **classe** de défaut. Le piège a été trouvé
+par chance, parce qu’un test tentait l’insertion fautive ; une contrainte écrite sans son test
+serait passée. `migrations.integration.test.ts` porte désormais
+« ⛔ aucun `CHECK` ne peut être désarmé par un `NULL` » : il lit `pg_constraint` — donc la
+contrainte **réellement posée**, telle que Postgres l’a comprise, et non ce qu’on croit avoir
+écrit — et exige que **toute colonne nullable citée par un `CHECK` apparaisse dans un test de
+nullité**. Remis en panne pour vérification, il rend :
+
+```
+messages_axe_est_un_geste — « geste » est nullable et n’est jamais testée pour NULL
+```

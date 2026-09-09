@@ -62,7 +62,7 @@ const RETOUR = `
 
 /** ⛔ Le FIL BRUT. C’est la moitié de la valeur de `lire_retour`. */
 const FIL = `
-  select ordre, role, texte
+  select ordre, role, texte, geste
     from messages
    where retour_id = $1
    order by ordre asc
@@ -74,6 +74,15 @@ const JOURNALISER = `
   insert into audit (id, retour_id, acteur, action, detail)
   values ($1, $2, 'developpeur', 'statut', $3::jsonb)
 `
+
+/**
+ * ⚠️ Relu contre l’énumération plutôt que recopié : ce que MCP rend est validé
+ *    par le contrat du paquet, et une valeur inconnue y échouerait — l’agent
+ *    perdrait le retour entier pour une colonne mal relue.
+ */
+function gesteOuNul(valeur: unknown): 'correction' | 'reponse_axe' | null {
+  return valeur === 'correction' || valeur === 'reponse_axe' ? valeur : null
+}
 
 function ouNul(valeur: unknown): string | null {
   return typeof valeur === 'string' && valeur.trim() !== '' ? valeur : null
@@ -205,6 +214,9 @@ export function creerDepotMcp(bassin: Bassin): DepotMcp {
             ordre: Number(tour['ordre']),
             role: tour['role'] === 'bot' ? ('bot' as const) : ('collaborateur' as const),
             texte: String(tour['texte'] ?? ''),
+            // ⛔ Une correction ou une réponse d’un clic n’est pas de la parole :
+            //    l’agent doit pouvoir le lire, sinon il cite le bot (016).
+            geste: gesteOuNul(tour['geste']),
           })),
           contexte: contexteDe(ligne),
           reponse: reponseDe(ligne),

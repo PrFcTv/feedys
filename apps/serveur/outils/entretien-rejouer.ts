@@ -95,6 +95,11 @@ function rendre(tour: TourEntretien): string {
 
   lignes.push('')
   lignes.push(`    question    ${tour.question ?? '— (le bot s’arrête)'}`)
+  // ⛔ L’AXE EST ICI PARCE QU’IL NE SE VOIT NULLE PART AILLEURS. Sans lui, « le
+  //    modèle propose trois boutons sous une question ouverte » ne se constate
+  //    qu’en production, sur l’écran de quelqu’un. C’est exactement ce que cet
+  //    outil existe pour attraper avant (01-Specs/entretien.md §La mise au point).
+  lignes.push(`    axe         ${tour.axe ?? '— (réponse libre)'}`)
   // ⛔ Le motif n’est jamais montré au collaborateur. Ici, il est TOUT l’intérêt :
   //    quand une question est mauvaise, c’est lui qui dit pourquoi.
   lignes.push(`    motif       ${tour.motif}`)

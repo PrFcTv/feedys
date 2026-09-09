@@ -44,15 +44,15 @@ const CHARGER = `
 
 /** ⚠️ Trié sur `ordre`, jamais sur `cree_le` : deux tours peuvent partager la seconde. */
 const FIL = `
-  select role, texte, ordre, geste
+  select role, texte, ordre, geste, axe, valeur_axe
     from messages
    where retour_id = $1
    order by ordre asc
 `
 
 const ECRIRE_MESSAGE = `
-  insert into messages (id, retour_id, ordre, role, texte, transcript_brut, motif, geste)
-  values ($1, $2, $3, $4, $5, $6, $7, $8::geste_message)
+  insert into messages (id, retour_id, ordre, role, texte, transcript_brut, motif, geste, axe, valeur_axe)
+  values ($1, $2, $3, $4, $5, $6, $7, $8::geste_message, $9, $10)
 `
 
 /**
@@ -104,6 +104,8 @@ export function creerDepotEntretien(bassin: Bassin): PortDepotEntretien {
           role: tour['role'] === 'bot' ? ('bot' as const) : ('collaborateur' as const),
           texte: String(tour['texte'] ?? ''),
           geste: gesteOuNul(tour['geste']),
+          axe: ouNul(tour['axe']),
+          valeurAxe: ouNul(tour['valeur_axe']),
         }))
 
         const ordres = fil.rows.map((tour) => Number(tour['ordre'] ?? 0))
@@ -156,6 +158,8 @@ export function creerDepotEntretien(bassin: Bassin): PortDepotEntretien {
             message.transcriptBrut,
             message.motif,
             message.geste,
+            message.axe,
+            message.valeurAxe,
           ])
         }
 
