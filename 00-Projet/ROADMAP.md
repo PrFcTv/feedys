@@ -103,8 +103,18 @@ matins » ne dit pas la même chose écrit et dit.
 **④ Le regroupement.** Quand trois personnes signalent la même chose en des termes différents.
 Utile seulement passé un certain volume — le construire avant serait deviner.
 
-**⑤ Les autres produits.** Le portail CGP, VIXIS, OrelSign. Techniquement, c’est une ligne de
-`<script>` et une clé ; l’écran de gestion des produits est le seul vrai travail.
+**⑤ Les autres produits.** Le portail CGP, VIXIS, OrelSign.
+
+⚠️ **Ce point supposait une instance, plusieurs de ses produits. C’est faux depuis
+[D-028](DECISIONS_LOG.md).** Chaque logiciel métier tourne sur le VPS de son client, et Feedys s’y
+installe **une fois par client** — une instance, un client, un produit. « Le produit suivant » n’est
+donc pas une ligne de `<script>` et une clé de plus dans une base existante : c’est **une
+installation de plus**, avec sa base, ses secrets et son back-office
+([hebergement.md](../04-Architecture/hebergement.md) §Une installation par client).
+
+⚠️ Ce qui reste vrai : la pose elle-même n’a pas bougé d’un iota — une balise, une clé, et la liste
+de vérification. Ce qui change, c’est ce qu’il y a **avant** elle. Et l’écran de gestion de
+plusieurs produits, lui, cesse d’être le vrai travail : il n’y a qu’un produit par instance.
 
 ## Ce qui n’arrivera pas
 
@@ -112,5 +122,12 @@ Pour couper court, ces sujets sont **hors périmètre définitivement**, pas « 
 
 - le vote, le classement, la feuille de route publique ;
 - le multi-tenant, les organisations, la facturation, les comptes utilisateurs ;
+- **un agrégateur des installations** — une console, un tableau de bord ou une API qui verrait
+  plusieurs clients à la fois. C’est du multi-tenant sous un autre nom, et ce serait le seul
+  composant à qui il faudrait ouvrir toutes les bases en même temps. L’email est le seul canal qui
+  centralise, et il suffit ([D-028](DECISIONS_LOG.md)) ;
+- **tout « phone home »** — vérification de version, statistiques d’usage, remontée d’erreurs vers
+  le développeur. Le conteneur ne dépend de rien d’extérieur, et c’est une clause de contrat autant
+  qu’une règle d’architecture ;
 - le support en direct, la réponse humaine dans le widget ;
 - une application mobile.

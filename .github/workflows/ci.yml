@@ -3,6 +3,16 @@ name: CI
 on:
   push:
     branches: [main]
+    # ⚠️ Le seul déclencheur de la PUBLICATION — job `publier` tout en bas.
+    #    Jamais un commit vers main : une image publiée est une DISTRIBUTION au
+    #    sens de l’AGPL, et elle doit pouvoir désigner la révision exacte de sa
+    #    source. Un commit sans tag ne le peut pas (D-028).
+    #
+    # ⚠️ Le motif est LARGE exprès. Un filtre fin qui ne correspond pas ne
+    #    publie rien et ne dit rien — la panne muette que ce dépôt refuse
+    #    partout. Ici, un tag qui n’est pas une version déclenche le job, et le
+    #    job le refuse en le nommant.
+    tags: ['*.*.*']
   pull_request:
 
 # Le dépôt est public : rien ne part ailleurs sans qu’on l’ait décidé.
@@ -169,3 +179,108 @@ jobs:
           sortie=$(docker run --rm -e DATABASE_URL -e FEEDYS_URL_PUBLIQUE -e ANTHROPIC_API_KEY -e FEEDYS_MODELE -e FEEDYS_BO_MOT_DE_PASSE -e FEEDYS_CLE_CHIFFREMENT feedys:ci 2>&1 || true)
           echo "$sortie"
           echo "$sortie" | grep -q 'la base ne répond pas'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # La publication — le SEUL job qui pousse quelque chose hors de GitHub
+  # ═══════════════════════════════════════════════════════════════════════════
+  #
+  # ⛔ Sur tag de version UNIQUEMENT. Pas sur main, pas sur une PR : là, le job
+  #    `image` ci-dessus garde son `push: false` et continue de prouver que
+  #    l’image se construit. C’est le check qui ne bouge pas.
+  #
+  # ⚠️ Il attend les six checks. Un tag peut être posé sur n’importe quel
+  #    commit — y compris un commit qui n’est jamais passé par main. Publier
+  #    une image non vérifiée chez des tiers serait pire que ne rien publier.
+  #
+  # ⛔ Aucun secret d’installation n’entre ici. Le seul jeton est celui que
+  #    GitHub fabrique pour ce run, et il ne sert qu’à écrire dans GHCR.
+  publier:
+    name: publier sur GHCR
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [verifier, integration, e2e, image]
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: la version publiée, et rien d’autre
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+          DEPOT: ${{ github.repository }}
+        run: |
+          # ⛔ Le tag EST la version, VERBATIM. Rien à retirer, rien à
+          #    transformer — surtout pas un « v » de tête.
+          #
+          #    `lienSource()` (apps/serveur/infra/source.ts) compose
+          #    github.com/<depot>/tree/<FEEDYS_VERSION>. Toute transformation
+          #    du tag fait un lien MORT en pied de back-office, c’est-à-dire
+          #    une image non conforme à l’article 13 de l’AGPL. Le tag se nomme
+          #    donc 1.4.0, jamais v1.4.0 (D-028).
+          case "$TAG" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+              echo "::error::« $TAG » n’est pas une version. Le tag doit être un semver nu — 1.4.0, pas v1.4.0 : il sert tel quel de FEEDYS_VERSION et de cible au lien vers la source."
+              exit 1
+              ;;
+          esac
+          # ⚠️ GHCR n’accepte que des minuscules ; le propriétaire du dépôt, lui,
+          #    a des majuscules. Sans ce `tr`, le push échoue sur un message qui
+          #    ne parle pas de casse.
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$(echo "$DEPOT" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # ⛔ linux/amd64 SEUL, et c’est MESURÉ, pas supposé : sous QEMU, la
+          #    même image coûte 319 s en arm64 contre 62 s en amd64 — 5,1× —
+          #    et personne ne l’a demandée. Le repli existe et il est prouvé :
+          #    `docker build .` sur une machine arm64 produit l’image, rien
+          #    dans le Dockerfile n’est propre à une architecture (D-028).
+          platforms: linux/amd64
+          # ⛔ Une seule étiquette, la version. PAS de `latest` : une
+          #    installation qui suivrait `latest` changerait de version toute
+          #    seule au prochain `docker compose pull` — or ce qui décide de
+          #    mettre à jour le serveur de quelqu’un d’autre, c’est un humain
+          #    (hebergement.md §Une installation par client).
+          tags: ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
+          # ⛔ La raison d’être de tout ce job. Une image publiée avec « dev »
+          #    dedans est une image NON CONFORME.
+          build-args: |
+            FEEDYS_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ⛔ On vérifie l’ARTEFACT PUBLIÉ, pas celui qu’on croit avoir construit :
+      #    on le retire du registre et on lui demande sa version. C’est le seul
+      #    contrôle qui attrape un build-arg oublié, et il ne coûte qu’un pull.
+      - name: l’image publiée porte la version, pas « dev »
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dedans=$(docker run --rm "$IMAGE" node -e 'process.stdout.write(process.env.FEEDYS_VERSION || "")')
+          echo "FEEDYS_VERSION dans l’image publiée : « $dedans »"
+          test "$dedans" = "$VERSION"
+
+      # ⛔ Et le lien que cette version affiche en pied de back-office RÉPOND.
+      #    Un 404 ici est un manquement à l’article 13, pas une coquille.
+      - name: le lien vers la source de cette version répond
+        env:
+          DEPOT: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: curl -sfI "https://github.com/$DEPOT/tree/$VERSION" > /dev/null

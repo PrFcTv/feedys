@@ -195,11 +195,28 @@ parole pour un problème d’identité. Le détail :
 
 ## Déployer
 
+**Une installation par client.** Feedys se pose sur le VPS où tournent déjà les logiciels métier,
+une fois par client — jamais en service partagé. Ce que cette topologie coûte, et la liste de
+vérification qui va avec :
+[04-Architecture/hebergement.md](04-Architecture/hebergement.md) §Une installation par client.
+
+L’image est **publiée sur GHCR**, sur tag de version : il n’y a rien à compiler chez le client.
+
 ```bash
 cp .env.example .env.production                      # puis renseigner — aucune valeur ne va dans git
-docker build -t feedys:1.0.0 --build-arg FEEDYS_VERSION=1.0.0 .
+docker pull ghcr.io/prfctv/feedys:1.0.0              # ⛔ l’étiquette EST la version, et FEEDYS_VERSION vaut la même
 docker compose -f docker-compose.production.yml up -d
 curl -fsS http://localhost:3000/sante                # {"etat":"ok","migrations":"a_jour",…}
+```
+
+⚠️ **Pas d’étiquette `latest`, et c’est délibéré** : ce qui décide de mettre à jour le serveur de
+quelqu’un d’autre, c’est un humain ([D-028](00-Projet/DECISIONS_LOG.md)).
+
+Construire soi-même reste possible, et c’est le chemin sur une machine **arm64**, pour laquelle rien
+n’est publié :
+
+```bash
+docker build -t feedys:1.0.0 --build-arg FEEDYS_VERSION=1.0.0 .
 ```
 
 Au démarrage, dans l’ordre : les variables obligatoires, la base, les migrations, l’empreinte de
@@ -216,6 +233,9 @@ docker compose -f docker-compose.production.yml -f docker-compose.tls.yml up -d
 
 # la machine a déjà un proxy → un vhost, et surtout PAS un second proxy
 #   deploiement/nginx-feedys.conf.exemple
+#
+# ce proxy est celui de Kamal → Feedys se pose en accessoire, dix lignes de deploy.yml
+#   04-Architecture/hebergement.md §Le cas Kamal
 ```
 
 Puis la sauvegarde — un dump quotidien, gardé 7 jours :
