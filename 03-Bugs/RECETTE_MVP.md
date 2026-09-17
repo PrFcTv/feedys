@@ -212,7 +212,8 @@ de panne de [D-029](../00-Projet/DECISIONS_LOG.md) — une clé révoquée —, 
 - **Le point 1, à la voix.** La clé de modèle du poste est refusée : la dictée irait jusqu’à
   l’ingestion, mais aucune carte ni aucune note ne viendrait. ⛔ **Il reste dû** : P-017 a modifié
   `useDictee.ts` après la dernière dictée humaine (2026-09-05), et `1.0.0` est partie sans
-  (relecture du 2026-09-17, constat 4). À rejouer avec une clé valide **avant la fusion de P-030**.
+  (relecture du 2026-09-17, constat 4). À rejouer avec une clé valide **avant la première pose (P-019)** — P-030 a été fusionnée sans elle,
+  par décision du développeur, le 2026-09-17.
 - **Un vrai message Telegram sur un vrai téléphone.** ⛔ Par décision, pas par oubli : un bot par
   installation, et son jeton se pose à l’intégration dans chaque ERP, jamais dans le dépôt
   ([D-030](../00-Projet/DECISIONS_LOG.md)). Il sera joué au point 7 de la liste d’installation

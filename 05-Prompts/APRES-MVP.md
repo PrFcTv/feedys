@@ -30,7 +30,7 @@ ce qu’on imagine.
 | P-027 · ce que Feedys impose à son hôte | [BUGS_LOG] 018, [D-027](../00-Projet/DECISIONS_LOG.md) | ✅ fait |
 | P-028 · les indices techniques | [D-026](../00-Projet/DECISIONS_LOG.md), T-011 | ✅ fait — **hors séquence** |
 | P-029 · une installation par client | [D-028](../00-Projet/DECISIONS_LOG.md), [D-029](../00-Projet/DECISIONS_LOG.md) | ✅ fait — **hors séquence**, `1.0.0` publiée |
-| P-030 · aucune note ne se perd, et Telegram prévient | [BUGS_LOG] 019, T-012, la relecture du 2026-09-17 | ⏳ **en PR** — ⛔ à fusionner AVANT P-019 |
+| P-030 · aucune note ne se perd, et Telegram prévient | [BUGS_LOG] 019, T-012, la relecture du 2026-09-17 | ✅ fait — [#31](https://github.com/PrFcTv/feedys/pull/31). ⏳ la dictée à la voix reste due **avant P-019** |
 
 ⚠️ **P-024 n’a pas de section de prompt ci-dessous, et c’est normal** : il est né d’une relecture
 de P-020, pas de la planification. Ce qu’il fait tient dans
@@ -1196,7 +1196,8 @@ T-012 clos ou requalifié · les six checks sont verts.
 ⚠️ **État au 2026-09-17** ([RECETTE_MVP] §P-030) : « Refaire la note » et l’alerte sans Telegram
 sont vérifiés **dans l’image**. ⛔ **Le vrai message Telegram est reporté à la première
 intégration**, par décision — un bot par installation, jeton posé chez le client, jamais dans le
-dépôt ([T-013]). ⏳ **La dictée à la voix reste due avant la fusion** : la clé de modèle du poste
+dépôt ([T-013]). ⏳ **La dictée à la voix reste due avant P-019** — la PR a été fusionnée sans elle, par décision du
+développeur : la clé de modèle du poste
 est refusée (401).
 
 [T-013]: ../00-Projet/TICKETS_DIFFERES.md
