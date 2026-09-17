@@ -49,11 +49,13 @@ référence du MVP marche de bout en bout.**
 | P-027 · ce que Feedys impose à son hôte | ✅ fait — la feuille est **construite** et n’exige plus rien du CSP de l’hôte ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 018), et `window.feedys.identite` accepte une **fonction** ([D-027](DECISIONS_LOG.md)). ⚠️ La capture, elle, coûte encore deux directives — [T-010](TICKETS_DIFFERES.md) |
 | P-026 · la réponse d’un clic | ✅ fait — le modèle déclare un axe fermé, le dépôt écrit les valeurs, et la réponse FIXE `impact` ou `recurrence` ([D-025](DECISIONS_LOG.md)) |
 | P-028 · les indices techniques | ✅ fait — le navigateur relève ce qu’il a vu avant l’ouverture, et Feedys **corrèle plutôt qu’il ne recopie** ([D-026](DECISIONS_LOG.md), [widget.md](../01-Specs/widget.md) §Les indices techniques). ⚠️ Renverse la règle d’occupation n°1 — et porte sa mesure : sous 20 % de retours avec indice, on retire le relevé passif. ⛔ Ni iframes, ni workers, ni avant-chargement — [T-011](TICKETS_DIFFERES.md) |
+| P-029 · une installation par client | ✅ fait — l’image est publiée sur GHCR, sur tag de version, et ce que la topologie coûte est écrit ([D-028](DECISIONS_LOG.md)) ; la clé du modèle est celle du développeur, plafonnée par client ([D-029](DECISIONS_LOG.md)). `1.0.0` est publiée |
+| P-030 · aucune note ne se perd, et Telegram prévient | ⏳ en PR — une panne du modèle ne perd plus la note ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 019), les alertes de `hebergement.md` existent, Telegram est le canal recommandé, et l’écart de version widget ↔ serveur est tenu par un test ([D-030](DECISIONS_LOG.md), [T-012](TICKETS_DIFFERES.md)). ⛔ **À fusionner avant P-019** |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
-**La suite est écrite** : [05-Prompts/APRES-MVP.md] — P-015 à P-026, dont le
-premier est joué. Le lot 7
+**La suite est écrite** : [05-Prompts/APRES-MVP.md] — P-015 à P-030. Tout est joué sauf P-019,
+qui attend un hôte réel, et P-021 à P-023, qui attendent P-019. Le lot 7
 finit un MVP qui n’est pas tout à fait fini (la recette non jouée, les deux défauts contournés
 de [BUGS_LOG](../03-Bugs/BUGS_LOG.md)), le lot 8 le met en service, le lot 9 est l’ordre de
 valeur ci-dessous. ⛔ Rien du lot 9 ne se commence avant qu’un vrai collaborateur ait parlé
@@ -83,7 +85,8 @@ C’est tout. Si ce parcours marche de bout en bout sur **un seul produit**, le 
 - plusieurs produits en parallèle — le modèle de données les prévoit, l’écran de gestion non ;
 - la relecture de l’audio dans le back-office (`wavesurfer`) ;
 - le rejeu de session (`rrweb`) ;
-- Slack, les webhooks, l’ouverture d’issues ;
+- Slack, les webhooks, l’ouverture d’issues — ⚠️ **Telegram en est sorti** le 2026-09-17, parce
+  qu’il ne porte pas la note : un avis sans parole, et les alertes ([D-030](DECISIONS_LOG.md)) ;
 - le retour vers le collaborateur (« c’est corrigé ») ;
 - le regroupement de retours similaires ;
 - tout écran d’administration au-delà de la liste et de la fiche.
@@ -124,10 +127,14 @@ Pour couper court, ces sujets sont **hors périmètre définitivement**, pas « 
 - le multi-tenant, les organisations, la facturation, les comptes utilisateurs ;
 - **un agrégateur des installations** — une console, un tableau de bord ou une API qui verrait
   plusieurs clients à la fois. C’est du multi-tenant sous un autre nom, et ce serait le seul
-  composant à qui il faudrait ouvrir toutes les bases en même temps. L’email est le seul canal qui
-  centralise, et il suffit ([D-028](DECISIONS_LOG.md)) ;
+  composant à qui il faudrait ouvrir toutes les bases en même temps. Telegram et l’email sont les
+  canaux qui centralisent, et ils suffisent ([D-028](DECISIONS_LOG.md), [D-030](DECISIONS_LOG.md)) ;
 - **tout « phone home »** — vérification de version, statistiques d’usage, remontée d’erreurs vers
   le développeur. Le conteneur ne dépend de rien d’extérieur, et c’est une clause de contrat autant
   qu’une règle d’architecture ;
+  ⚠️ **Précisé le 2026-09-17** ([D-030](DECISIONS_LOG.md)) : les alertes partent au prestataire, par
+  le bot Telegram de CETTE installation, et la phrase de contrat les nomme une par une — deux
+  indicateurs d’usage compris. Ce qui n’arrivera pas reste ce qui est écrit : un canal vers un serveur
+  de l’éditeur, une remontée que le contrat ne nomme pas, ou un service qui les verrait toutes ;
 - le support en direct, la réponse humaine dans le widget ;
 - une application mobile.

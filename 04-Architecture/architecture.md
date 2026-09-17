@@ -104,7 +104,7 @@ endroit que son appel, et **on peut changer de modèle en éditant un fichier**.
 | 5 | `POST /api/retours/:id/tour` — le modèle rend compréhension + question. | `domaine/entretien` |
 | 6 | La carte s’affiche. Le collaborateur corrige ou répond. Retour en 5, deux fois au plus. | widget |
 | 7 | Fin d’entretien : `generateObject` produit la synthèse typée. | `domaine/synthese` |
-| 8 | La note part par email. Elle devient lisible par MCP et dans le back-office. | `infra` |
+| 8 | La note est lisible par MCP et dans le back-office ; un avis part par Telegram, la note entière par email. Si le modèle n’a pas répondu, le filet la redemande (P-030). | `infra` |
 
 ⛔ **L’étape 4 est un invariant : le retour est persisté avant tout appel au modèle.** Si le
 modèle échoue, expire, ou si le collaborateur ferme l’onglet, **la parole est déjà sauvée**. Rien

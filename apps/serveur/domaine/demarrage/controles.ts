@@ -37,13 +37,15 @@ export const VARIABLES_OBLIGATOIRES = [
  *    (01-Specs/ingestion.md §L’invariant). Refuser de démarrer pour ça perdrait
  *    de la parole au nom d’un confort.
  */
+/**
+ * ⚠️ Les canaux de notification n’y sont plus (P-030) : l’absence du SMTP n’est
+ *    une dégradation que si Telegram manque AUSSI. Ils ont leur propre verdict,
+ *    `verdictCanaux`, juste en dessous.
+ */
 export const VARIABLES_RECOMMANDEES: ReadonlyArray<{
   readonly nom: string
   readonly consequence: string
 }> = [
-  { nom: 'SMTP_URL', consequence: 'la note ne part par email pour personne' },
-  { nom: 'FEEDYS_EMAIL_DE', consequence: 'la note ne part par email pour personne' },
-  { nom: 'FEEDYS_EMAIL_A', consequence: 'la note ne part par email pour personne' },
   { nom: 'FEEDYS_MCP_JETON', consequence: 'l’API MCP répond 503 et ne sert rien' },
   { nom: 'FEEDYS_VERSION', consequence: 'le pied de back-office affiche « dev »' },
   {
@@ -52,6 +54,104 @@ export const VARIABLES_RECOMMANDEES: ReadonlyArray<{
       'les migrations tournent avec le rôle de service — hebergement.md §Le rôle de connexion',
   },
 ]
+
+export const VARIABLES_TELEGRAM = ['FEEDYS_TELEGRAM_JETON', 'FEEDYS_TELEGRAM_CHAT'] as const
+export const VARIABLES_EMAIL = ['SMTP_URL', 'FEEDYS_EMAIL_DE', 'FEEDYS_EMAIL_A'] as const
+
+export type EtatCanal =
+  | { readonly etat: 'configure' }
+  | { readonly etat: 'absent' }
+  /** Une partie seulement : le canal ne part pas, et c’est presque toujours un oubli. */
+  | { readonly etat: 'incomplet'; readonly manquantes: readonly string[] }
+  /** ⚠️ Présentes, mais pas à la forme attendue. ⛔ La valeur n’est jamais citée. */
+  | { readonly etat: 'mal_forme'; readonly variables: readonly string[] }
+
+export interface VerdictCanaux {
+  readonly telegram: EtatCanal
+  readonly email: EtatCanal
+}
+
+/**
+ * ⚠️ La forme d’un jeton de bot : un identifiant, deux-points, un secret. Un chat
+ *    est un nombre — négatif pour un groupe — ou `@nom` pour un canal public.
+ */
+const FORME_JETON = /^\d+:[A-Za-z0-9_-]{20,}$/
+const FORME_CHAT = /^(-?\d+|@[A-Za-z][A-Za-z0-9_]{4,})$/
+
+function etatDe(
+  env: Record<string, string | undefined>,
+  noms: readonly string[],
+): { etat: 'configure' } | { etat: 'absent' } | { etat: 'incomplet'; manquantes: string[] } {
+  const manquantes = noms.filter((nom) => (env[nom]?.trim() ?? '') === '')
+  if (manquantes.length === 0) return { etat: 'configure' }
+  if (manquantes.length === noms.length) return { etat: 'absent' }
+  return { etat: 'incomplet', manquantes }
+}
+
+/**
+ * Les canaux de notification — Telegram, recommandé, et l’email ([D-030]).
+ *
+ * ⛔ Ce verdict n’empêche jamais de démarrer : un retour sans notification est
+ *    un retour reçu (01-Specs/ingestion.md §L’invariant).
+ */
+export function verdictCanaux(env: Record<string, string | undefined>): VerdictCanaux {
+  let telegram: EtatCanal = etatDe(env, VARIABLES_TELEGRAM)
+
+  if (telegram.etat === 'configure') {
+    const variables = [
+      ...(FORME_JETON.test(env['FEEDYS_TELEGRAM_JETON']?.trim() ?? '') ? [] : ['FEEDYS_TELEGRAM_JETON']),
+      ...(FORME_CHAT.test(env['FEEDYS_TELEGRAM_CHAT']?.trim() ?? '') ? [] : ['FEEDYS_TELEGRAM_CHAT']),
+    ]
+    if (variables.length > 0) telegram = { etat: 'mal_forme', variables }
+  }
+
+  return { telegram, email: etatDe(env, VARIABLES_EMAIL) }
+}
+
+/**
+ * Ce que le démarrage en dit.
+ *
+ * ⚠️ TELEGRAM SANS SMTP N’EST PAS UNE DÉGRADATION : c’est la configuration
+ *    recommandée, et rien n’est dit. Ce qui en est une : aucun canal — la note ne
+ *    part pour personne ; et pas de Telegram — les alertes restent en console,
+ *    parce qu’une alerte ne passe pas par le SMTP qu’elle pourrait surveiller.
+ *
+ * ⛔ Aucune valeur n’est citée, seulement des noms.
+ */
+export function messagesCanaux(verdict: VerdictCanaux): string[] {
+  const alertes: string[] = []
+  const { telegram, email } = verdict
+
+  if (telegram.etat === 'incomplet') {
+    alertes.push(
+      `${telegram.manquantes.join(', ')} est absente — Telegram ne part pas : ni l’avis des nouveaux retours, ni les alertes.`,
+    )
+  }
+  if (telegram.etat === 'mal_forme') {
+    alertes.push(
+      `${telegram.variables.join(', ')} n’a pas la forme attendue — Telegram refusera l’envoi (04-Architecture/hebergement.md §Telegram).`,
+    )
+  }
+  if (email.etat === 'incomplet') {
+    alertes.push(`${email.manquantes.join(', ')} est absente — la note ne part pas par email.`)
+  }
+
+  const telegramPart = telegram.etat === 'configure' || telegram.etat === 'mal_forme'
+
+  if (!telegramPart && email.etat !== 'configure') {
+    alertes.push(
+      'aucun canal de notification — la note ne part pour personne, et les alertes restent en console. ' +
+        'FEEDYS_TELEGRAM_JETON et FEEDYS_TELEGRAM_CHAT sont recommandées.',
+    )
+  } else if (!telegramPart) {
+    alertes.push(
+      'Telegram n’est pas configuré — la note part par email, mais les alertes restent en console ' +
+        '(FEEDYS_TELEGRAM_JETON, FEEDYS_TELEGRAM_CHAT).',
+    )
+  }
+
+  return alertes
+}
 
 /**
  * Le budget du widget — 60 Ko gzip (01-Specs/widget.md §4).

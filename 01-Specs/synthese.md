@@ -9,7 +9,7 @@ dictée, l’entretien, le contexte — n’existe que pour la fabriquer.
 
 Elle est produite **une fois**, à la fin de l’entretien, par un appel `generateObject` — donc
 typée, pas du texte à reparser. Elle est stockée telle quelle et rendue en trois formes : email,
-fiche du back-office, réponse MCP.
+fiche du back-office, réponse MCP. Telegram l’**annonce**, et n’en porte rien (§Le rendu Telegram).
 
 ## La structure
 
@@ -87,7 +87,25 @@ avalé. Les trois chemins de [entretien.md](entretien.md) y mènent :
 | abandon | `abandonne` | « la personne a refermé le panneau ; rien n’est confirmé » |
 
 ⛔ **Une synthèse qui rate ne perd rien.** Le retour est en base depuis l’ingestion et clos depuis
-la fin d’entretien ; il lui manque sa note, c’est tout, et la note est rejouable.
+la fin d’entretien ; il lui manque sa note, c’est tout — et **le filet la redemande tout seul**
+(§Quand elle rate).
+
+### Quand elle rate — les reprises
+
+⚠️ **Jusqu’au 2026-09-17, « la note est rejouable » était une promesse sans chemin** : une panne du
+modèle perdait la note pour toujours, et l’outil cité n’écrit rien ([BUGS_LOG](../03-Bugs/BUGS_LOG.md)
+019, [D-030](../00-Projet/DECISIONS_LOG.md)).
+
+- **Le filet redemande** la note de tout retour clos qui n’en a pas — refermé par le widget comme par
+  le filet —, espacé en doublant à partir de cinq minutes, **huit fois au plus**. Une note reprise
+  part par le même chemin que les autres : elle est écrite, puis notifiée.
+- **Au plafond, il renonce**, le back-office le dit, et une alerte part.
+- ⛔ **Un retour sans parole n’est jamais retenté** : un retour dicté sans transcript ne produira
+  jamais de note.
+- **« Refaire la note »**, sur la fiche du back-office, la demande à la main — ⛔ jamais pour un retour
+  qui a déjà la sienne, ni pour un entretien en cours.
+
+Le détail d’exploitation est dans [hebergement.md](../04-Architecture/hebergement.md) §Le filet.
 
 ### Le schéma est UNE définition
 
@@ -181,6 +199,10 @@ La note est rendue telle que le développeur la lirait, **citations passées par
 verbatim** — les citations jetées sont affichées comme telles. C’est là qu’on voit un prompt qui
 dérive.
 
+⛔ **Il n’écrit rien, et il ne rattrape rien.** C’est un outil de mise au point, sur le poste du
+développeur ; il n’existe pas dans l’image de production. Refaire une note manquante, c’est le filet,
+ou le bouton du back-office (§Quand elle rate).
+
 ## Le rendu par email
 
 Sujet :
@@ -238,7 +260,8 @@ une ligne `echoue` datée mentirait au premier coup d’œil.
 note est écrite avant qu’on tente quoi que ce soit, et elle reste lisible au back-office et par MCP.
 L’email est un confort, pas le chemin.
 
-⛔ **Une note ne se renvoie pas.** Une seule notification par retour.
+⛔ **Une note ne se renvoie pas.** Une seule notification par retour **et par canal** — l’index
+`notifications_retour_canal_uniq` le tient en base.
 
 ### Relire la mise en forme sans rien envoyer
 
@@ -249,6 +272,34 @@ pnpm emails:apercu
 Rend une note **figée et inventée** (`domaine/notification/exemple.ts`) dans `.apercu-emails/`. ⛔ Il
 n’envoie rien et **ne lit aucun secret** : on doit pouvoir relire la mise en forme d’un email sur un
 poste sans configuration de messagerie, et sans risquer d’écrire à quelqu’un.
+
+## Le rendu Telegram — un avis, pas la note
+
+**Le canal recommandé** ([D-030](../00-Projet/DECISIONS_LOG.md)). Quand les deux sont configurés,
+les deux partent : l’avis sur le téléphone, la note dans la boîte.
+
+```
+Feedys · Pistache
+Nouveau retour · bug
+4 sept. 2026 à 09:14
+https://feedys.exemple.fr/bo/r/clx8f2a…
+```
+
+⛔ **Rien de la parole, et rien de la personne.** Ni le titre — le modèle l’écrit à partir de ce qui
+a été dit, et il peut porter un nom —, ni le résumé, ni une citation, ni la zone, ni l’auteur, ni
+l’URL de la page où il était. Telegram Messenger Inc. est hors de l’EEE, ses messages de bot ne sont
+pas chiffrés de bout en bout, et il ne propose pas de contrat de sous-traitance : la parole des
+salariés d’un client n’a rien à y faire. Pour lire, on ouvre la fiche.
+
+⚠️ **Texte brut**, sans `parse_mode` : `<b>`, `&` et `_*[` arrivent tels quels. **Aperçu de lien
+désactivé.** Tronqué à 4 096 caractères, ⛔ **le lien reste**.
+
+⚠️ **L’heure est celle du collaborateur**, comme dans l’email.
+
+Ce que devient un envoi qui rate est la même chose que pour l’email : la ligne passe à `echoue`, avec
+une raison lisible — ⛔ **nettoyée de tout jeton**, qui est dans l’URL de l’API. Un `429` est
+réessayé après l’attente demandée (deux fois, trente secondes au plus) ; un `400` ou un `403` échoue
+tout de suite, sans boucle. `apps/serveur/domaine/notification/telegram.ts`.
 
 ## Le rendu MCP
 

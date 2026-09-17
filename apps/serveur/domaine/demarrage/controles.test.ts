@@ -7,8 +7,10 @@ import {
   indiceDeRole,
   messageVariablesManquantes,
   messageWidget,
+  messagesCanaux,
   variablesManquantes,
   messageRole,
+  verdictCanaux,
   verdictRole,
   verdictWidget,
 } from './controles'
@@ -49,13 +51,102 @@ describe('variablesManquantes', () => {
     ])
   })
 
-  it('range SMTP et le jeton MCP en recommandées — leur absence dégrade, elle ne casse pas', () => {
-    const { SMTP_URL: _s, FEEDYS_MCP_JETON: _j, ...sansConfort } = COMPLET
+  it('range le jeton MCP en recommandée — son absence dégrade, elle ne casse pas', () => {
+    const { FEEDYS_MCP_JETON: _j, ...sansConfort } = COMPLET
     const verdict = variablesManquantes(sansConfort)
 
     expect(verdict.obligatoires).toEqual([])
-    expect(verdict.recommandees.map((m) => m.nom)).toEqual(['SMTP_URL', 'FEEDYS_MCP_JETON'])
-    expect(verdict.recommandees[0]?.consequence).toContain('email')
+    expect(verdict.recommandees.map((m) => m.nom)).toEqual(['FEEDYS_MCP_JETON'])
+  })
+
+  it('⚠️ ne range plus les canaux parmi les recommandées — ils ont leur propre verdict', () => {
+    const { SMTP_URL: _s, FEEDYS_EMAIL_DE: _d, FEEDYS_EMAIL_A: _a, ...sansEmail } = COMPLET
+    expect(variablesManquantes(sansEmail).recommandees).toEqual([])
+  })
+})
+
+/** ⛔ Inventé, sans valeur nulle part. */
+const TELEGRAM = {
+  FEEDYS_TELEGRAM_JETON: '000000123:jeton-invente-pour-les-tests-sans-valeur',
+  FEEDYS_TELEGRAM_CHAT: '-1000000000042',
+}
+const EMAIL = {
+  SMTP_URL: 'smtp://relais.exemple.fr',
+  FEEDYS_EMAIL_DE: 'feedys@exemple.fr',
+  FEEDYS_EMAIL_A: 'dev@exemple.fr',
+}
+
+describe('verdictCanaux — Telegram recommandé, l’email ensuite (D-030)', () => {
+  it('⚠️ Telegram sans SMTP n’est PAS une dégradation : rien n’est dit', () => {
+    const verdict = verdictCanaux(TELEGRAM)
+
+    expect(verdict).toEqual({ telegram: { etat: 'configure' }, email: { etat: 'absent' } })
+    expect(messagesCanaux(verdict)).toEqual([])
+  })
+
+  it('les deux configurés : rien n’est dit', () => {
+    expect(messagesCanaux(verdictCanaux({ ...TELEGRAM, ...EMAIL }))).toEqual([])
+  })
+
+  it('⛔ aucun canal : la note ne part pour personne, et le démarrage le dit', () => {
+    const messages = messagesCanaux(verdictCanaux({}))
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toContain('la note ne part pour personne')
+    expect(messages[0]).toContain('les alertes restent en console')
+  })
+
+  it('⛔ l’email sans Telegram : la note part, mais les alertes restent en console', () => {
+    const messages = messagesCanaux(verdictCanaux(EMAIL))
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toContain('les alertes restent en console')
+  })
+
+  it('un canal à moitié configuré nomme ce qui manque', () => {
+    const verdict = verdictCanaux({ FEEDYS_TELEGRAM_JETON: TELEGRAM.FEEDYS_TELEGRAM_JETON, ...EMAIL })
+
+    expect(verdict.telegram).toEqual({ etat: 'incomplet', manquantes: ['FEEDYS_TELEGRAM_CHAT'] })
+    expect(messagesCanaux(verdict)[0]).toContain('FEEDYS_TELEGRAM_CHAT est absente')
+  })
+
+  it('un SMTP à moitié configuré aussi', () => {
+    const verdict = verdictCanaux({ ...TELEGRAM, SMTP_URL: EMAIL.SMTP_URL })
+
+    expect(verdict.email).toEqual({
+      etat: 'incomplet',
+      manquantes: ['FEEDYS_EMAIL_DE', 'FEEDYS_EMAIL_A'],
+    })
+  })
+
+  it('accepte un groupe (négatif), une personne (positif), et un canal public (@nom)', () => {
+    for (const chat of ['-1000000000042', '123456789', '@annonces_exemple']) {
+      expect(verdictCanaux({ ...TELEGRAM, FEEDYS_TELEGRAM_CHAT: chat }).telegram).toEqual({
+        etat: 'configure',
+      })
+    }
+  })
+
+  it('⛔ une forme fausse est dite — sans jamais citer la valeur', () => {
+    const verdict = verdictCanaux({
+      FEEDYS_TELEGRAM_JETON: 'pas-un-jeton-secret-valeur',
+      FEEDYS_TELEGRAM_CHAT: 'chat-invalide',
+    })
+    const messages = messagesCanaux(verdict).join(' | ')
+
+    expect(verdict.telegram).toEqual({
+      etat: 'mal_forme',
+      variables: ['FEEDYS_TELEGRAM_JETON', 'FEEDYS_TELEGRAM_CHAT'],
+    })
+    expect(messages).toContain('FEEDYS_TELEGRAM_JETON')
+    expect(messages).not.toContain('pas-un-jeton-secret-valeur')
+    expect(messages).not.toContain('chat-invalide')
+  })
+
+  it('une espace de trop compte comme absente', () => {
+    expect(verdictCanaux({ FEEDYS_TELEGRAM_JETON: '  ', FEEDYS_TELEGRAM_CHAT: '' }).telegram).toEqual({
+      etat: 'absent',
+    })
   })
 })
 

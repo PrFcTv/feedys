@@ -1,7 +1,8 @@
 'use server'
 
 /**
- * Les deux seules écritures du back-office, plus la déconnexion.
+ * Les deux seules corrections du back-office, les deux gestes de P-030, et la
+ * déconnexion.
  *
  * ⛔ TROIS CHAMPS, ET PAS UN DE PLUS : `statut`, `type`, `zone`. Le refus est
  *    porté par `domaine/backoffice/correction.ts`, dont les schémas sont
@@ -14,6 +15,12 @@
  *    (`infra/base/depot-bo.ts`). Un changement sans trace, c’est une histoire du
  *    retour qui ment.
  *
+ * ⚠️ DEUX GESTES DE PLUS, ET CE NE SONT PAS DES CORRECTIONS (P-030) :
+ *    - « Refaire la note » demande la note d’un retour qui n’en a pas, par le
+ *      chemin ordinaire. ⛔ Il ne touche ni au statut, ni aux étiquettes à la
+ *      main, ni au fil — et il refuse un retour qui a déjà sa note ;
+ *    - « Envoyer un message d’essai » vérifie Telegram. ⛔ Il n’écrit rien.
+ *
  * ⚠️ La garde est répétée ici : une garde posée seulement sur l’affichage
  *    protège l’écran, pas l’écriture.
  */
@@ -24,9 +31,13 @@ import {
   lireChangementEtiquettes,
   lireChangementStatut,
 } from '../../../domaine/backoffice/correction'
+import { REFUS_REFAIRE } from '../../../domaine/backoffice/sans-note'
+import { refaireLaNote } from '../../../domaine/synthese/refaire'
 import { exigerSession, fermerSession } from '../../../infra/backoffice/garde'
 import { pool } from '../../../infra/base/connexion'
 import { creerDepotBackOffice } from '../../../infra/base/depot-bo'
+import type { IssueEssai } from '../../../infra/composition'
+import { envoyerEssaiTelegram, portsRefaire } from '../../../infra/composition'
 
 export type Issue = { readonly ok: true } | { readonly ok: false; readonly message: string }
 
@@ -87,6 +98,29 @@ export async function corrigerEtiquettes(retourId: string, donnees: FormData): P
   revalidatePath(`/bo/r/${retourId}`)
   revalidatePath('/bo')
   return { ok: true }
+}
+
+/**
+ * « Refaire la note ».
+ *
+ * ⚠️ L’identifiant est lié côté serveur, dans la page — il ne transite par aucun
+ *    champ de formulaire.
+ */
+export async function refaireNote(retourId: string): Promise<Issue> {
+  await exigerSession()
+
+  const issue = await refaireLaNote(retourId, portsRefaire())
+  if (!issue.ok) return { ok: false, message: REFUS_REFAIRE[issue.motif] ?? 'Refusé.' }
+
+  revalidatePath(`/bo/r/${retourId}`)
+  revalidatePath('/bo')
+  return { ok: true }
+}
+
+/** Le message d’essai de Telegram. ⛔ Il n’écrit rien en base. */
+export async function envoyerEssai(): Promise<IssueEssai> {
+  await exigerSession()
+  return envoyerEssaiTelegram()
 }
 
 export async function seDeconnecter(): Promise<void> {

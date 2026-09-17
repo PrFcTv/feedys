@@ -9,8 +9,12 @@
  * ⛔ Rien n’est modifiable ici. Ni le résumé, ni les citations. Ce qui se corrige
  *    — le type et la zone — a son propre formulaire.
  */
+import type { ReactNode } from 'react'
+
+import { dateComplete } from '../../domaine/backoffice/dates'
 import { LIBELLES_TYPE } from '../../domaine/backoffice/filtres'
 import type { Synthese } from '../../domaine/synthese/schema'
+import type { SuiviNoteFiche } from '../../infra/base/depot-bo'
 import { PastilleConfiance, PastilleType } from '../pastille'
 
 const IMPACTS: Record<Synthese['impact'], string> = {
@@ -94,14 +98,83 @@ export function BlocSynthese({ synthese }: { synthese: Synthese }) {
   )
 }
 
-export function SansSynthese({ type }: { type: string | null }) {
+/**
+ * La fiche d’un retour sans note — et ce qu’il y a à faire.
+ *
+ * ⛔ Elle ne renvoie plus à `pnpm entretien:rejouer` : cet outil n’écrit rien, et
+ *    il n’existe pas dans l’image de production (BUGS_LOG 019). Ce qui marche
+ *    partout, c’est le bouton qu’elle porte.
+ *
+ * ⚠️ Quatre situations, qui ne demandent pas le même geste. Le bouton n’est pas
+ *    proposé quand il ne peut que refuser : un entretien en cours, un fil sans
+ *    parole.
+ */
+export function SansSynthese({
+  type,
+  statut,
+  suivi,
+  fuseau,
+  bouton,
+}: {
+  type: string | null
+  statut: string
+  suivi: SuiviNoteFiche
+  fuseau: string | null | undefined
+  bouton: ReactNode
+}) {
+  const intact = (
+    <>
+      ⚠️ <strong className="font-medium text-encre">Rien n’est perdu pour autant</strong> : la
+      parole est en base depuis l’ingestion, et le fil ci-dessous est intact.
+    </>
+  )
+  const derniere = suivi.repriseLe ? ` — la dernière le ${dateComplete(suivi.repriseLe, fuseau)}` : ''
+
+  let texte: ReactNode
+  let proposerBouton = true
+
+  if (statut === 'en_cours') {
+    texte = <>L’entretien est encore en cours : la note sera rédigée à sa fin.</>
+    proposerBouton = false
+  } else if (suivi.etat === 'sans_parole') {
+    texte = (
+      <>
+        Il n’y a rien à synthétiser : le fil ne contient aucune parole écrite. Un retour dicté dont
+        le transcript n’est pas arrivé ne produira pas de note. Le fil ci-dessous est intact.
+      </>
+    )
+    proposerBouton = false
+  } else if (suivi.etat === 'impossible') {
+    texte = (
+      <>
+        Le modèle n’a pas répondu, et le filet a renoncé après {suivi.reprises ?? 0} reprise(s)
+        {suivi.impossibleLe ? `, le ${dateComplete(suivi.impossibleLe, fuseau)}` : ''}. {intact}{' '}
+        Refaites la note quand le modèle répond de nouveau.
+      </>
+    )
+  } else if (suivi.etat === 'en_reprise') {
+    texte = (
+      <>
+        La synthèse a échoué, et le filet la redemande tout seul : {suivi.reprises} reprise(s)
+        {derniere}. {intact} Vous pouvez aussi la refaire maintenant.
+      </>
+    )
+  } else {
+    texte = (
+      <>
+        Ce retour n’a pas encore de note. La synthèse a échoué ou n’a pas eu lieu — le filet la
+        redemandera dans quelques minutes. {intact}
+      </>
+    )
+  }
+
   return (
-    <p className="max-w-prose text-sm leading-relaxed text-encre-2">
-      Ce retour n’a pas de note. La synthèse a échoué, ou l’entretien s’est refermé sans un mot —
-      ⚠️ <strong className="font-medium text-encre">rien n’est perdu pour autant</strong> : la parole
-      est en base depuis l’ingestion, et le fil ci-dessous est intact. La note est rejouable avec{' '}
-      <code className="font-mono text-[13px]">pnpm entretien:rejouer</code>.
-      {type === null ? '' : ` Le type actuel est « ${LIBELLES_TYPE[type as 'bug'] ?? type} ».`}
-    </p>
+    <div>
+      <p className="max-w-prose text-sm leading-relaxed text-encre-2">
+        {texte}
+        {type === null ? '' : ` Le type actuel est « ${LIBELLES_TYPE[type as 'bug'] ?? type} ».`}
+      </p>
+      {proposerBouton ? bouton : null}
+    </div>
   )
 }

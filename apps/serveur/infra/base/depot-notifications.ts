@@ -7,6 +7,7 @@
  *    lui-même, après une clôture déjà autorisée. Aucune requête client n’arrive ici.
  */
 import type {
+  CanalNotification,
   PortDepotNotifications,
 } from '../../domaine/notification/envoyer'
 import type { RetourANotifier } from '../../domaine/notification/message'
@@ -35,11 +36,20 @@ const CHARGER = `
    limit 1
 `
 
-const DEJA_ENVOYEE = 'select 1 from notifications where retour_id = $1 limit 1'
+const DEJA_ENVOYEE = `
+  select 1 from notifications where retour_id = $1 and canal = $2::canal_notification limit 1
+`
 
+/**
+ * ⛔ `on conflict … do nothing` : c’est l’index `notifications_retour_canal_uniq`
+ *    (0011) qui tranche une course entre deux envois du même canal. Aucune
+ *    ligne rendue veut dire « déjà ouverte », pas « erreur ».
+ */
 const OUVRIR = `
   insert into notifications (id, retour_id, canal, destinataire, statut)
-  values ($1, $2, 'email'::canal_notification, $3, 'en_attente')
+  values ($1, $2, $3::canal_notification, $4, 'en_attente')
+  on conflict (retour_id, canal) do nothing
+  returning id
 `
 
 /**
@@ -105,24 +115,28 @@ export function creerDepotNotifications(
       }
     },
 
-    async dejaEnvoyee(retourId: string): Promise<boolean> {
+    async dejaEnvoyee(retourId: string, canal: CanalNotification): Promise<boolean> {
       const connexion = await bassin.connect()
 
       try {
-        const { rows } = await connexion.query(DEJA_ENVOYEE, [retourId])
+        const { rows } = await connexion.query(DEJA_ENVOYEE, [retourId, canal])
         return rows.length > 0
       } finally {
         connexion.release()
       }
     },
 
-    async ouvrir(retourId: string, destinataire: string): Promise<string> {
+    async ouvrir(
+      retourId: string,
+      destinataire: string,
+      canal: CanalNotification,
+    ): Promise<string | null> {
       const connexion = await bassin.connect()
-      const id = identifiant()
 
       try {
-        await connexion.query(OUVRIR, [id, retourId, destinataire])
-        return id
+        const { rows } = await connexion.query(OUVRIR, [identifiant(), retourId, canal, destinataire])
+        const ligne = rows[0]
+        return ligne === undefined ? null : String(ligne['id'])
       } finally {
         connexion.release()
       }

@@ -13,6 +13,22 @@
  * ⚠️ Le widget n’importe ce module qu’en `import type` : zod ne doit pas entrer
  *    dans `widget.js`, dont le budget est de 60 Ko gzip (01-Specs/widget.md).
  *    C’est le serveur qui valide, et c’est lui qui paie zod.
+ *
+ * ⛔ LA RÈGLE DES VERSIONS (P-030, [T-012]) — un widget et le serveur qui le sert
+ *    peuvent avoir une version d’écart : `widget.js` est gardé un jour en
+ *    `stale-while-revalidate`, et un onglet de logiciel métier reste ouvert
+ *    toute la journée. Donc :
+ *    - un champ de REQUÊTE nouveau est toujours facultatif ;
+ *    - les ENVELOPPES de requête ignorent ce qu’elles ne connaissent pas — un
+ *      widget plus récent, après un retour arrière du serveur, ne perd pas sa
+ *      parole pour un champ que l’ancien serveur ignore ;
+ *    - un champ de RÉPONSE ne se renomme ni ne disparaît : le widget lit les
+ *      réponses à la main, sans zod, et un renommage casserait en silence tous
+ *      les onglets ouverts.
+ *    ⛔ `SchemaIndice` reste `.strict()` : c’est le mur de [D-026] contre
+ *    `message`. Un indice ne gagne donc jamais de champ — et le widget, sur un
+ *    400, renvoie la parole SANS indices ni capture (`envoi.ts`).
+ *    `tests/versions/` fige ce qu’envoie et lit chaque version publiée.
  */
 import { z } from 'zod'
 
@@ -132,6 +148,11 @@ export const SchemaIndice = z
  *
  * ⚠️ Tout est facultatif sauf l’URL : la collecte est en échec-doux côté widget.
  *    Une capture qui rate n’empêche jamais l’envoi (P-004).
+ *
+ * ⚠️ CLOSE ET TOLÉRANTE À LA FOIS, depuis P-030. Ce qui n’est pas dans la liste
+ *    est RETIRÉ, plus refusé : rien d’inconnu n’atteint la base, et un widget
+ *    plus récent que le serveur ne voit pas son retour entier rejeté. La
+ *    liste reste close — c’est ce qu’on garde qui l’est.
  */
 export const SchemaContexte = z
   .object({
@@ -165,7 +186,6 @@ export const SchemaContexte = z
      */
     indices: z.array(SchemaIndice).max(INDICES_MAX).optional(),
   })
-  .strict()
 
 /**
  * La charge d’un jeton d’identité — ce que le serveur de l’hôte signe.
@@ -222,7 +242,7 @@ export const SchemaCorpsRetour = z
     source: z.enum(['voix', 'texte']).optional(),
     contexte: SchemaContexte,
   })
-  .strict()
+  // ⚠️ Pas de `.strict()` : un champ inconnu est retiré (règle des versions, en tête).
   .refine((corps) => estNonVide(corps.texte) || corps.audio !== undefined, {
     message: 'Un retour porte du texte ou de l’audio.',
     path: ['texte'],
@@ -321,7 +341,7 @@ export const SchemaCorpsTour = z
     corrections: z.string().max(BORNES.texte).optional(),
     source: z.enum(['voix', 'texte']).optional(),
   })
-  .strict()
+  // ⚠️ Pas de `.strict()` : un champ inconnu est retiré (règle des versions, en tête).
   /**
    * ⛔ L’un sans l’autre n’a aucun sens, et la valeur doit APPARTENIR à l’axe.
    *    Sans ce contrôle, `{ axe: 'recurrence', valeurAxe: 'bloque' }` écrirait
@@ -400,7 +420,7 @@ export const SchemaCorpsFin = z
     transcriptBrut: z.string().max(BORNES.texte).optional(),
     corrections: z.string().max(BORNES.texte).optional(),
   })
-  .strict()
+// ⚠️ Pas de `.strict()` : un champ inconnu est retiré (règle des versions, en tête).
 
 /** Ce que la fin rend. Le widget n’en a besoin que pour cesser d’attendre. */
 export const SchemaFinRendue = z

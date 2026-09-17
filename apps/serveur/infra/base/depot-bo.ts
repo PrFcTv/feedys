@@ -19,6 +19,8 @@ import type {
 import { auditStatut } from '../../domaine/backoffice/correction'
 import type { Filtres, Statut, TypeRetour } from '../../domaine/backoffice/filtres'
 import { depuisDe } from '../../domaine/backoffice/filtres'
+import type { EtatSansNote } from '../../domaine/backoffice/sans-note'
+import { etatSansNote } from '../../domaine/backoffice/sans-note'
 import { lienCorrectif } from '../../domaine/retours/correctif'
 import { lienIndice } from '../../domaine/retours/indice'
 import type { Synthese } from '../../domaine/synthese/schema'
@@ -44,6 +46,8 @@ export interface LigneListe {
   readonly produitNom: string
   readonly creeLe: Date
   readonly confiance: 'haute' | 'moyenne' | 'basse' | null
+  /** Ce qu’on dit à la place du titre quand la note manque (P-030). */
+  readonly sansNote: EtatSansNote
 }
 
 export interface TourFiche {
@@ -104,6 +108,25 @@ export interface CorrectifFiche {
   readonly url: string | null
 }
 
+/**
+ * Où en est la note d’un retour qui n’en a pas (P-030).
+ *
+ * ⚠️ Lu, jamais écrit ici : ce sont le filet et ses reprises qui le tiennent.
+ */
+export interface SuiviNoteFiche {
+  readonly etat: EtatSansNote
+  readonly reprises: number | null
+  readonly repriseLe: Date | null
+  readonly impossibleLe: Date | null
+}
+
+/** Une notification, par canal. ⛔ Le destinataire n’est pas affiché : il n’apprend rien au lecteur. */
+export interface NotificationFiche {
+  readonly canal: 'email' | 'telegram'
+  readonly statut: string
+  readonly erreur: string | null
+}
+
 export interface Fiche {
   readonly id: string
   readonly statut: Statut
@@ -127,12 +150,15 @@ export interface Fiche {
   readonly contexte: ContexteFiche | null
   /** Ce que le navigateur a relevé avant l’ouverture (P-028). ⚠️ Liste vide si rien. */
   readonly indices: readonly IndiceFiche[]
-  readonly notification: { readonly statut: string; readonly erreur: string | null } | null
+  readonly suiviNote: SuiviNoteFiche
+  /** ⚠️ Une par canal, depuis P-030 — Telegram, puis l’email. */
+  readonly notifications: readonly NotificationFiche[]
 }
 
 const LISTE = `
   select r.id, r.titre, r.statut, r.type, r.zone, r.source,
          r.auteur_nom, r.identite_verifiee, r.cree_le,
+         r.synthese_reprises, r.synthese_impossible_motif,
          p.nom as produit_nom,
          s.confiance
     from retours r
@@ -151,18 +177,30 @@ const FICHE = `
          r.auteur_nom, r.auteur_role, r.identite_verifiee, r.cree_le, r.envoye_le,
          r.reponse_texte, r.reponse_envoyee_le, r.reponse_lue_le,
          r.correctif_ref, r.correctif_note, r.correctif_le,
+         r.synthese_reprises, r.synthese_reprise_le,
+         r.synthese_impossible_le, r.synthese_impossible_motif,
          p.nom as produit_nom, p.url_forge, p.url_observabilite,
          s.contenu, s.modele,
          c.url, c.titre_page, c.ecran, c.selecteur_dom, c.navigateur, c.systeme,
-         c.viewport_l, c.viewport_h, c.fuseau, c.capture_chemin,
-         n.statut as notification_statut, n.erreur as notification_erreur
+         c.viewport_l, c.viewport_h, c.fuseau, c.capture_chemin
     from retours r
     join produits p on p.id = r.produit_id
     left join syntheses s on s.retour_id = r.id
     left join contextes c on c.retour_id = r.id
-    left join notifications n on n.retour_id = r.id
    where r.id = $1
    limit 1
+`
+
+/**
+ * ⚠️ À part, et plus en jointure : depuis P-030, un retour a une notification
+ *    PAR CANAL. Une jointure dans `FICHE` doublait la ligne, et `limit 1` en
+ *    gardait une au hasard.
+ */
+const NOTIFICATIONS = `
+  select canal, statut, erreur
+    from notifications
+   where retour_id = $1
+   order by case canal when 'telegram' then 0 else 1 end
 `
 
 const FIL = `
@@ -285,6 +323,10 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
           produitNom: String(ligne['produit_nom']),
           creeLe: ligne['cree_le'] as Date,
           confiance: (ouNul(ligne['confiance']) as LigneListe['confiance']) ?? null,
+          sansNote: etatSansNote({
+            reprises: entierOuNul(ligne['synthese_reprises']),
+            impossibleMotif: ouNul(ligne['synthese_impossible_motif']),
+          }),
         }))
       } finally {
         connexion.release()
@@ -311,6 +353,7 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
         if (ligne === undefined) return null
 
         const messages = await connexion.query(FIL, [retourId])
+        const notifications = await connexion.query(NOTIFICATIONS, [retourId])
 
         const contexte: ContexteFiche | null =
           ligne['url'] === null || ligne['url'] === undefined
@@ -337,7 +380,6 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
           url: lienIndice(urlObservabilite, indice.reference),
         }))
 
-        const notificationStatut = ouNul(ligne['notification_statut'])
 
         const correctifRef = ouNul(ligne['correctif_ref'])
         const correctifNote = ouNul(ligne['correctif_note'])
@@ -379,10 +421,20 @@ export function creerDepotBackOffice(bassin: Bassin): DepotBackOffice {
           })),
           contexte,
           indices,
-          notification:
-            notificationStatut === null
-              ? null
-              : { statut: notificationStatut, erreur: ouNul(ligne['notification_erreur']) },
+          suiviNote: {
+            etat: etatSansNote({
+              reprises: entierOuNul(ligne['synthese_reprises']),
+              impossibleMotif: ouNul(ligne['synthese_impossible_motif']),
+            }),
+            reprises: entierOuNul(ligne['synthese_reprises']),
+            repriseLe: (ligne['synthese_reprise_le'] as Date | null) ?? null,
+            impossibleLe: (ligne['synthese_impossible_le'] as Date | null) ?? null,
+          },
+          notifications: notifications.rows.map((notification) => ({
+            canal: notification['canal'] === 'telegram' ? ('telegram' as const) : ('email' as const),
+            statut: String(notification['statut']),
+            erreur: ouNul(notification['erreur']),
+          })),
         }
       } finally {
         connexion.release()

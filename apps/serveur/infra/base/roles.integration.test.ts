@@ -200,15 +200,17 @@ describe('ce que le rôle de service peut, et ne peut pas', () => {
     expect(rows[0]?.['n']).toBe(2)
   })
 
-  it('⛔ ne peut supprimer dans AUCUNE des sept tables', async () => {
+  it('⛔ ne peut supprimer dans AUCUNE des tables métier', async () => {
     for (const table of [
       'produits',
       'retours',
       'messages',
       'contextes',
+      'indices',
       'syntheses',
       'notifications',
       'audit',
+      'alertes',
     ]) {
       expect(await refuse(service, `delete from ${table}`)).toBe(PRIVILEGE_INSUFFISANT)
     }

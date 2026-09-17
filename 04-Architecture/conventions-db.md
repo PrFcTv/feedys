@@ -41,8 +41,10 @@ Un retour qui ne mérite rien passe en `ecarte`. Il n’est pas détruit.
 produits ──┬─< retours ──┬─< messages
            │             ├─── contextes   (1–1)
            │             ├─── syntheses   (1–1, produite en fin d’entretien)
-           │             ├─< notifications
+           │             ├─< notifications (une par canal)
            │             └─< audit         ⛔ zone gelée
+
+alertes   (seule, sans lien : un incident d’exploitation ou d’usage — P-030)
 ```
 
 ### `produits`
@@ -75,9 +77,18 @@ Un logiciel métier qui embarque le widget. Voir [D-005](../00-Projet/DECISIONS_
 | `zone` | `text` NULL | idem |
 | `source` | `source_retour` | `voix` ou `texte` — on veut mesurer si le pari de la parole tient |
 | `envoye_le` | `timestamptz` NULL | |
+| `synthese_reprises` | `integer` NULL | combien de fois le filet a redemandé la note (P-030). NULL = jamais |
+| `synthese_reprise_le` | `timestamptz` NULL | la dernière reprise — l’espacement **et** la réservation |
+| `synthese_impossible_le` | `timestamptz` NULL | le filet a renoncé. ⛔ Terminal pour le filet, pas pour un humain |
+| `synthese_impossible_motif` | `text` NULL | `plafond` ou `rien_a_synthetiser`, sous CHECK. Présent si et seulement si la date l’est |
 
 ⚠️ **`source` n’est pas décoratif** : c’est la mesure du pari du produit
 ([VISION.md](../00-Projet/VISION.md)). Si 90 % des retours sont en `texte`, la thèse est fausse.
+
+⚠️ **Les quatre colonnes `synthese_*` ne décrivent pas la note** — elle est dans `syntheses` —, mais
+son **absence** : où en est le filet qui la redemande ([D-030](../00-Projet/DECISIONS_LOG.md),
+[BUGS_LOG](../03-Bugs/BUGS_LOG.md) 019). Ce sont des colonnes typées sur `retours` plutôt qu’une
+table, parce qu’elles décrivent un seul état par retour, et qu’on filtre dessus.
 
 ### `messages`
 
@@ -148,11 +159,34 @@ peut rester dans le document.
 
 ### `notifications`
 
-`retour_id` · `canal` (`email` au MVP) · `destinataire` · `statut` (`en_attente`, `envoye`,
+`retour_id` · `canal` (`email`, `telegram`) · `destinataire` · `statut` (`en_attente`, `envoye`,
 `echoue`) · `erreur` · `envoye_le`.
 
 ⚠️ **Un échec d’envoi ne perd pas le retour** : il est déjà en base, lisible au back-office et par
 MCP. La notification est un confort, pas le chemin.
+
+⛔ **Une ligne par retour ET par canal**, tenue par l’index unique
+`notifications_retour_canal_uniq` (0011). Pour Telegram, `destinataire` est l’identifiant du chat —
+⛔ jamais le jeton, et `erreur` est nettoyée de toute forme de jeton avant d’être écrite.
+
+### `alertes`
+
+Un incident d’exploitation ou d’usage, et s’il a été annoncé (P-030,
+[D-030](../00-Projet/DECISIONS_LOG.md)).
+
+| Colonne | Type | Note |
+|---|---|---|
+| `genre` | `text` | sous CHECK : `notes_impossibles`, `modele_en_echec`, `aucun_retour`, `voix_minoritaire` |
+| `ouverte_le` | `timestamptz` | l’incident commence |
+| `close_le` | `timestamptz` NULL | NULL = ouvert |
+| `envoyee_le` | `timestamptz` NULL | l’alerte est arrivée chez Telegram. ⚠️ Posée seulement en cas de succès |
+| `erreur` | `text` NULL | pourquoi elle n’est pas partie — Telegram absent, refus, réseau |
+
+⛔ **Un seul incident OUVERT par genre** : l’index partiel `alertes_une_ouverte_par_genre` (`where
+close_le is null`) est la réservation — `insert … on conflict do nothing` —, et c’est ce qui fait
+qu’un incident prévient une fois, même à plusieurs conteneurs.
+
+⛔ **Aucune parole, aucun nom** : la table ne stocke pas le message, seulement son sort.
 
 ### `audit` — ⛔ zone gelée
 
@@ -169,7 +203,7 @@ create type type_retour        as enum ('bug','idee','question','gene');
 create type source_retour      as enum ('voix','texte');
 create type role_message       as enum ('collaborateur','bot');
 create type confiance_synthese as enum ('haute','moyenne','basse');
-create type canal_notification as enum ('email');
+create type canal_notification as enum ('email', 'telegram');  -- telegram : 0011
 create type genre_indice       as enum ('js','http');
 ```
 
@@ -185,12 +219,20 @@ create index on retours (produit_id, type, cree_le desc);    -- le filtre du MCP
 create index on messages (retour_id, ordre);                 -- le fil, dans l’ordre
 create unique index on produits (cle_publique);              -- vérifié à chaque requête widget
 create unique index on indices (retour_id, ordre);           -- les indices d’un retour, dans l’ordre
+create unique index on notifications (retour_id, canal);     -- une notification par canal
+create unique index on alertes (genre) where close_le is null; -- un incident ouvert par genre
+create index on retours (produit_id, auteur_ref, reponse_envoyee_le desc)
+  where reponse_envoyee_le is not null and reponse_lue_le is null; -- la relève du collaborateur
 ```
+
+⚠️ **Les deux index partiels sont dans le miroir Prisma** depuis P-030 (`previewFeatures =
+["partialIndexes"]`). Avant, Prisma ne les voyait pas — et le test du miroir ne pouvait donc pas
+réclamer celui de 0006, qui en était absent.
 
 ## Les privilèges
 
-Le rôle applicatif reçoit `SELECT, INSERT, UPDATE` sur les tables métier, **et `SELECT, INSERT`
-seulement sur `audit`**.
+Le rôle applicatif reçoit `SELECT, INSERT, UPDATE` sur les tables métier — `alertes` comprise —,
+**et `SELECT, INSERT` seulement sur `audit`**.
 
 ⚠️ **La table `migrations` a son propre `GRANT SELECT`** ([0003](../db/migrations/), P-018). Elle
 n’est créée par aucune migration — le runner la pose lui-même — et n’en portait donc aucun. Or la

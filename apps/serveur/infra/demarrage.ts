@@ -25,10 +25,12 @@ import { Client } from 'pg'
 import {
   enKo,
   indiceDeRole,
+  messagesCanaux,
   messageRole,
   messageVariablesManquantes,
   messageWidget,
   variablesManquantes,
+  verdictCanaux,
   verdictRole,
   verdictWidget,
 } from '../domaine/demarrage/controles'
@@ -81,6 +83,12 @@ export async function verifierDemarrage(journal: Journal = CONSOLE): Promise<Res
 
   for (const { nom, consequence } of manquantes.recommandees) {
     journal.alerte(`${nom} est absente — ${consequence}.`)
+  }
+
+  // ⚠️ Les canaux ont leur propre verdict : Telegram sans SMTP n’est pas une
+  //    dégradation, aucun canal en est une (P-030).
+  for (const message of messagesCanaux(verdictCanaux(process.env))) {
+    journal.alerte(message)
   }
 
   if (manquantes.obligatoires.length > 0) {

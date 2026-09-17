@@ -108,6 +108,10 @@ d’intégration, qui fait `set role feedys_app` avant de tenter un `DELETE`.
 c’est de **s’en servir** — un déploiement à un conteneur migre avec un rôle propriétaire, et rien
 n’oblige encore `DATABASE_URL` à pointer sur un rôle membre. Le ticket reste ouvert pour ça.
 
+⚠️ **Annoté le 2026-09-17** (relecture du 2026-09-17) : le paragraphe ci-dessus est **antérieur à
+la clôture**. « Le ticket reste ouvert pour ça » n’est plus vrai — P-018 a outillé l’usage (deux
+URL, [D-019](DECISIONS_LOG.md)), et le ticket est clos, comme le dit son titre.
+
 ---
 
 ## T-005 — snapdom écrit un avertissement dans la console de l’hôte
@@ -224,6 +228,12 @@ que rien ne la reprenne — ni BUGS_LOG, ni ce registre. C’est exactement ce q
 **En attendant** : rien. Le mode dégradé est censé être rare, et c’est précisément sa fréquence
 qui rouvrira le sujet.
 
+⚠️ **Mis à jour le 2026-09-17 (P-030)** : la ligne dit désormais **quel** mode dégradé — « le
+modèle sera relancé », « le modèle n’a pas répondu, à refaire » (en rouge), « rien à synthétiser »
+([back-office.md](../01-Specs/back-office.md) §La liste). Ce qui reste est l’observation d’origine :
+entre elles, cinq lignes sans titre restent indiscernables, et il faut les ouvrir. Le déclencheur
+ne change pas.
+
 ---
 
 ## T-009 — Rien ne consigne un correctif quand l’agent oublie de marquer
@@ -332,10 +342,11 @@ optionnelle — jamais comme intégration par défaut.
 
 ---
 
-## T-012 — Le widget et le serveur qui le sert peuvent avoir une version d’écart
+## ~~T-012 — Le widget et le serveur qui le sert peuvent avoir une version d’écart~~ · ✅ clos
 
 **Différé le** : 2026-09-09, pendant P-027 — **annoncé, jamais écrit**. Ouvert le 2026-09-17, à la
 relecture de `main` à `0da28df`
+**Clos le** : 2026-09-17, pendant P-030, par [D-030](DECISIONS_LOG.md)
 **Déclencheur de reprise** : déjà tombé — `1.0.0` est publiée, et un retour arrière chez un client
 se décide en une commande. Traité par P-030, partie 4 ; ce qui en restera sera requalifié ici
 **Coût si plus tard** : plus cher — chaque version publiée sans règle ajoute une paire
@@ -367,4 +378,32 @@ faux, deux fois :
 
 **En attendant** : aucune règle n’est écrite, et aucun test ne relit un corps de requête d’une
 version publiée contre les schémas du jour.
+
+### Comment il a été fermé
+
+- **La règle est écrite** — [ingestion.md](../01-Specs/ingestion.md) §La règle des versions : un champ
+  de requête nouveau est toujours facultatif ; une enveloppe de requête ignore ce qu’elle ne connaît
+  pas ; un champ de réponse ne se renomme ni ne disparaît.
+- **Les enveloppes de requête ne sont plus `.strict()`** : `SchemaCorpsRetour`, `SchemaContexte`,
+  `SchemaCorpsTour`, `SchemaCorpsFin`. Un champ inconnu est retiré — il n’atteint toujours pas la
+  base.
+- ⛔ **`SchemaIndice` reste `.strict()`** — le mur de [D-026](DECISIONS_LOG.md). Et le widget, sur un
+  `400`, **renvoie une fois la parole sans capture ni indices** : un indice refusé ne coûte plus la
+  parole.
+- **Un test la tient** : `apps/serveur/app/api/retours/compatibilite.test.ts` relit les corps et les
+  lecteurs du widget `1.0.0`, **écrits à la main et figés** dans `tests/versions/widget-1.0.0.ts`,
+  contre les schémas et les réponses d’aujourd’hui. Vérifié en renommant un champ : il rougit.
+- [D-028] et hebergement.md §2 sont **annotés**, pas réécrits.
+
+### Ce qui reste, et ce qui le rouvrirait
+
+- ⚠️ **Un fichier par version publiée** : à chaque tag, `tests/versions/` gagne le sien, et le test
+  le relit. Oublier de l’ajouter ne casse rien tout de suite — c’est la version suivante qui ne
+  serait plus protégée. C’est une ligne de la liste de publication, pas un automatisme.
+- ⚠️ **`SchemaIdentite` reste `.strict()`**, et ce n’est pas un écart de version : la charge est
+  signée par le serveur de l’**hôte**, pas par le widget. Un hôte qui y ajoute un champ fait
+  arriver ses retours sans auteur — rien n’est perdu ([ingestion.md](../01-Specs/ingestion.md)
+  §L’identité signée).
+- **Déclencheur de réouverture** : un retour arrivé sans parole, ou une carte qui ne s’affiche plus,
+  dans un onglet resté ouvert pendant une mise à jour.
 

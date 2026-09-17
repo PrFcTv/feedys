@@ -27,6 +27,8 @@ export const TITRE_BUG = 'Le tri par date de la liste des dossiers se réinitial
 export const TITRE_IDEE = 'Pouvoir exporter la liste filtrée en tableur'
 export const PAROLE_BUG =
   'dès que je reviens en arrière le tri il se remet à zéro et faut que je le refasse'
+/** Un retour auquel le filet a renoncé, faute de modèle (P-030). ⚠️ Sans note, donc sans titre. */
+export const PAROLE_SANS_NOTE = 'quand je valide le bordereau la page revient en haut et je perds ma ligne'
 
 const BUG: Synthese = {
   type: 'bug',
@@ -120,6 +122,23 @@ async function semer(client: Client): Promise<void> {
     `insert into syntheses (id, retour_id, contenu, modele, confiance)
      values ($1, $2, $3::jsonb, 'bouchon-e2e', 'haute'::confiance_synthese)`,
     [identifiant(), ideeId, JSON.stringify(IDEE)],
+  )
+
+  // ⚠️ Le filet a renoncé : huit reprises, le modèle muet. C’est l’état que
+  //    « Refaire la note » existe pour rattraper — et le modèle du parcours
+  //    est mort, hors ligne, donc le bouton doit DIRE qu’il n’a pas pu.
+  const sansNoteId = 'ret_e2e_sans_note'
+  await client.query(
+    `insert into retours (id, produit_id, source, statut, envoye_le,
+                          synthese_reprises, synthese_reprise_le,
+                          synthese_impossible_le, synthese_impossible_motif)
+     values ($1, 'prod_e2e', 'voix', 'envoye', now(), 8, now(), now(), 'plafond')`,
+    [sansNoteId],
+  )
+  await client.query(
+    `insert into messages (id, retour_id, ordre, role, texte)
+     values ($1, $2, 0, 'collaborateur', $3)`,
+    [identifiant(), sansNoteId, PAROLE_SANS_NOTE],
   )
 }
 

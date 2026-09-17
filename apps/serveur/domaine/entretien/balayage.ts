@@ -63,9 +63,10 @@ export const PAR_PASSE = 20
  *    `enCours` de `infra/filet.ts` faisait sauter les onze ticks suivants.
  *
  * ⚠️ Trois minutes : on n’entame pas un nouvel aval au-delà. Ce qui reste est
- *    déjà refermé et déjà journalisé — il sera repris par la requête de
- *    rattrapage (04-Architecture/hebergement.md §Le filet), pas par une passe
- *    suivante : `clore` ne regarde que les `en_cours`.
+ *    déjà refermé et déjà journalisé — `clore` ne le reverra pas, il ne regarde
+ *    que les `en_cours`. Ce sont les REPRISES qui y reviendront
+ *    (domaine/synthese/reprise.ts, P-030) : un retour clos sans note est repris
+ *    quelle que soit la façon dont il a été clos.
  */
 export const BUDGET_PASSE_MS = 3 * 60 * 1000
 
@@ -140,10 +141,10 @@ export interface BilanBalayage {
   /**
    * Refermés, dont l’aval n’a pas été entamé faute de temps.
    *
-   * ⛔ Ils ne reviendront PAS d’eux-mêmes : ils sont déjà `abandonne`, et
-   *    `clore` ne regarde que les `en_cours`. C’est la requête de rattrapage qui
-   *    les retrouve (04-Architecture/hebergement.md §Le filet). Une valeur non
-   *    nulle ici est un signal d’exploitation, pas une statistique.
+   * ⚠️ Le balayage ne les reverra pas — ils sont déjà `abandonne`, et `clore` ne
+   *    regarde que les `en_cours`. Ce sont les reprises qui les reprendront, à
+   *    une passe suivante (P-030). Avant elles, un reporté était une note
+   *    perdue pour toujours (BUGS_LOG 019).
    */
   reportes: number
 }
@@ -156,9 +157,10 @@ export interface BilanBalayage {
  *    requêtes est exactement ce qu’on ne veut pas.
  *
  * ⛔ UN ÉCHEC NE BLOQUE PAS LES SUIVANTS, et ne laisse pas le retour dans un
- *    état intermédiaire : il est déjà `abandonne`, ce qui est terminal. Il lui
- *    manque sa note, exactement comme à un `POST /fin` dont la synthèse a
- *    échoué — `terminerEntretien` avale la même erreur pour la même raison.
+ *    état intermédiaire : il est déjà `abandonne`, ce qui est terminal pour le
+ *    balayage. Il lui manque sa note, exactement comme à un `POST /fin` dont la
+ *    synthèse a échoué — et dans les deux cas, ce sont les reprises qui la
+ *    redemanderont.
  */
 export async function balayer(
   ports: PortsBalayage,
@@ -189,8 +191,7 @@ export async function balayer(
     } catch (erreur) {
       bilan.echoues += 1
       // ⚠️ L’IDENTIFIANT EST DANS LE MESSAGE. Sans lui, les journaux disaient
-      //    qu’une note avait manqué sans dire laquelle, et le retour est
-      //    terminal : aucune passe ne le reprendra. Un cuid n’est pas de la
+      //    qu’une note avait manqué sans dire laquelle. Un cuid n’est pas de la
       //    parole — la règle « jamais le corps d’un retour » n’est pas en cause.
       ports.signaler?.(`balayage — aval de ${retourId} (refermé par silence)`, erreur)
     }
@@ -199,7 +200,7 @@ export async function balayer(
   if (bilan.reportes > 0) {
     ports.signaler?.(
       `balayage — ${bilan.reportes} entretien(s) refermé(s) sans note, budget de passe épuisé`,
-      new Error('budget de passe épuisé — rattrapage : hebergement.md §Le filet'),
+      new Error('budget de passe épuisé — les reprises y reviendront'),
     )
   }
 

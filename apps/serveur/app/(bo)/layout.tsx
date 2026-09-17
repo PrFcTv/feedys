@@ -19,7 +19,12 @@ export default function CoquilleBackOffice({ children }: { children: ReactNode }
           <Link href="/bo" className="font-titre text-base font-semibold text-encre">
             Feedys
           </Link>
-          <span className="text-[13px] text-encre-3">le retour terrain, dicté</span>
+          <nav className="flex items-center gap-4 text-[13px] text-encre-3">
+            <span>le retour terrain, dicté</span>
+            <Link href="/bo/installation" className="hover:text-encre">
+              Installation
+            </Link>
+          </nav>
         </div>
       </header>
 

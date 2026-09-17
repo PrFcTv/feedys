@@ -6,8 +6,13 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
-import { envoyerNote } from './envoyer'
-import type { PortsNotification } from './envoyer'
+import { canalEmail, envoyerNote, envoyerParCanal, notifierParCanaux } from './envoyer'
+import type {
+  CanalNotification,
+  PortCanal,
+  PortDepotNotifications,
+  PortsNotification,
+} from './envoyer'
 import { EXEMPLE_NOTIFICATION } from './exemple'
 
 function bouchon(surcharges: Partial<PortsNotification> = {}): {
@@ -135,5 +140,135 @@ describe('envoyerNote', () => {
 
     await envoyerNote('ret_1', b.ports)
     expect(b.closes[0]?.erreur?.length).toBe(500)
+  })
+})
+
+describe('les canaux — Telegram et l’email, une fois chacun', () => {
+  function depotParCanal() {
+    const ouvertes: Array<{ retour: string; canal: CanalNotification }> = []
+    const depot: PortDepotNotifications = {
+      charger: async () => EXEMPLE_NOTIFICATION,
+      dejaEnvoyee: async (retourId, canal) =>
+        ouvertes.some((ligne) => ligne.retour === retourId && ligne.canal === canal),
+      ouvrir: async (retourId, _destinataire, canal) => {
+        ouvertes.push({ retour: retourId, canal })
+        return `notif_${canal}`
+      },
+      clore: async () => undefined,
+    }
+    return { depot, ouvertes }
+  }
+
+  function canal(nom: CanalNotification, envoyer: PortCanal['envoyer'] = async () => undefined): PortCanal {
+    return { canal: nom, destinataire: nom === 'email' ? 'dev@exemple.fr' : '-1000000000042', envoyer }
+  }
+
+  it('⚠️ les deux partent quand les deux sont configurés — chacun sa ligne', async () => {
+    const { depot, ouvertes } = depotParCanal()
+    const telegram = vi.fn(async () => undefined)
+    const email = vi.fn(async () => undefined)
+
+    await notifierParCanaux('ret_1', {
+      depot,
+      canaux: [canal('telegram', telegram), canal('email', email)],
+    })
+
+    expect(telegram).toHaveBeenCalledOnce()
+    expect(email).toHaveBeenCalledOnce()
+    expect(ouvertes.map((ligne) => ligne.canal)).toEqual(['telegram', 'email'])
+  })
+
+  it('⛔ un canal coupé n’empêche pas l’autre', async () => {
+    const { depot } = depotParCanal()
+    const email = vi.fn(async () => undefined)
+
+    await notifierParCanaux('ret_1', {
+      depot,
+      canaux: [
+        canal('telegram', async () => {
+          throw new Error('Telegram injoignable')
+        }),
+        canal('email', email),
+      ],
+      signaler: () => undefined,
+    })
+
+    expect(email).toHaveBeenCalledOnce()
+  })
+
+  it('⛔ une base qui tombe sur un canal n’empêche pas l’autre, et ne remonte pas', async () => {
+    const { depot } = depotParCanal()
+    const email = vi.fn(async () => undefined)
+    const signaler = vi.fn()
+    let premier = true
+
+    await expect(
+      notifierParCanaux('ret_1', {
+        depot: {
+          ...depot,
+          ouvrir: async (retourId, destinataire, nom) => {
+            if (premier) {
+              premier = false
+              throw new Error('Postgres injoignable')
+            }
+            return depot.ouvrir(retourId, destinataire, nom)
+          },
+        },
+        canaux: [canal('telegram'), canal('email', email)],
+        signaler,
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(email).toHaveBeenCalledOnce()
+    expect(signaler.mock.calls[0]?.[0]).toContain('Telegram')
+  })
+
+  it('⛔ « déjà envoyée » se juge PAR CANAL', async () => {
+    const { depot } = depotParCanal()
+    await notifierParCanaux('ret_1', { depot, canaux: [canal('email')] })
+
+    const telegram = vi.fn(async () => undefined)
+    const email = vi.fn(async () => undefined)
+    await notifierParCanaux('ret_1', { depot, canaux: [canal('telegram', telegram), canal('email', email)] })
+
+    expect(telegram).toHaveBeenCalledOnce()
+    expect(email).not.toHaveBeenCalled()
+  })
+
+  it('⛔ une ligne que l’index refuse vaut « déjà envoyée » — et rien ne part', async () => {
+    const envoyer = vi.fn(async () => undefined)
+
+    const resultat = await envoyerParCanal('ret_1', {
+      depot: {
+        charger: async () => EXEMPLE_NOTIFICATION,
+        dejaEnvoyee: async () => false,
+        ouvrir: async () => null,
+        clore: async () => undefined,
+      },
+      canal: canal('telegram', envoyer),
+    })
+
+    expect(resultat).toEqual({ ok: false, motif: 'deja_envoyee' })
+    expect(envoyer).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ aucun canal : rien ne part, et ça se dit', async () => {
+    const { depot } = depotParCanal()
+    const signaler = vi.fn()
+
+    await notifierParCanaux('ret_1', { depot, canaux: [], signaler })
+
+    expect(signaler).toHaveBeenCalledOnce()
+    expect(signaler.mock.calls[0]?.[0]).toContain('aucun canal configuré')
+  })
+
+  it('l’email garde la note entière — c’est le canal qui la porte', async () => {
+    const envoyer = vi.fn(async () => undefined)
+
+    await canalEmail({ envoyer }, 'dev@exemple.fr').envoyer(EXEMPLE_NOTIFICATION)
+
+    expect(envoyer).toHaveBeenCalledWith('dev@exemple.fr', expect.objectContaining({
+      corps: expect.stringContaining('dès que je reviens en arrière il se remet à zéro'),
+    }))
   })
 })

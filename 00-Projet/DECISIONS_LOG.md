@@ -176,6 +176,11 @@ Les autres canaux sont des variations sur le même contenu. Ils s’ajouteront q
 prouvé qu’elle est bonne — l’ajouter tôt ne ferait que multiplier les endroits à corriger à chaque
 changement de format.
 
+⚠️ **Renversée en partie le 2026-09-17 par [D-030]** : Telegram est devenu le canal recommandé
+avant que la note ait fait ses preuves. Le motif ci-dessus tient toujours — Telegram ne porte pas la
+note, seulement un avis de quatre lignes et les alertes. Slack, les webhooks et l’ouverture
+d’issues restent sous la condition écrite ici.
+
 ---
 
 ## D-008 — TypeScript 6, pas 7, tant que `typescript-eslint` ne suit pas
@@ -849,6 +854,11 @@ Ce qui part par email est la **synthèse** : le résumé, quelques citations. C�
 **dérivé** — et précisément la seule chose qui se **régénère**, par
 `pnpm entretien:rejouer --synthese`.
 
+⚠️ **Corrigé le 2026-09-17** ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 019) : cet outil **n’écrit rien**,
+par construction, et il n’existe pas dans l’image de production. Ce qui régénère une note, c’est le
+filet, qui la redemande tout seul, et le bouton « Refaire la note » du back-office ([D-030]).
+L’argument de la sauvegarde, lui, ne change pas.
+
 ⛔ Ce qui n’existe nulle part ailleurs qu’en base est le **fil brut** : ce que la personne a dit,
 ses hésitations, le transcript avant correction. C’est la matière qui sert à régler le prompt, et la
 seule façon de vérifier qu’une note n’a pas déformé quelqu’un. Autrement dit : **l’email sauvegarde
@@ -1377,6 +1387,13 @@ back-office et MCP se démultiplient**, **les secrets sont propres à chaque ins
 widget, et **il n’y a jamais d’écart entre le widget et le serveur qui le sert** — ils sortent de la
 même image. C’est la contrepartie heureuse de « N déploiements ».
 
+⚠️ **Corrigé le 2026-09-17** ([TICKETS_DIFFERES](TICKETS_DIFFERES.md) T-012, [D-030]) : **la phrase
+est fausse.** Ils sortent de la même image, mais pas au même moment chez le navigateur : `widget.js`
+est gardé un jour en `stale-while-revalidate`, et un onglet de logiciel métier reste ouvert toute la
+journée avec le widget chargé le matin. Après une mise à jour — ou un retour arrière —, le widget
+d’hier parle au serveur d’aujourd’hui. La règle qui le rend sûr est dans
+[01-Specs/ingestion.md](../01-Specs/ingestion.md) §La règle des versions.
+
 ### L’image publiée — sur GHCR, sur tag de version, et rien d’autre
 
 ⛔ **Sur tag de version uniquement, jamais à chaque commit vers `main`.** Publier une image, c’est
@@ -1583,3 +1600,163 @@ ailleurs.
   réglé, pas que la décision était fausse ;
 - **un client dont la politique interdit que sa parole transite par le compte d’un tiers** → **(b)**,
   sans discuter. Ça ne renverse pas la décision, ça exerce l’exception qu’elle prévoit.
+
+---
+
+## D-030 — Telegram prévient, sans porter la parole ; aucune note ne se perd ; les alertes existent
+
+**2026-09-17**, P-030 — les cinq choix de l’étape 0 ont été tranchés avec le développeur, un par un.
+
+### Le problème
+
+La relecture du 2026-09-17, jouée **après** la publication de `1.0.0`, les six checks verts, a
+trouvé quatre choses qu’aucun test ne voyait ([05-Prompts/APRES-MVP.md](../05-Prompts/APRES-MVP.md)
+§P-030) :
+
+- ⛔ **une panne du modèle perdait la note pour toujours**, sans que personne le sache, et le
+  rattrapage écrit ne pouvait pas marcher ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 019). C’est la
+  conséquence directe de [D-029] : l’option (a) qu’on a retenue laisse le développeur aussi peu
+  prévenu que l’option (b) qu’on lui reprochait ;
+- **les trois seuils** de `hebergement.md` §Ce qui doit être surveillé n’étaient codés nulle part.
+  Avec une installation par client et aucun « phone home » ([D-028]), rien ne remontait ;
+- **l’écart widget ↔ serveur existe**, et [D-028] affirmait le contraire
+  ([TICKETS_DIFFERES](TICKETS_DIFFERES.md) T-012) ;
+- et un relais SMTP **par client** est le réglage le plus souvent raté d’une installation.
+
+### ⚠️ Ce que cette décision RENVERSE, et qu’il faut dire
+
+- **[D-007]** : « Pas de Slack, pas de webhook […]. Les autres canaux s’ajouteront quand la note
+  aura prouvé qu’elle est bonne. » Telegram arrive **avant** que P-019 ait mesuré quoi que ce soit.
+  ⚠️ Le motif de D-007 ne tombe pas pour autant : il refusait de « multiplier les endroits à
+  corriger à chaque changement de format » de la note. **Telegram ne porte pas la note** — il porte
+  un avis de quatre lignes et les alertes. Il n’y a pas de format de note à tenir de ce côté.
+  Slack, les webhooks et l’ouverture d’issues restent sous la condition de D-007.
+- **La phrase de contrat** ([hebergement.md](../04-Architecture/hebergement.md) §1) disait « il
+  n’émet aucune donnée d’usage, aucune statistique ». ⛔ C’est désormais faux, et elle est
+  réécrite : deux indicateurs chiffrés partent, nommés un par un, vers le prestataire.
+- **[D-028]** : « il n’y a jamais d’écart entre le widget et le serveur qui le sert ». Annotée,
+  pas réécrite.
+- **hebergement.md §3** : « l’email est le seul canal qui centralise ». Telegram centralise aussi.
+
+### Les cinq choix, et ce qu’ils coûtent
+
+**1 · Le message Telegram est un POINTEUR, pas la note.** Le produit, le type du retour, la date
+du collaborateur et le lien vers la fiche. ⛔ Ni titre, ni résumé, ni citation, ni nom, ni URL de
+la page de l’hôte.
+
+Vérifié le 2026-09-17 sur telegram.org/privacy (mise à jour du 2026-08-21) : le responsable de
+traitement est **Telegram Messenger Inc.**, établi hors de l’EEE, représenté dans l’Union par
+l’EDPO (Bruxelles) ; les messages de bot sont des « cloud chats », **non chiffrés de bout en
+bout** ; les données des comptes de l’EEE sont stockées aux Pays-Bas ; **aucun contrat de
+sous-traitance n’est proposé** aux entreprises. Porter la note par Telegram aurait fait de lui un
+sous-traitant des données des salariés du client, sans contrat au sens de l’article 28 — et chaque
+installation aurait dépendu d’une vérification juridique.
+
+⚠️ **Le titre est exclu aussi** : le modèle l’écrit à partir de la parole, et « Le dossier de
+M. Martin ne s’ouvre plus » est un titre ordinaire. Le coût est réel : il faut ouvrir le
+back-office pour lire. L’email garde la note entière pour qui le configure.
+
+**2 · Les deux canaux partent quand les deux sont configurés** — une fois chacun. L’avis sur le
+téléphone, la note dans la boîte : ils se complètent. `notifications` porte une ligne **par retour
+et par canal**, et l’index `notifications_retour_canal_uniq` le tient en base.
+
+**3 · Quatre alertes, par Telegram et par lui seul, et la phrase de contrat les nomme.**
+`notes_impossibles` et `modele_en_echec` sont de l’exploitation ; `aucun_retour` et
+`voix_minoritaire` sont de l’usage. Les garder locales, dans un panneau du back-office, aurait
+renversé `back-office.md` (« ni compteur, ni retours cette semaine ») — et surtout, **un produit
+mort n’envoie plus rien : personne n’ouvre le back-office, donc personne ne lit le panneau**.
+C’est exactement le mode de défaillance que le seuil existe pour voir.
+
+⚠️ Ce qui rend l’amendement honnête : le destinataire est le prestataire, qui reçoit déjà un avis
+par retour — il pourrait compter lui-même. Les deux indicateurs ne lui apprennent rien qu’il ne
+puisse déduire ; ils lui évitent de devoir le faire.
+
+⛔ **Une alerte ne passe pas par ce qu’elle surveille** : ni le SMTP, ni le modèle. Sans Telegram,
+elle reste en console, et le démarrage le dit. ⛔ **Une alerte ne contient ni parole ni nom** : des
+nombres, des dates, des identifiants de retour, le produit et l’origine publique.
+
+**4 · Le retour arrière de version est sûr sans consigne.** Les enveloppes de requête ignorent les
+champs inconnus (le défaut de zod, en retirant `.strict()`). ⛔ `SchemaIndice` reste `.strict()` —
+c’est le mur de [D-026] contre `message` —, donc un indice ne gagne jamais de champ, et **le
+widget, sur un 400, renvoie une fois la parole sans capture ni indices**. L’alternative — « un
+retour arrière impose d’attendre un jour et de faire recharger les onglets » — ne tenait pas :
+personne ne peut forcer ce rechargement chez le client, et pendant ce temps chaque envoi recevait
+un 400 que le widget ne réessaie pas.
+
+La règle est écrite dans [01-Specs/ingestion.md](../01-Specs/ingestion.md) §La règle des
+versions, et tenue par `apps/serveur/app/api/retours/compatibilite.test.ts`, qui relit les corps et
+les lecteurs du widget `1.0.0`, figés à la main dans `tests/versions/`.
+
+**5 · Une migration, `0011_notes_et_telegram.sql`** : la valeur `telegram` de l’enum, quatre
+colonnes nullables sur `retours`, l’index unique des notifications, et la table `alertes`.
+⚠️ `ALTER TYPE … ADD VALUE` n’est pas utilisable dans la transaction qui l’ajoute : rien dans ce
+fichier n’emploie `telegram`. L’index unique ne pouvait pas échouer sur une base `1.0.0` :
+`notifier()` n’est appelé qu’après un `enregistrer` réussi, que `syntheses_retour_uniq` rend unique
+par retour.
+
+### Les reprises — ce qui ferme BUGS_LOG 019
+
+Le filet reprend les retours **clos** (`envoye`, `abandonne`) **sans note**, quelle que soit la
+façon dont ils ont été clos. Il redemande la note par **le** chemin d’une note
+(`domaine/synthese/chaine.ts`), qui notifie déjà — ⛔ il n’y a pas de second chemin.
+
+- **Huit reprises, en doublant à partir de cinq minutes** : 5, 10, 20, … 640 minutes, soit
+  environ vingt et une heures. Une panne d’une journée est couverte ; une clé révoquée ne l’est pas,
+  et c’est `modele_en_echec` qui l’aura dit bien avant. La première attend cinq minutes parce que
+  la tentative ordinaire dure trois minutes au pire.
+- **Une reprise comptée est une reprise tentée** : le filet réserve UN retour à la fois, dans le
+  même `update … for update skip locked` qui compte la reprise. Vérifié en retirant le verrou : le
+  test d’intégration rougit cinq fois sur cinq.
+- ⛔ **`rien_a_synthetiser` n’est jamais retenté** : un retour dicté sans transcript ne produira
+  jamais de note.
+- **Au plafond, le filet renonce** — `synthese_impossible_le`, motif `plafond` —, le back-office le
+  dit sur la liste et sur la fiche, et l’alerte `notes_impossibles` part.
+- **« Refaire la note »**, sur la fiche : le rattrapage à la main, qui marche **dans l’image**. ⛔ Il
+  refuse un retour qui a déjà sa note, et un entretien en cours ; il ne touche à rien d’autre.
+- ⛔ **`entretien:rejouer` reste en lecture seule.** C’est un outil de mise au point du prompt, pas
+  un rattrapage — et il n’existe pas dans l’image.
+
+### Où vit l’état des alertes
+
+**Les incidents, en base** (`alertes`) : un incident s’ouvre une fois — c’est l’alerte —, se referme
+une fois — c’est la ligne « rétabli » —, et les passes d’entre-deux se taisent. L’index partiel
+`alertes_une_ouverte_par_genre` fait qu’un seul conteneur ouvre, donc prévient. **Un conteneur qui
+redémarre retrouve ses incidents**, et ne renvoie pas une alerte déjà partie.
+
+**La mesure des échecs du modèle, en mémoire** : une heure d’appels, réussis ou non. Un redémarrage
+l’oublie, et c’est juste — elle rend « inconnu » jusqu’à ce que de nouveaux appels parlent, et
+« inconnu » n’ouvre ni ne ferme rien. ⛔ Ce n’est pas le compteur de consommation que [D-029]
+refuse : il ne compte que des réussites et des échecs, ne les écrit nulle part, et ne coupe jamais
+un appel.
+
+⚠️ **Hystérésis** sur les deux seuils en pourcentage — le modèle se déclare rétabli sous 2 %, la
+voix au-dessus de 45 % — pour qu’un taux qui oscille autour du seuil ne fasse pas une alerte par
+passe par un autre chemin.
+
+### Ce qu’on n’a pas fait
+
+- ⛔ **Ni `getUpdates`, ni webhook, ni commande** : le bot ne lit rien. Sinon Feedys devient un
+  canal de support ([D-021]).
+- ⛔ **Aucune dépendance** : le `fetch` natif suffit.
+- ⛔ **Aucun `parse_mode`** : texte brut. `MarkdownV2` demande d’échapper dix-huit caractères, et un
+  seul oublié rend 400.
+- ⛔ **Le jeton ne sort jamais** : il est dans l’URL, et toute erreur est une `ErreurTelegram` neuve,
+  nettoyée, sans `cause`.
+- ⛔ **Ni « phone home », ni agrégateur** : chaque installation parle à SON bot, et à rien d’autre.
+- ⛔ **Ni worker, ni cron, ni file** : la veille tourne dans la passe du filet ([D-018]).
+- ⛔ **L’email n’est ni retiré, ni déprécié.** Il cesse seulement d’être le canal qu’on recommande
+  en premier.
+
+### Ce qui la renverserait
+
+- **Un client qui refuse Telegram**, même pour un avis sans contenu. L’email reste, mais les
+  alertes retombent en console : il faudrait alors un autre canal d’alerte — et c’est le premier
+  endroit où un webhook aurait un sens.
+- **Un réseau d’entreprise qui bloque `api.telegram.org`**. La page `/bo/installation` et le
+  message d’essai le montrent le jour de l’installation ; les alertes, elles, ne partiraient plus.
+- **Un contrat de sous-traitance proposé par Telegram, ou des bots chiffrés de bout en bout.** Ça ne
+  suffirait pas à porter la note — le titre et les citations restent des données de salariés —,
+  mais la question du choix 1 se rouvrirait.
+- **Des alertes qui sonnent à vide** — la part de voix sur un parc Firefox, par exemple ([D-003]) —
+  ou **un plafond de reprises mal placé**, qui se lira dans `retours.synthese_reprises` au premier
+  vrai incident.

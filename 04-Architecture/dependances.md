@@ -42,7 +42,7 @@ un emprunt d’idée, à citer dans `ATTRIBUTIONS.md`.
 | `ai` (Vercel AI SDK) | Apache-2.0 | 26 570 | `generateObject` — la sortie **typée**, pas du texte à reparser. ⚠️ **Installé le 2026-09-04 en 7.0.92**, dans `apps/serveur` uniquement |
 | `@ai-sdk/anthropic` | Apache-2.0 | — | Claude. ⚠️ **Installé le 2026-09-04 en 4.0.49** |
 | `zod` | MIT | — | schémas — partagés entre validation d’API et `generateObject`. ⚠️ Déclaré par `packages/widget`, qui porte le contrat de transport ; le serveur l’atteint en important `contrat.ts`. ⚠️ **Et déclaré aussi par `apps/serveur` depuis le 2026-09-04, à la version EXACTE de `packages/widget` (4.5.4)** : la sortie du modèle a besoin d’un schéma qui n’est pas du transport, et faire descendre ce schéma dans le paquet MIT ferait importer de la logique au serveur depuis MIT. Deux déclarations, une seule copie — pnpm dédoublonne à version identique, et deux instances de zod rendraient les types incompatibles. ⛔ Il n’entre pas dans `widget.js` : le widget n’importe le contrat qu’en `import type` |
-| `@prisma/client` | Apache-2.0 | — | accès base |
+| ~~`@prisma/client`~~ | Apache-2.0 | — | ⛔ **Retiré le 2026-09-17 (P-030).** La ligne disait « accès base » : c’était faux, le serveur parle à Postgres par `pg`, et personne n’importait le client généré. Il était pourtant une dépendance de **production** — et il apportait à lui seul les trois alertes de `pnpm audit --prod`, toutes par `prisma@7.10.0` : `deepmerge-ts <8.0.0` (high), `mysql2 <3.22.0` (high), `mysql2 <=3.23.0` (moderate). ⚠️ Vérifié avant de le retirer : `pnpm db:generate` produit toujours `prisma/genere` sans lui, et le test du miroir (`prisma migrate diff`) ne passe que par le CLI. Après : `pnpm audit --prod` → « No known vulnerabilities found » |
 | `shadcn` (copié) | MIT | 122 975 | composants de chat de juin 2026, **variante Base UI** |
 | `@base-ui/react` | MIT | — | le socle des composants shadcn, **variante Base UI et non Radix** (DESIGN.md §2). ⚠️ **Installé le 2026-09-04 en 1.8.0.** ⛔ Le paquet `@base-ui-components/react` est DÉPRÉCIÉ — renommé, sa dernière version publiée est une `rc`. C’est `@base-ui/react` qu’on prend |
 | `tailwindcss` + `@tailwindcss/postcss` | MIT | — | le style du back-office. ⚠️ **v4 : plus de fichier de configuration**, le thème est déclaré en CSS (`app/global.css`, `@theme`). ⛔ Rien à voir avec le widget, qui est en CSS-en-JS dans son shadow DOM |
@@ -55,7 +55,17 @@ un emprunt d’idée, à citer dans `ATTRIBUTIONS.md`.
 | `hash-wasm` | MIT | 1 100 | argon2id du secret produit, **en WebAssembly** — pas d’extension native à construire dans une image Alpine ([D-010](../00-Projet/DECISIONS_LOG.md)) |
 | `@paralleldrive/cuid2` | MIT | 1 500 | les `id` de toutes les tables. `cuid()` de Prisma n’est pas utilisable : le schéma ne pose aucun `@default` |
 
+⚠️ **Telegram n’a pas de dépendance** (P-030) : le `fetch` natif de Node suffit à `sendMessage`. Une bibliothèque de bot aurait apporté `getUpdates`, les webhooks et les commandes — tout ce que Feedys s’interdit ([D-030](../00-Projet/DECISIONS_LOG.md)).
+
 ### Outillage
+
+⚠️ **`prisma` (le CLI du miroir) porte encore les trois alertes** — `deepmerge-ts` par
+`@prisma/config`, et deux fois `mysql2` —, mais **hors production** : c’est une dépendance de
+développement de la racine, qui ne sert qu’à `pnpm db:generate` et au test du miroir, et n’entre
+pas dans l’image servie (`output: 'standalone'`). `pnpm audit` complet les montre ;
+`pnpm audit --prod` est propre. Mesuré le 2026-09-17. ⚠️ Déclencheur : une version de `prisma`
+qui les corrige, ou une alerte qui toucherait l’outil lui-même plutôt qu’un pilote MySQL qu’on
+n’appelle jamais.
 
 `typescript` · `vite` · `vitest` · `happy-dom` · `@playwright/test` · `eslint` · `turbo` · `tsx` —
 tous MIT ou Apache-2.0.

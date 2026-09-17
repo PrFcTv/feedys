@@ -52,20 +52,42 @@ describe('analyserCorpsRetour', () => {
     expect(analyserCorpsRetour(corps).ok).toBe(false)
   })
 
-  it('⛔ refuse un champ de contexte qui n’est pas dans la liste close', () => {
+  /**
+   * ⚠️ La liste reste CLOSE, mais c’est ce qu’on GARDE qui l’est (P-030) : un
+   *    champ inconnu est retiré, plus refusé. Refuser le retour entier faisait
+   *    perdre la parole d’un widget plus récent que le serveur, après un retour
+   *    arrière ([T-012]). Ce qui compte ne change pas : l’inconnu n’atteint
+   *    jamais la base.
+   */
+  it('⛔ retire un champ de contexte qui n’est pas dans la liste close — il n’atteint jamais la base', () => {
     const resultat = analyserCorpsRetour({
       texte: 'x',
       contexte: { ...CONTEXTE, presse_papier: 'IBAN FR76…' },
     })
 
-    expect(resultat.ok).toBe(false)
+    expect(resultat.ok).toBe(true)
+    expect(JSON.stringify(resultat.ok ? resultat.valeur : null)).not.toContain('IBAN')
+    expect(resultat.ok && 'presse_papier' in resultat.valeur.contexte).toBe(false)
   })
 
-  it('⛔ refuse un champ de corps qui n’est pas dans la liste close', () => {
+  it('⛔ retire un champ de corps qui n’est pas dans la liste close', () => {
     const resultat = analyserCorpsRetour({
       texte: 'x',
       cookies: 'session=…',
       contexte: CONTEXTE,
+    })
+
+    expect(resultat.ok).toBe(true)
+    expect(resultat.ok && 'cookies' in resultat.valeur).toBe(false)
+  })
+
+  it('⛔ mais un indice qui porte un `message` refuse TOUJOURS le corps — le mur de D-026', () => {
+    const resultat = analyserCorpsRetour({
+      texte: 'x',
+      contexte: {
+        ...CONTEXTE,
+        indices: [{ genre: 'js', nom: 'TypeError', message: 'Le dossier de M. Martin est verrouillé' }],
+      },
     })
 
     expect(resultat.ok).toBe(false)

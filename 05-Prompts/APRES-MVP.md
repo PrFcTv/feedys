@@ -19,18 +19,37 @@ ce qu’on imagine.
 | P-017 · ce que le widget dit quand ça casse | [BUGS_LOG] 004, T-007 | ✅ fait |
 | P-018 · le rôle de connexion | T-004 | ✅ fait |
 | P-019 · la première mise en service | T-003 | ⏳ **la moitié AVANT est écrite** — la pose attend un hôte |
-| P-020 · le retour au collaborateur | [ROADMAP] ① | 🔒 après P-019 |
+| P-020 · le retour au collaborateur | [ROADMAP] ① | ✅ fait — **avant P-019**, malgré le verrou prévu ([D-021](../00-Projet/DECISIONS_LOG.md)) |
 | P-021 · le rejeu des trente secondes | [ROADMAP] ② | 🔒 après P-019 |
 | P-022 · l’audio réécoutable | [ROADMAP] ③ | 🔒 après P-019 |
 | P-023 · l’écran de gestion des produits | [ROADMAP] ⑤ | 🔒 après P-019 |
 | P-024 · la traçabilité du correctif | prolonge P-020 côté MCP | ✅ fait — **hors séquence** |
-| P-030 · aucune note ne se perd, et Telegram prévient | [BUGS_LOG] 019, T-012, la relecture du 2026-09-17 | ⏳ **à jouer AVANT P-019** |
+| P-02X · la contextualisation métier de l’entretien | [D-020](../00-Projet/DECISIONS_LOG.md) | ✅ fait — **hors séquence** |
+| P-025 · la citation qui n’en est pas une | [BUGS_LOG] 016 | ✅ fait |
+| P-026 · la réponse d’un clic | [D-025](../00-Projet/DECISIONS_LOG.md) | ✅ fait |
+| P-027 · ce que Feedys impose à son hôte | [BUGS_LOG] 018, [D-027](../00-Projet/DECISIONS_LOG.md) | ✅ fait |
+| P-028 · les indices techniques | [D-026](../00-Projet/DECISIONS_LOG.md), T-011 | ✅ fait — **hors séquence** |
+| P-029 · une installation par client | [D-028](../00-Projet/DECISIONS_LOG.md), [D-029](../00-Projet/DECISIONS_LOG.md) | ✅ fait — **hors séquence**, `1.0.0` publiée |
+| P-030 · aucune note ne se perd, et Telegram prévient | [BUGS_LOG] 019, T-012, la relecture du 2026-09-17 | ⏳ **en PR** — ⛔ à fusionner AVANT P-019 |
 
 ⚠️ **P-024 n’a pas de section de prompt ci-dessous, et c’est normal** : il est né d’une relecture
 de P-020, pas de la planification. Ce qu’il fait tient dans
 [tracabilite-du-correctif.md](../01-Specs/tracabilite-du-correctif.md) et
 [D-024](../00-Projet/DECISIONS_LOG.md) — « traité » n’est plus une affirmation, il porte ce qui a
 corrigé. Les numéros ne se réattribuent pas : P-021 à P-023 restent ce qu’ils étaient.
+
+⚠️ **P-02X, P-028 et P-029 n’ont pas de section non plus, pour la même raison** — ils sont nés
+en dehors de cette séquence, et ce qu’ils font tient dans leur décision :
+
+- **P-02X** — la contextualisation métier et situationnelle de l’entretien :
+  [D-020](../00-Projet/DECISIONS_LOG.md), [entretien.md](../01-Specs/entretien.md) ;
+- **P-028** — les indices techniques : le navigateur relève ce qu’il a vu avant l’ouverture, et
+  Feedys corrèle plutôt qu’il ne recopie. [D-026](../00-Projet/DECISIONS_LOG.md),
+  [widget.md](../01-Specs/widget.md) §Les indices techniques, T-011 ;
+- **P-029** — une installation par client : l’image publiée sur tag de version, et ce que la
+  topologie coûte. [D-028](../00-Projet/DECISIONS_LOG.md), [D-029](../00-Projet/DECISIONS_LOG.md),
+  [hebergement.md](../04-Architecture/hebergement.md) §Une installation par client. C’est lui qui a
+  publié `1.0.0` — et c’est après lui que la relecture de P-030 a été jouée.
 
 [MVP.md]: MVP.md
 [ROADMAP]: ../00-Projet/ROADMAP.md
@@ -1190,7 +1209,7 @@ tombé. Les écrire maintenant reviendrait à deviner.
 | **T-005** · l’avertissement snapdom dans la console de l’hôte | un intégrateur signale la ligne — c’est P-019 qui le dira —, **ou** snapdom expose de quoi la taire |
 | **④ le regroupement** de retours similaires | un volume qui le justifie. [ROADMAP] : « le construire avant serait deviner » |
 | **Whisper côté serveur** | Chrome n’est plus tenable, **ou** T-002 échoue et la confidentialité l’exige. Le tuyau est déjà prêt : l’ingestion accepte l’audio depuis P-003 |
-| **Slack, les webhooks, l’ouverture d’issues** — [ROADMAP] §hors MVP | des retours réels ont prouvé que la note est bonne. D-007 : « ils s’ajouteront quand la note aura prouvé qu’elle est bonne » — P-019 ouvre la mesure, il ne la tranche pas |
+| **Slack, les webhooks, l’ouverture d’issues** — [ROADMAP] §hors MVP | des retours réels ont prouvé que la note est bonne. D-007 : « ils s’ajouteront quand la note aura prouvé qu’elle est bonne » — P-019 ouvre la mesure, il ne la tranche pas. ⚠️ **Telegram en est sorti avec P-030** : il ne porte pas la note — un avis sans parole, et les alertes —, donc le motif de D-007 ne le visait pas ([D-030](../00-Projet/DECISIONS_LOG.md)). Un webhook, lui, reste ici — et c’est le premier canal d’alerte à considérer le jour où un client refuse Telegram |
 | **T-008** · la liste du back-office en mode dégradé | le mode dégradé devient fréquent — un relevé, pas une impression ([RECETTE_MVP] §5) |
 
 Le détail de chaque ticket, avec son coût si on le fait plus tard, est dans [TICKETS_DIFFERES].

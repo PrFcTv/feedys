@@ -9,7 +9,7 @@ import type { MotifRefus } from '../../../domaine/retours/ingestion'
 import { corpsTropGros, ingerer } from '../../../domaine/retours/ingestion'
 import { portsIngestion } from '../../../infra/composition'
 
-import { ipDe, json, preflight } from './_reponses'
+import { enveloppes, ipDe, json, preflight } from './_reponses'
 
 /** ⚠️ `pg` et le système de fichiers : la route ne tourne pas sur l’edge. */
 export const runtime = 'nodejs'
@@ -37,7 +37,7 @@ export async function POST(requete: Request): Promise<Response> {
   const annonce = Number(requete.headers.get('content-length'))
   if (Number.isFinite(annonce) && corpsTropGros(annonce)) {
     return json(
-      { motif: 'corps_trop_gros', message: 'Ce retour est trop lourd pour être envoyé.' },
+      enveloppes.erreur('corps_trop_gros', 'Ce retour est trop lourd pour être envoyé.'),
       STATUT.corps_trop_gros,
       origine,
     )
@@ -60,8 +60,8 @@ export async function POST(requete: Request): Promise<Response> {
   )
 
   if (!resultat.ok) {
-    return json({ motif: resultat.motif, message: resultat.message }, STATUT[resultat.motif], origine)
+    return json(enveloppes.erreur(resultat.motif, resultat.message), STATUT[resultat.motif], origine)
   }
 
-  return json({ retour: resultat.retour }, 201, origine)
+  return json(enveloppes.retourCree(resultat.retour), 201, origine)
 }

@@ -64,7 +64,7 @@ leur motif dans [04-Architecture/dependances.md](04-Architecture/dependances.md)
 | `@floating-ui/dom` | MIT | Floating UI contributors |
 | `ai` (AI SDK) | Apache-2.0 | Vercel, Inc. |
 | `next` | MIT | Vercel, Inc. |
-| `@prisma/client` | Apache-2.0 | Prisma Data, Inc. |
+| `prisma` (CLI du miroir, outillage) | Apache-2.0 | Prisma Data, Inc. |
 | `shadcn` (composants copiés) | MIT | shadcn |
 | `@modelcontextprotocol/sdk` | MIT | Anthropic |
 | `nodemailer` | MIT-0 | Andris Reinman |

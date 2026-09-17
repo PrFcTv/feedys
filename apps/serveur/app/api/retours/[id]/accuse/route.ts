@@ -8,7 +8,7 @@ import { EN_TETE_CLE, EN_TETE_IDENTITE } from '../../../../../../../packages/wid
 import type { MotifRefusAccuse } from '../../../../../domaine/retours/collaborateur'
 import { accuserReceptionCollaborateur } from '../../../../../domaine/retours/collaborateur'
 import { portsCollaborateur } from '../../../../../infra/composition'
-import { ipDe, json, preflight } from '../../_reponses'
+import { enveloppes, ipDe, json, preflight } from '../../_reponses'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,8 +46,8 @@ export async function POST(
   )
 
   if (!resultat.ok) {
-    return json({ motif: resultat.motif, message: resultat.message }, STATUT[resultat.motif], origine)
+    return json(enveloppes.erreur(resultat.motif, resultat.message), STATUT[resultat.motif], origine)
   }
 
-  return json({ ok: true }, 200, origine)
+  return json(enveloppes.accuse(), 200, origine)
 }

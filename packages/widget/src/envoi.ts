@@ -41,7 +41,40 @@ export interface Requete {
 const GENERIQUE = 'L’envoi n’a pas abouti. Réessayez dans un instant.'
 const HORS_LIGNE = 'Pas de connexion. Votre retour part dès qu’elle revient.'
 
+/**
+ * Envoie le retour.
+ *
+ * ⛔ LA PAROLE D’ABORD, LE CONFORT ENSUITE. Un serveur peut avoir une version de
+ *    retard sur ce widget — un retour arrière, un onglet ouvert depuis le matin —
+ *    et refuser en 400 un indice ou une capture qu’il ne sait pas lire
+ *    ([T-012], P-030). La capture et les indices sont des aide-mémoire : sur un
+ *    400, le widget renvoie UNE fois la parole sans eux. Ce qui ne passe
+ *    toujours pas ne passera pas, et le refus du serveur est rendu tel quel.
+ *
+ * ⚠️ Ça ne desserre rien côté serveur : un indice qui porterait un `message` est
+ *    toujours refusé, et il n’atteint toujours pas la base ([D-026]). C’est la
+ *    parole qu’on sauve, pas l’indice.
+ */
 export async function envoyer(requete: Requete): Promise<Resultat> {
+  const premier = await poster(requete, requete.corps)
+  if (premier.statut !== 400 || !aDuConfort(requete.corps)) return premier.resultat
+
+  return (await poster(requete, sansConfort(requete.corps))).resultat
+}
+
+function aDuConfort(corps: CorpsRetour): boolean {
+  return corps.contexte.capture !== undefined || corps.contexte.indices !== undefined
+}
+
+function sansConfort(corps: CorpsRetour): CorpsRetour {
+  const { capture: _capture, indices: _indices, ...contexte } = corps.contexte
+  return { ...corps, contexte }
+}
+
+async function poster(
+  requete: Requete,
+  corpsEnvoye: CorpsRetour,
+): Promise<{ readonly statut: number | null; readonly resultat: Resultat }> {
   const appeler = requete.fetch ?? globalThis.fetch
 
   let reponse: Response
@@ -55,29 +88,36 @@ export async function envoyer(requete: Requete): Promise<Resultat> {
         [EN_TETE_CLE]: requete.cle,
         ...(requete.identite === undefined ? {} : { [EN_TETE_IDENTITE]: requete.identite }),
       },
-      body: JSON.stringify(requete.corps),
+      body: JSON.stringify(corpsEnvoye),
     })
   } catch {
     // ⚠️ `fetch` ne rejette que sur le réseau : coupure, DNS, CORS. Tout le
     //    reste arrive avec un statut.
-    return { ok: false, message: HORS_LIGNE, reessayable: true }
+    return { statut: null, resultat: { ok: false, message: HORS_LIGNE, reessayable: true } }
   }
 
   if (reponse.status === 201) {
     const corps = await lireJson(reponse)
     const retour = typeof corps?.retour === 'string' ? corps.retour : ''
-    return retour === '' ? { ok: false, message: GENERIQUE, reessayable: true } : { ok: true, retour }
+    return {
+      statut: 201,
+      resultat:
+        retour === '' ? { ok: false, message: GENERIQUE, reessayable: true } : { ok: true, retour },
+    }
   }
 
   const corps = await lireJson(reponse)
 
   return {
-    ok: false,
-    // ⚠️ Le serveur écrit en français et ne dit rien de son intérieur
-    //    (01-Specs/ingestion.md) : son message est meilleur que le nôtre quand
-    //    il y en a un.
-    message: typeof corps?.message === 'string' && corps.message !== '' ? corps.message : GENERIQUE,
-    reessayable: reponse.status === 429 || reponse.status >= 500,
+    statut: reponse.status,
+    resultat: {
+      ok: false,
+      // ⚠️ Le serveur écrit en français et ne dit rien de son intérieur
+      //    (01-Specs/ingestion.md) : son message est meilleur que le nôtre quand
+      //    il y en a un.
+      message: typeof corps?.message === 'string' && corps.message !== '' ? corps.message : GENERIQUE,
+      reessayable: reponse.status === 429 || reponse.status >= 500,
+    },
   }
 }
 

@@ -48,6 +48,8 @@ const TABLES_METIER = [
   'syntheses',
   'notifications',
   'audit',
+  /** Un incident, un message — l’état qui empêche d’alerter à chaque passe (P-030). */
+  'alertes',
 ] as const
 
 const ENUMS = [
@@ -62,8 +64,12 @@ const ENUMS = [
 ] as const
 
 const INDEX = [
+  /** ⛔ Un seul incident OUVERT par genre (P-030). */
+  'alertes_une_ouverte_par_genre',
   'indices_retour_ordre_uniq',
   'messages_retour_ordre_idx',
+  /** ⛔ Une notification par retour ET par canal (P-030). */
+  'notifications_retour_canal_uniq',
   'produits_cle_publique_uniq',
   'retours_produit_statut_cree_idx',
   'retours_produit_type_cree_idx',
@@ -140,7 +146,7 @@ describe('le socle, appliqué sur une base vierge', () => {
     expect(resultat.deja).toEqual([])
   })
 
-  it('crée les huit tables métier, et rien d’autre que le registre en plus', async () => {
+  it('crée les neuf tables métier, et rien d’autre que le registre en plus', async () => {
     const { rows } = await base.client.query<{ table_name: string }>(
       `select table_name from information_schema.tables
        where table_schema = 'public' and table_type = 'BASE TABLE'
@@ -187,6 +193,9 @@ describe('le socle, appliqué sur une base vierge', () => {
     //    permet pas d’employer la valeur dans la transaction qui l’ajoute, et
     //    le runner enveloppe chaque migration dans la sienne (D-025).
     expect(parNom.get('geste_message')).toEqual(['correction', 'reponse_axe'])
+    // ⚠️ `telegram` arrive par 0011, et rien dans ce fichier ne l’emploie : la
+    //    valeur n’est pas utilisable dans la transaction qui l’ajoute (P-030).
+    expect(parNom.get('canal_notification')).toEqual(['email', 'telegram'])
   })
 
   /**
@@ -243,7 +252,7 @@ describe('le socle, appliqué sur une base vierge', () => {
     ).toEqual([])
   })
 
-  it('crée les quatre index qui comptent', async () => {
+  it('crée les index qui comptent', async () => {
     const { rows } = await base.client.query<{ indexname: string }>(
       `select indexname from pg_indexes
        where schemaname = 'public' and indexname = any($1::text[])
@@ -277,7 +286,7 @@ describe('le socle, appliqué sur une base vierge', () => {
       `select count(*)::text as n from information_schema.tables
        where table_schema = 'public' and table_type = 'BASE TABLE'`,
     )
-    expect(tables[0]?.n).toBe('9')
+    expect(tables[0]?.n).toBe(String(TABLES_METIER.length + 1))
   })
 })
 

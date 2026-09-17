@@ -11,7 +11,7 @@ import type { Page } from '@playwright/test'
 
 import { MOT_DE_PASSE_E2E } from '../../playwright.config'
 
-import { PAROLE_BUG, TITRE_BUG, TITRE_IDEE } from './preparer'
+import { PAROLE_BUG, PAROLE_SANS_NOTE, TITRE_BUG, TITRE_IDEE } from './preparer'
 
 /**
  * ⚠️ Le serveur de développement de Next parle en console pour ses propres
@@ -159,4 +159,51 @@ test('l’état vide dit quoi faire ensuite', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: 'Rien ne correspond à ces filtres' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Voir tous les retours' })).toBeVisible()
+})
+
+test('⛔ une note devenue impossible se dit sur la liste ET sur la fiche, et se refait à la main', async ({ page }) => {
+  const erreurs = surveillerLaConsole(page)
+
+  await seConnecter(page)
+
+  // ── la liste le dit, à la place du titre ─────────────────────────────────
+  const ligne = page.getByText('sans note — le modèle n’a pas répondu, à refaire')
+  await expect(ligne).toBeVisible()
+  await ligne.click()
+
+  // ── la fiche le dit, et la parole est là ─────────────────────────────────
+  const note = section(page, 'La note')
+  await expect(note).toContainText('le filet a renoncé après 8 reprise(s)')
+  await expect(note).toContainText('Rien n’est perdu pour autant')
+  await expect(note).not.toContainText('pnpm')
+  await expect(page.getByText(PAROLE_SANS_NOTE)).toBeVisible()
+
+  // ── le bouton : le modèle du parcours est mort, hors ligne ─────────────────
+  // ⚠️ Le refus doit être DIT, dans la fiche — pas avalé, pas en console.
+  await note.getByRole('button', { name: 'Refaire la note' }).click()
+  await expect(note.getByRole('alert')).toContainText('Le modèle ne répond toujours pas', {
+    timeout: 25_000,
+  })
+
+  expect(erreurs).toEqual([])
+})
+
+test('la page d’installation dit les canaux — des noms, jamais une valeur', async ({ page }) => {
+  const erreurs = surveillerLaConsole(page)
+
+  await seConnecter(page)
+  await page.getByRole('link', { name: 'Installation' }).click()
+
+  await expect(page.getByRole('heading', { name: 'L’installation' })).toBeVisible()
+
+  // ⚠️ Le parcours vide Telegram exprès (playwright.config.ts) : le bouton
+  //    d’essai n’est pas proposé, et la page dit où vont les alertes.
+  const canaux = section(page, 'Les canaux')
+  await expect(canaux).toContainText('non configuré — FEEDYS_TELEGRAM_JETON, FEEDYS_TELEGRAM_CHAT')
+  await expect(canaux.getByRole('button', { name: 'Envoyer un message d’essai' })).toHaveCount(0)
+  await expect(canaux).toContainText('Sans Telegram, les alertes restent dans les journaux du conteneur.')
+
+  await expect(section(page, 'Les incidents ouverts')).toBeVisible()
+
+  expect(erreurs).toEqual([])
 })

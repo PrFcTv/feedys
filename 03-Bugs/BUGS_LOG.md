@@ -766,7 +766,7 @@ encore `style-src 'unsafe-inline'` et `img-src data:` — c’est snapdom, pas n
 
 ## 019 — Une panne du modèle perd la note pour toujours, et le rattrapage écrit ne peut pas marcher
 
-**Statut** : 🔴 Ouvert
+**Statut** : ✅ Résolu (2026-09-17, P-030)
 **Constaté le** : 2026-09-17, à la relecture de `main` à `0da28df`, **après** la publication de
 `1.0.0` — les six checks verts
 **Où** : `apps/serveur/infra/composition.ts`, `apps/serveur/domaine/entretien/balayage.ts`,
@@ -813,10 +813,44 @@ exactement aussi vrai de l’option (a), celle qu’on a retenue.
 (`apps/serveur/domaine/entretien/tour.ts:382`) dit « Une note qui manque se rattrape — la requête
 est dans hebergement.md ». C’est faux.
 
-**Correctif** — à venir : P-030, partie 1 ([05-Prompts/APRES-MVP.md](../05-Prompts/APRES-MVP.md)).
+**Correctif** — trois pièces, et aucune ne passe par un outil absent de l’image
+([D-030](../00-Projet/DECISIONS_LOG.md)) :
 
-**Ce qui l’a laissé passer** — les tests prouvent que l’échec de la synthèse est **avalé** —
+1. **Le filet reprend** tout retour clos (`envoye`, `abandonne`) sans note, **quelle que soit la
+   façon dont il a été clos** — il ne regarde plus `audit`, seulement le statut et l’absence de
+   note. Huit reprises, en doublant à partir de cinq minutes (environ vingt et une heures),
+   comptées en base (`0011_notes_et_telegram.sql`), une à la fois, sous une réservation
+   `for update skip locked`. La note reprise part par **le** chemin d’une note
+   (`domaine/synthese/chaine.ts`), qui notifie. ⛔ `rien_a_synthetiser` n’est jamais retenté.
+2. **Le renoncement se voit** : au plafond, le retour porte `synthese_impossible_le`, la liste et la
+   fiche le disent, et l’alerte Telegram `notes_impossibles` part — une par incident.
+3. **Le rattrapage à la main marche dans l’image** : « Refaire la note » sur la fiche. ⛔ Il refuse
+   un retour qui a déjà sa note et un entretien en cours. `entretien:rejouer` reste en lecture
+   seule.
+
+`synthetiser()` rend désormais son issue au lieu de `void` : c’est ce qui permet au filet de savoir
+s’il doit reprendre. `hebergement.md` §Le filet est réécrit avec le chemin qui marche, et les deux
+textes qui mentaient — le commentaire de `rejouerAval` et le message d’alerte du filet — sont
+corrigés.
+
+⚠️ **Pourquoi pas une file de reprises, ou un worker** : [D-018] les refuse, et le travail tient
+dans la passe existante — même budget, même verrou `enCours`, en série.
+
+**Ce qui l’a laissé passer** — les tests prouvaient que l’échec de la synthèse est **avalé** —
 `produire.test.ts` rend `modele_indisponible`, `tour.test.ts` referme quand même. C’est
-l’invariant d’ingestion, et il tient. ⛔ **Aucun ne demande ce qui se passe ENSUITE** : aucun ne
-coupe le modèle, le rétablit, et attend la note. Et la procédure de rattrapage a été **écrite
-sans jamais être jouée** : un seul essai sur l’image l’aurait fait tomber sur la raison 2.
+l’invariant d’ingestion, et il tenait. ⛔ **Aucun ne demandait ce qui se passe ENSUITE** : aucun ne
+coupait le modèle, le rétablissait, et attendait la note. Et la procédure de rattrapage avait été
+**écrite sans jamais être jouée** : un seul essai sur l’image l’aurait fait tomber sur la raison 2.
+
+Désormais, `domaine/synthese/reprise.integration.test.ts` fait exactement ça, contre un vrai
+Postgres et **par le vrai chemin** — `synthetiserEtNotifier`, les dépôts de production,
+`canalTelegram` —, seuls le modèle et `fetch` étant bouchonnés : le modèle échoue, la passe
+suivante ne rappelle rien, le modèle revient, la note est écrite et l’avis part. Il couvre aussi le
+retour refermé par le widget **sans aucune ligne d’audit**, le `rien_a_synthetiser` jamais retenté,
+le plafond, et des passes simultanées — ⚠️ ce dernier vérifié en retirant le verrou : il rougit cinq
+fois sur cinq. Et `/bo` porte un parcours e2e qui clique « Refaire la note » sur un modèle mort, et
+exige que le refus soit dit.
+
+⚠️ **La leçon qui vaut au-delà de ce défaut** : une procédure d’exploitation écrite est un code qui
+n’a jamais tourné. Celle-ci citait un outil en lecture seule, absent de l’image, et une requête
+aveugle à la moitié des cas — trois fautes qu’un seul essai aurait montrées.

@@ -8,7 +8,7 @@ import { EN_TETE_CLE, EN_TETE_IDENTITE } from '../../../../../../packages/widget
 import type { MotifRefusReleve } from '../../../../domaine/retours/collaborateur'
 import { releverReponsesCollaborateur } from '../../../../domaine/retours/collaborateur'
 import { portsCollaborateur } from '../../../../infra/composition'
-import { ipDe, jsonPrive, preflight } from '../_reponses'
+import { enveloppes, ipDe, jsonPrive, preflight } from '../_reponses'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -39,9 +39,9 @@ export async function GET(requete: Request): Promise<Response> {
   )
 
   if (!resultat.ok) {
-    return jsonPrive({ motif: resultat.motif, message: resultat.message }, STATUT[resultat.motif], origine)
+    return jsonPrive(enveloppes.erreur(resultat.motif, resultat.message), STATUT[resultat.motif], origine)
   }
 
   // ⛔ `jsonPrive` et pas `json` : cette liste est celle d’UNE personne.
-  return jsonPrive({ retours: resultat.retours }, 200, origine)
+  return jsonPrive(enveloppes.reponses(resultat.retours), 200, origine)
 }

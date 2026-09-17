@@ -9,8 +9,11 @@
 // jamais un « ticket ».
 
 generator client {
-  provider = "prisma-client"
-  output   = "./genere"
+  provider        = "prisma-client"
+  output          = "./genere"
+  // ⚠️ Pour dire l’index partiel de `alertes` (0011) : sans lui, le miroir
+  //    ne peut pas décrire ce que la base contient, et il mentirait.
+  previewFeatures = ["partialIndexes"]
 }
 
 // ⚠️ La chaîne de connexion n’est plus ici mais dans prisma.config.ts —
@@ -88,6 +91,7 @@ enum ConfianceSynthese {
 
 enum CanalNotification {
   email
+  telegram
 
   @@map("canal_notification")
 }
@@ -151,6 +155,14 @@ model Retour {
   /// `reponseTexte` qui lui parle, et les deux ne se confondent pas (P-021).
   correctifNote    String?      @map("correctif_note")
   correctifLe      DateTime?    @map("correctif_le") @db.Timestamptz(6)
+  /// Combien de fois le filet a redemandé la note. NULL = jamais (P-030).
+  syntheseReprises        Int?      @map("synthese_reprises")
+  /// La dernière reprise — l’espacement, et la réservation.
+  syntheseRepriseLe       DateTime? @map("synthese_reprise_le") @db.Timestamptz(6)
+  /// ⛔ Terminal pour le filet seulement : « Refaire la note » reste possible.
+  syntheseImpossibleLe    DateTime? @map("synthese_impossible_le") @db.Timestamptz(6)
+  /// `plafond` ou `rien_a_synthetiser`, sous contrainte CHECK en base.
+  syntheseImpossibleMotif String?   @map("synthese_impossible_motif")
   creeLe           DateTime     @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe            DateTime     @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
 
@@ -164,6 +176,10 @@ model Retour {
 
   @@index([produitId, statut, creeLe(sort: Desc)], map: "retours_produit_statut_cree_idx")
   @@index([produitId, type, creeLe(sort: Desc)], map: "retours_produit_type_cree_idx")
+  /// La relève des réponses au collaborateur (0006). ⚠️ Absent du miroir jusqu’à
+  /// P-030 : sans `partialIndexes`, Prisma ne voyait pas les index partiels, et
+  /// le test du miroir ne pouvait donc pas le réclamer.
+  @@index([produitId, auteurRef, reponseEnvoyeeLe(sort: Desc)], map: "retours_reponse_en_attente_idx", where: raw("(reponse_envoyee_le IS NOT NULL) AND (reponse_lue_le IS NULL)"))
   @@map("retours")
 }
 
@@ -288,7 +304,29 @@ model Notification {
 
   retour Retour @relation(fields: [retourId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  /// Une par retour ET par canal (0011).
+  @@unique([retourId, canal], map: "notifications_retour_canal_uniq")
   @@map("notifications")
+}
+
+/// Un incident d’exploitation ou d’usage, et s’il a été annoncé (P-030).
+///
+/// ⛔ Une alerte par incident, pas une par passe : un seul incident OUVERT par
+///    genre, tenu par l’index partiel. `genre` est un String sous contrainte
+///    CHECK en base, pour la même raison que `Notification.statut`.
+/// ⛔ Aucune parole, aucun nom.
+model Alerte {
+  id        String    @id
+  genre     String
+  ouverteLe DateTime  @default(now()) @map("ouverte_le") @db.Timestamptz(6)
+  closeLe   DateTime? @map("close_le") @db.Timestamptz(6)
+  envoyeeLe DateTime? @map("envoyee_le") @db.Timestamptz(6)
+  erreur    String?
+  creeLe    DateTime  @default(now()) @map("cree_le") @db.Timestamptz(6)
+  majLe     DateTime  @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)
+
+  @@unique([genre], map: "alertes_une_ouverte_par_genre", where: raw("close_le IS NULL"))
+  @@map("alertes")
 }
 
 /// ⛔ ZONE GELÉE. Append-only : aucun UPDATE, aucun DELETE, jamais.

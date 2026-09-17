@@ -10,29 +10,45 @@
  */
 import type { PortsCollaborateur } from '../domaine/retours/collaborateur'
 import type { PortsBalayage } from '../domaine/entretien/balayage'
-import type { PortsNotification } from '../domaine/notification/envoyer'
-import { envoyerNote } from '../domaine/notification/envoyer'
+import type { PortCanal } from '../domaine/notification/envoyer'
+import { canalEmail, notifierParCanaux } from '../domaine/notification/envoyer'
+import type { ReglagesTelegram } from '../domaine/notification/telegram'
+import { canalTelegram, composerEssai, envoyerTelegram } from '../domaine/notification/telegram'
 import type { PortsIngestion } from '../domaine/retours/ingestion'
+import { synthetiserEtNotifier } from '../domaine/synthese/chaine'
 import type { PortsSynthese } from '../domaine/synthese/produire'
+import type { PortsRefaire } from '../domaine/synthese/refaire'
+import type { IssueSynthese, PortsReprise } from '../domaine/synthese/reprise'
 import type { PortsTour } from '../domaine/entretien/tour'
 import { MAX_RELANCES } from '../domaine/entretien/tour'
 import { creerDebitCollaborateur, creerDebitEntretien, creerDebitIngestion } from '../domaine/retours/debit'
-import { etiquettesDe, produireSynthese } from '../domaine/synthese/produire'
 import { modeleClaude } from '../domaine/entretien/modele'
+import type { Installation, PortsVeille } from '../domaine/veille/alertes'
+import { creerFenetreModele, mesurerModele } from '../domaine/veille/modele'
 
 import { pool } from './base/connexion'
 import { creerDepotBalayage } from './base/depot-balayage'
 import { creerDepotCollaborateur } from './base/depot-collaborateur'
 import { creerDepotEntretien } from './base/depot-entretien'
 import { creerDepotNotifications } from './base/depot-notifications'
+import { creerDepotReprise } from './base/depot-reprise'
 import { creerDepotRetours } from './base/depot-retours'
 import { creerDepotSyntheses } from './base/depot-syntheses'
+import { creerDepotVeille } from './base/depot-veille'
 import { creerSmtp } from './courriel/smtp'
 import { lireGabaritSynthese, lireGabaritSysteme } from './prompts'
 import { creerStockageFichiers } from './stockage/fichiers'
 
 const debit = creerDebitIngestion()
 const debitEntretien = creerDebitEntretien()
+
+/**
+ * ⚠️ Les appels au modèle de la dernière heure, réussis ou non — la mesure de
+ *    l’alerte `modele_en_echec`. Singleton de module pour la même raison que les
+ *    limiteurs : une fenêtre recréée à chaque requête ne mesurerait rien. Elle
+ *    ne survit pas à un redémarrage, et c’est voulu (domaine/veille/modele.ts).
+ */
+const fenetreModele = creerFenetreModele()
 
 /**
  * ⛔ Ce qui sort en console ne contient jamais le corps d’un retour : la parole
@@ -109,8 +125,10 @@ export function portsTour(): PortsTour {
     signaler,
     // ⛔ APRÈS la clôture, jamais avant, et son échec est avalé par
     //    `terminerEntretien` : une synthèse qui rate ne perd pas le retour, il
-    //    est déjà en base et déjà clos.
-    aval: (retourId) => synthetiser(retourId),
+    //    est déjà en base et déjà clos — et le filet la redemandera.
+    aval: async (retourId) => {
+      await synthetiser(retourId)
+    },
   }
 }
 
@@ -128,17 +146,44 @@ export function portsBalayage(): PortsBalayage {
 
   return {
     clore: (avant, limite) => depot.clore(avant, limite),
-    aval: (retourId) => synthetiser(retourId),
+    aval: async (retourId) => {
+      await synthetiser(retourId)
+    },
     signaler,
   }
 }
 
+/**
+ * Les ports des reprises.
+ *
+ * ⛔ `synthetiser` est LE MÊME que celui de la fin d’entretien — et il notifie
+ *    déjà. Une note reprise part par le chemin ordinaire, pas par un second
+ *    (domaine/synthese/reprise.ts).
+ */
+export function portsReprise(): PortsReprise {
+  const depot = creerDepotReprise(pool())
+
+  return {
+    reserver: (limites, plafond) => depot.reserver(limites, plafond),
+    synthetiser,
+    renoncer: (retourId, motif) => depot.renoncer(retourId, motif),
+    signaler,
+  }
+}
+
+/**
+ * ⚠️ Le modèle est MESURÉ : chaque appel, réussi ou non, entre dans la fenêtre
+ *    de l’alerte `modele_en_echec`. Rien d’autre ne change pour l’appelant.
+ */
 function modeleDuServeur() {
-  return modeleClaude({
-    gabarit: lireGabaritSysteme(),
-    gabaritSynthese: lireGabaritSynthese(),
-    identifiant: identifiantModele(),
-  })
+  return mesurerModele(
+    modeleClaude({
+      gabarit: lireGabaritSysteme(),
+      gabaritSynthese: lireGabaritSynthese(),
+      identifiant: identifiantModele(),
+    }),
+    fenetreModele,
+  )
 }
 
 export function portsSynthese(): PortsSynthese {
@@ -150,33 +195,35 @@ export function portsSynthese(): PortsSynthese {
 }
 
 /**
- * Produit la synthèse d’un retour clos, et l’écrit.
- *
- * ⚠️ L’écriture est ici plutôt que dans le domaine parce que c’est un effet de
- *    bord : `produireSynthese` rend ce qu’il faut écrire, il n’écrit pas.
+ * Produit la synthèse d’un retour clos, l’écrit, et la notifie — par LE chemin
+ * d’une note (domaine/synthese/chaine.ts).
  */
-export async function synthetiser(retourId: string): Promise<void> {
-  const ports = portsSynthese()
-  const resultat = await produireSynthese(retourId, ports, MAX_RELANCES)
-
-  if (!resultat.ok) {
-    // ⚠️ `deja_faite` et `rien_a_synthetiser` sont des issues normales, pas des
-    //    pannes : une double fin d’entretien est une course ordinaire.
-    if (resultat.motif === 'modele_indisponible' || resultat.motif === 'retour_inconnu') {
-      signaler(`synthèse du retour — ${resultat.motif}`, new Error(resultat.motif))
-    }
-    return
-  }
-
-  await ports.depot.enregistrer(retourId, resultat.synthese, etiquettesDe(resultat.synthese.contenu))
-
-  // ⛔ APRÈS l’écriture, jamais avant, et son échec est avalé : l’email est un
-  //    confort, la note est déjà lisible au back-office et par MCP.
-  await notifier(retourId)
+export function synthetiser(retourId: string): Promise<IssueSynthese> {
+  return synthetiserEtNotifier(retourId, {
+    synthese: portsSynthese(),
+    notifier,
+    maximumRelances: MAX_RELANCES,
+  })
 }
 
 /**
- * L’origine publique, pour composer le lien vers la fiche dans l’email.
+ * Les ports du bouton « Refaire la note ».
+ *
+ * ⛔ `synthetiser`, et rien d’autre : le bouton ne touche ni aux reprises, ni au
+ *    statut, ni au fil (01-Specs/back-office.md).
+ */
+export function portsRefaire(): PortsRefaire {
+  const depot = creerDepotSyntheses(pool())
+
+  return {
+    statut: async (retourId) => (await depot.charger(retourId))?.statut ?? null,
+    aSaNote: (retourId) => depot.dejaFaite(retourId),
+    synthetiser,
+  }
+}
+
+/**
+ * L’origine publique, pour composer le lien vers la fiche.
  *
  * ⚠️ Sans elle on n’envoie pas de lien mort : on retombe sur une origine locale,
  *    qui se voit immédiatement dans le message.
@@ -186,46 +233,127 @@ function urlPublique(): string {
 }
 
 /**
- * ⚠️ Rend `undefined` quand l’email n’est pas configuré. Ce n’est pas une panne :
- *    un poste de développement sans relais SMTP doit tourner, et un retour sans
- *    notification reste un retour complet.
+ * Telegram, s’il est configuré.
+ *
+ * ⚠️ Les DEUX variables, ou rien : un jeton sans chat n’envoie nulle part, et le
+ *    démarrage le dit (domaine/demarrage/controles.ts).
  */
-export function portsNotification(): PortsNotification | undefined {
+export function reglagesTelegram(): ReglagesTelegram | undefined {
+  const jeton = process.env['FEEDYS_TELEGRAM_JETON']?.trim()
+  const chat = process.env['FEEDYS_TELEGRAM_CHAT']?.trim()
+
+  return jeton && chat ? { jeton, chat } : undefined
+}
+
+/**
+ * ⚠️ Le `fetch` natif, et l’attente réelle d’un 429 : c’est ce que les tests
+ *    remplacent. ⛔ Aucune dépendance : rien d’autre n’est nécessaire.
+ */
+const PORTS_TELEGRAM = {
+  fetch: (url: string, init: RequestInit) => fetch(url, init),
+  attendre: (ms: number) => new Promise<void>((resoudre) => setTimeout(resoudre, ms)),
+}
+
+/**
+ * Les canaux configurés — Telegram d’abord, l’email ensuite ([D-030]).
+ *
+ * ⚠️ Une liste vide n’est pas une panne : un poste de développement tourne sans,
+ *    et un retour sans notification reste un retour complet.
+ */
+export function canauxConfigures(): PortCanal[] {
+  const canaux: PortCanal[] = []
+
+  const telegram = reglagesTelegram()
+  if (telegram !== undefined) canaux.push(canalTelegram(telegram, PORTS_TELEGRAM))
+
   const url = process.env['SMTP_URL']?.trim()
   const expediteur = process.env['FEEDYS_EMAIL_DE']?.trim()
   const destinataire = process.env['FEEDYS_EMAIL_A']?.trim()
+  if (url && expediteur && destinataire) {
+    canaux.push(canalEmail(creerSmtp({ url, expediteur }), destinataire))
+  }
 
-  if (!url || !expediteur || !destinataire) return undefined
+  return canaux
+}
 
-  return {
+/**
+ * Envoie la note par chaque canal configuré. ⛔ N’interrompt jamais ce qui l’appelle.
+ *
+ * ⚠️ Un canal coupé laisse SA notification en `echoue` et n’empêche pas l’autre
+ *    (04-Architecture/conventions-db.md §notifications).
+ *
+ * ⚠️ `pool()` est appelé DANS la fonction, pas au chargement : rien ne se
+ *    connecte à l’import.
+ */
+export function notifier(retourId: string): Promise<void> {
+  return notifierParCanaux(retourId, {
     depot: creerDepotNotifications(pool(), urlPublique()),
-    smtp: creerSmtp({ url, expediteur }),
-    destinataire,
+    canaux: canauxConfigures(),
     signaler,
+  })
+}
+
+/** Qui parle, dans une alerte : les produits actifs et l’origine publique. */
+async function installation(): Promise<Installation> {
+  return {
+    produits: await creerDepotVeille(pool()).produits(),
+    origine: urlPublique(),
+  }
+}
+
+export type IssueEssai = { readonly ok: true } | { readonly ok: false; readonly raison: string }
+
+/**
+ * Le message d’essai de la liste d’installation.
+ *
+ * ⛔ Il n’écrit rien en base, et il ne rend qu’une raison nettoyée : le jeton
+ *    n’y est pas (domaine/notification/telegram.ts).
+ */
+export async function envoyerEssaiTelegram(): Promise<IssueEssai> {
+  const reglages = reglagesTelegram()
+  if (reglages === undefined) {
+    return {
+      ok: false,
+      raison: 'Telegram n’est pas configuré : FEEDYS_TELEGRAM_JETON et FEEDYS_TELEGRAM_CHAT.',
+    }
+  }
+
+  const qui = await installation()
+  const nom = `${qui.produits.join(', ') || 'aucun produit'} · ${qui.origine}`
+
+  try {
+    await envoyerTelegram(composerEssai(nom), reglages, PORTS_TELEGRAM)
+    return { ok: true }
+  } catch (erreur) {
+    return { ok: false, raison: erreur instanceof Error ? erreur.message : String(erreur) }
   }
 }
 
 /**
- * Envoie la note. ⛔ N’interrompt jamais ce qui l’appelle.
+ * Les ports de la veille.
  *
- * ⚠️ Un SMTP coupé laisse la notification en `echoue` et le retour en `envoye` :
- *    c’est le comportement attendu, pas une dégradation
- *    (04-Architecture/conventions-db.md §notifications).
+ * ⛔ `prevenir` est Telegram, et lui seul : une alerte ne passe pas par ce
+ *    qu’elle surveille — ni par le SMTP, ni par le modèle.
  */
-export async function notifier(retourId: string): Promise<void> {
-  const ports = portsNotification()
+export function portsVeille(journal: (texte: string) => void): PortsVeille {
+  const depot = creerDepotVeille(pool())
+  const telegram = reglagesTelegram()
 
-  if (ports === undefined) {
-    signaler(
-      'envoi de la note — SMTP_URL, FEEDYS_EMAIL_DE ou FEEDYS_EMAIL_A est absente',
-      new Error('email non configuré'),
-    )
-    return
-  }
-
-  try {
-    await envoyerNote(retourId, ports)
-  } catch (erreur) {
-    signaler('envoi de la note par email', erreur)
+  return {
+    ouvertes: () => depot.ouvertes(),
+    ouvrir: (genre) => depot.ouvrir(genre),
+    fermer: (id) => depot.fermer(id),
+    consigner: (id, erreur) => depot.consigner(id, erreur),
+    derniereFermeture: (genre) => depot.derniereFermeture(genre),
+    impossiblesDepuis: (instant) => depot.impossiblesDepuis(instant),
+    noteEcriteDepuis: (instant) => depot.noteEcriteDepuis(instant),
+    retours: () => depot.retours(),
+    partVoix: (depuis) => depot.partVoix(depuis),
+    etatModele: () => fenetreModele.etat(),
+    installation,
+    ...(telegram === undefined
+      ? {}
+      : { prevenir: (texte: string) => envoyerTelegram(texte, telegram, PORTS_TELEGRAM) }),
+    journal,
   }
 }
