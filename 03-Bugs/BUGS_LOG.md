@@ -766,7 +766,7 @@ encore `style-src 'unsafe-inline'` et `img-src data:` — c’est snapdom, pas n
 
 ## 019 — Une panne du modèle perd la note pour toujours, et le rattrapage écrit ne peut pas marcher
 
-**Statut** : ✅ Résolu (2026-09-17, P-030)
+**Statut** : ✅ Résolu (2026-09-17, PR #31)
 **Constaté le** : 2026-09-17, à la relecture de `main` à `0da28df`, **après** la publication de
 `1.0.0` — les six checks verts
 **Où** : `apps/serveur/infra/composition.ts`, `apps/serveur/domaine/entretien/balayage.ts`,

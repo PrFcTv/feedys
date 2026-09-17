@@ -407,3 +407,24 @@ version publiée contre les schémas du jour.
 - **Déclencheur de réouverture** : un retour arrivé sans parole, ou une carte qui ne s’affiche plus,
   dans un onglet resté ouvert pendant une mise à jour.
 
+
+---
+
+## T-013 — Aucun vrai message Telegram n’est encore arrivé sur un vrai téléphone
+
+**Différé le** : 2026-09-17, pendant P-030, par décision du développeur
+**Déclencheur de reprise** : la première intégration de Feedys dans un ERP client — point 7 de la
+liste d’installation, le message d’essai de `/bo/installation`
+**Coût si plus tard** : identique — le message d’essai existe pour ça, dans l’image
+
+Le canal Telegram est éprouvé **hors ligne** : `fetch` bouchonné, les refus `400`/`403`/`429`, le
+jeton nettoyé des erreurs, le texte brut, la troncature ([D-030](DECISIONS_LOG.md)). ⚠️ **Rien n’a
+encore parlé à la vraie API** : ni `link_preview_options`, ni la forme réelle des refus, ni un chat
+de groupe négatif.
+
+⛔ **Ce n’est pas un oubli** : un bot par installation, et son jeton se pose à l’intégration dans
+chaque ERP, jamais dans le `.env.local` du dépôt.
+
+**En attendant** : le point 7 de la liste d’installation se coche quand le message est **lu sur le
+téléphone**, pas quand le bouton dit « Parti ». Un écart constaté ce jour-là devient une entrée de
+[BUGS_LOG](../03-Bugs/BUGS_LOG.md).

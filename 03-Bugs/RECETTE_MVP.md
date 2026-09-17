@@ -181,3 +181,40 @@ parce que les tests vérifiaient une constante contre elle-même.
 ⛔ **Donc : rejouer le point 1 à la voix après toute modification de `packages/widget/src/dictee/`
 ou de `ui/useDictee.ts`.** C’est cinq minutes, et c’est la seule chose qui regarde le produit
 plutôt que le code.
+
+## P-030 · Ce qui a été joué le 2026-09-17, et ce qui ne l’a pas été
+
+**Le montage.** L’image construite depuis la branche de P-030 (`docker build`, 324 Mo), lancée par
+`docker run` contre une base **neuve et isolée** (`feedys_p030`) — ⚠️ pas la base de développement :
+d’autres sessions y travaillent, et leur code ne connaît pas `0011`. `pnpm widget:demo` branché sur
+l’image, sur un autre port. Aucun jeton Telegram, un SMTP à moitié configuré, et une clé de modèle
+**refusée** — ce dernier point n’était pas voulu, il a été constaté.
+
+### Joué dans l’image, sans `pnpm`
+
+| Point | Verdict |
+|---|---|
+| Le démarrage applique `0011` sur une base neuve, `/sante` rend `ok` | ✅ onze migrations |
+| Le démarrage dit ce qui manque, sans une valeur | ✅ « SMTP_URL est absente — la note ne part pas par email », puis « aucun canal de notification — la note ne part pour personne, et les alertes restent en console » |
+| Un retour abandonné par le filet se dit **sur la liste** | ✅ « sans note — le modèle n’a pas répondu, à refaire » |
+| … et **sur la fiche** | ✅ « le filet a renoncé après 8 reprise(s) » |
+| « Refaire la note » avec un modèle qui refuse | ✅ le refus est dit dans la fiche — « Le modèle ne répond toujours pas. Rien n’a changé ; réessayez plus tard. » —, aucune note n’est écrite, les reprises ne bougent pas, **console vide** |
+| L’alerte `notes_impossibles`, sans Telegram | ✅ **une** ligne `veille — …` dans les journaux, **une** ligne dans `alertes` (« Telegram n’est pas configuré — l’alerte est restée en console »), et les passes suivantes se taisent |
+| `/bo/installation` | ✅ « Telegram — non configuré », « Email — incomplet, il manque SMTP_URL », pas de bouton d’essai, et la phrase qui dit où vont les alertes |
+
+⚠️ **Ce que la clé refusée a montré, sans qu’on le cherche** : le modèle a rendu `401 — API key is
+invalid` (vérifié hors de l’image : la clé du poste elle-même est refusée). C’est exactement le mode
+de panne de [D-029](../00-Projet/DECISIONS_LOG.md) — une clé révoquée —, celui que
+[BUGS_LOG](BUGS_LOG.md) 019 rendait invisible. Il s’est vu : sur la fiche, dans les journaux, en base.
+
+### ⛔ Pas joué
+
+- **Le point 1, à la voix.** La clé de modèle du poste est refusée : la dictée irait jusqu’à
+  l’ingestion, mais aucune carte ni aucune note ne viendrait. ⛔ **Il reste dû** : P-017 a modifié
+  `useDictee.ts` après la dernière dictée humaine (2026-09-05), et `1.0.0` est partie sans
+  (relecture du 2026-09-17, constat 4). À rejouer avec une clé valide **avant la fusion de P-030**.
+- **Un vrai message Telegram sur un vrai téléphone.** ⛔ Par décision, pas par oubli : un bot par
+  installation, et son jeton se pose à l’intégration dans chaque ERP, jamais dans le dépôt
+  ([D-030](../00-Projet/DECISIONS_LOG.md)). Il sera joué au point 7 de la liste d’installation
+  ([hebergement.md](../04-Architecture/hebergement.md) §Installer chez un client) —
+  [T-013](../00-Projet/TICKETS_DIFFERES.md).

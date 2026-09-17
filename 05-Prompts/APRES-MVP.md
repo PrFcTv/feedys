@@ -1193,6 +1193,14 @@ base, aucun journal · un corps de requête du widget `1.0.0` passe toujours · 
 est propre, ou justifié · la dictée à la voix est rejouée et consignée · BUGS_LOG 019 est ✅ et
 T-012 clos ou requalifié · les six checks sont verts.
 
+⚠️ **État au 2026-09-17** ([RECETTE_MVP] §P-030) : « Refaire la note » et l’alerte sans Telegram
+sont vérifiés **dans l’image**. ⛔ **Le vrai message Telegram est reporté à la première
+intégration**, par décision — un bot par installation, jeton posé chez le client, jamais dans le
+dépôt ([T-013]). ⏳ **La dictée à la voix reste due avant la fusion** : la clé de modèle du poste
+est refusée (401).
+
+[T-013]: ../00-Projet/TICKETS_DIFFERES.md
+
 [D-028]: ../00-Projet/DECISIONS_LOG.md
 [D-029]: ../00-Projet/DECISIONS_LOG.md
 
