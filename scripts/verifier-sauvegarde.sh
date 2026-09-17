@@ -21,6 +21,15 @@ ENV_FILE="${ENV_FILE:-$RACINE/.env.production}"
 DEST="${DEST:-$RACINE/sauvegardes}"
 SERVICE_PG="${SERVICE_PG:-postgres}"
 
+# ⚠️ DEUX MONTAGES, UN SEUL SCRIPT. Par défaut, le compose de ce dossier
+#    (docker-compose.production.yml). Sous Kamal il n’y a pas de compose : la
+#    base est un accessoire, et CONTENEUR_PG la désigne par le nom de son
+#    conteneur — le `service:` de l’accessoire, `feedys-postgres` dans
+#    hebergement.md §Le cas Kamal. On passe alors par `docker exec`.
+#
+#      CONTENEUR_PG=feedys-postgres ./scripts/sauvegarde.sh
+CONTENEUR_PG="${CONTENEUR_PG:-}"
+
 if [ -f "$ENV_FILE" ]; then
   set -a
   # shellcheck source=/dev/null
@@ -33,6 +42,24 @@ compose() {
     docker compose -f "$COMPOSE" --env-file "$ENV_FILE" "$@"
   else
     docker compose -f "$COMPOSE" "$@"
+  fi
+}
+
+# ⚠️ Sous Kamal il n’y a pas de `.env.production` sur l’hôte : l’utilisateur et
+#    la base se lisent dans l’environnement du conteneur Postgres lui-même,
+#    plutôt que de supposer le défaut et de viser la mauvaise base.
+if [ -n "$CONTENEUR_PG" ]; then
+  POSTGRES_USER="${POSTGRES_USER:-$(docker exec "$CONTENEUR_PG" printenv POSTGRES_USER || true)}"
+  POSTGRES_DB="${POSTGRES_DB:-$(docker exec "$CONTENEUR_PG" printenv POSTGRES_DB || true)}"
+fi
+
+# ⛔ `-i` et `-T` : l’entrée standard doit passer (pg_restore la lit), et aucun
+#    terminal ne doit être alloué — il corromprait le flux binaire du dump.
+pg_exec() {
+  if [ -n "$CONTENEUR_PG" ]; then
+    docker exec -i "$CONTENEUR_PG" "$@"
+  else
+    compose exec -T "$SERVICE_PG" "$@"
   fi
 }
 
@@ -67,24 +94,24 @@ BASE_ESSAI="feedys_verif_$(date +%s)_$$"
 #    restauration échoue au milieu, ce qui est précisément le cas où l’on veut
 #    savoir, pas le cas où l’on veut laisser des débris.
 detruire() {
-  compose exec -T "$SERVICE_PG" dropdb -U "$UTILISATEUR" --if-exists --force "$BASE_ESSAI" \
+  pg_exec dropdb -U "$UTILISATEUR" --if-exists --force "$BASE_ESSAI" \
     > /dev/null 2>&1 || true
 }
 trap detruire EXIT
 
 echo "📦 $dump"
-compose exec -T "$SERVICE_PG" createdb -U "$UTILISATEUR" "$BASE_ESSAI"
+pg_exec createdb -U "$UTILISATEUR" "$BASE_ESSAI"
 
 # ⚠️ `pg_restore` rend un code non nul sur de simples avertissements — un rôle
 #    absent, un commentaire sur un objet système. Ce qui tranche n’est pas son
 #    code de sortie, ce sont les LIGNES qu’on relit ensuite.
-if ! compose exec -T "$SERVICE_PG" \
+if ! pg_exec \
   pg_restore -U "$UTILISATEUR" -d "$BASE_ESSAI" --no-owner --no-privileges < "$dump"; then
   echo "⚠️ pg_restore a signalé des avertissements. Les comptes ci-dessous font foi."
 fi
 
 echo
-compose exec -T "$SERVICE_PG" psql -U "$UTILISATEUR" -d "$BASE_ESSAI" -c "
+pg_exec psql -U "$UTILISATEUR" -d "$BASE_ESSAI" -c "
   select 'messages'  as table, count(*) as lignes from messages
   union all select 'retours',   count(*) from retours
   union all select 'contextes', count(*) from contextes
@@ -97,7 +124,7 @@ compose exec -T "$SERVICE_PG" psql -U "$UTILISATEUR" -d "$BASE_ESSAI" -c "
 # ⛔ LE SEUL COMPTE QUI DÉCIDE. Une base restaurée sans un seul message est une
 #    sauvegarde qui n’a rien sauvegardé — et c’est exactement ce qu’un dump
 #    plausible mais vide donnerait.
-messages=$(compose exec -T "$SERVICE_PG" \
+messages=$(pg_exec \
   psql -U "$UTILISATEUR" -d "$BASE_ESSAI" -tAc 'select count(*) from messages' | tr -d '[:space:]')
 
 if [ "${messages:-0}" -eq 0 ]; then

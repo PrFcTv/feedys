@@ -51,10 +51,11 @@ référence du MVP marche de bout en bout.**
 | P-028 · les indices techniques | ✅ fait — le navigateur relève ce qu’il a vu avant l’ouverture, et Feedys **corrèle plutôt qu’il ne recopie** ([D-026](DECISIONS_LOG.md), [widget.md](../01-Specs/widget.md) §Les indices techniques). ⚠️ Renverse la règle d’occupation n°1 — et porte sa mesure : sous 20 % de retours avec indice, on retire le relevé passif. ⛔ Ni iframes, ni workers, ni avant-chargement — [T-011](TICKETS_DIFFERES.md) |
 | P-029 · une installation par client | ✅ fait — l’image est publiée sur GHCR, sur tag de version, et ce que la topologie coûte est écrit ([D-028](DECISIONS_LOG.md)) ; la clé du modèle est celle du développeur, plafonnée par client ([D-029](DECISIONS_LOG.md)). `1.0.0` est publiée |
 | P-030 · aucune note ne se perd, et Telegram prévient | ✅ fait — [#31](https://github.com/PrFcTv/feedys/pull/31). Une panne du modèle ne perd plus la note ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 019), les alertes de `hebergement.md` existent, Telegram est le canal recommandé, et l’écart de version widget ↔ serveur est tenu par un test ([D-030](DECISIONS_LOG.md), [T-012](TICKETS_DIFFERES.md)). ⏳ **La dictée à la voix reste due avant P-019** ([RECETTE_MVP](../03-Bugs/RECETTE_MVP.md) §P-030) ; le vrai message Telegram se joue à la première intégration ([T-013](TICKETS_DIFFERES.md)) |
+| P-031 · Feedys en accessoire Kamal, joué pour de vrai | ✅ fait — l’image porte l’outil de création de produit, la sauvegarde marche sans compose, et §Le cas Kamal est corrigé de quatre défauts qui empêchaient toute installation ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 020, [D-031](DECISIONS_LOG.md)). ⚠️ Publié en `1.1.0` : c’est la version minimale d’une installation chez un client |
 
 La séquence de travail est dans [05-Prompts/MVP.md] — quatorze prompts, un par PR.
 
-**La suite est écrite** : [05-Prompts/APRES-MVP.md] — P-015 à P-030. Tout est joué sauf P-019,
+**La suite est écrite** : [05-Prompts/APRES-MVP.md] — P-015 à P-031. Tout est joué sauf P-019,
 qui attend un hôte réel, et P-021 à P-023, qui attendent P-019. Le lot 7
 finit un MVP qui n’est pas tout à fait fini (la recette non jouée, les deux défauts contournés
 de [BUGS_LOG](../03-Bugs/BUGS_LOG.md)), le lot 8 le met en service, le lot 9 est l’ordre de

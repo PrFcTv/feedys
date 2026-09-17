@@ -19,6 +19,7 @@
     "db:migrate": "tsx apps/serveur/outils/migrer.ts",
     "db:generate": "prisma generate",
     "produit:creer": "tsx apps/serveur/outils/creer-produit.ts",
+    "outils:empaqueter": "tsx apps/serveur/outils/empaqueter.ts",
     "entretien:rejouer": "tsx apps/serveur/outils/entretien-rejouer.ts",
     "emails:apercu": "tsx apps/serveur/outils/emails-apercu.ts",
     "widget:demo": "pnpm --filter @feedys/widget build && tsx packages/widget/demo/serveur.ts"
@@ -28,6 +29,7 @@
     "@playwright/test": "1.62.1",
     "@types/node": "24.13.3",
     "@types/pg": "8.23.1",
+    "esbuild": "0.28.2",
     "eslint": "10.9.1",
     "happy-dom": "20.14.0",
     "pg": "8.23.0",

@@ -33,6 +33,15 @@ DEST="${DEST:-$RACINE/sauvegardes}"
 RETENTION_JOURS="${RETENTION_JOURS:-7}"
 SERVICE_PG="${SERVICE_PG:-postgres}"
 
+# ⚠️ DEUX MONTAGES, UN SEUL SCRIPT. Par défaut, le compose de ce dossier
+#    (docker-compose.production.yml). Sous Kamal il n’y a pas de compose : la
+#    base est un accessoire, et CONTENEUR_PG la désigne par le nom de son
+#    conteneur — le `service:` de l’accessoire, `feedys-postgres` dans
+#    hebergement.md §Le cas Kamal. On passe alors par `docker exec`.
+#
+#      CONTENEUR_PG=feedys-postgres ./scripts/sauvegarde.sh
+CONTENEUR_PG="${CONTENEUR_PG:-}"
+
 # ⚠️ `set -a` : les variables du fichier deviennent celles de CE shell, ce qui
 #    donne POSTGRES_USER et POSTGRES_DB à la ligne `pg_dump`. `--env-file` seul
 #    ne sert qu’à l’interpolation de compose — c’est la double contrainte
@@ -49,6 +58,24 @@ compose() {
     docker compose -f "$COMPOSE" --env-file "$ENV_FILE" "$@"
   else
     docker compose -f "$COMPOSE" "$@"
+  fi
+}
+
+# ⚠️ Sous Kamal il n’y a pas de `.env.production` sur l’hôte : l’utilisateur et
+#    la base se lisent dans l’environnement du conteneur Postgres lui-même,
+#    plutôt que de supposer le défaut et de viser la mauvaise base.
+if [ -n "$CONTENEUR_PG" ]; then
+  POSTGRES_USER="${POSTGRES_USER:-$(docker exec "$CONTENEUR_PG" printenv POSTGRES_USER || true)}"
+  POSTGRES_DB="${POSTGRES_DB:-$(docker exec "$CONTENEUR_PG" printenv POSTGRES_DB || true)}"
+fi
+
+# ⛔ `-i` et `-T` : l’entrée standard doit passer (pg_restore la lit), et aucun
+#    terminal ne doit être alloué — il corromprait le flux binaire du dump.
+pg_exec() {
+  if [ -n "$CONTENEUR_PG" ]; then
+    docker exec -i "$CONTENEUR_PG" "$@"
+  else
+    compose exec -T "$SERVICE_PG" "$@"
   fi
 }
 
@@ -69,7 +96,7 @@ trap nettoyer EXIT
 # ⚠️ `--format=custom` : compressé, et surtout relisible par `pg_restore`, qui
 #    sait restaurer table par table. `--no-owner` parce que le rôle qui
 #    restaure n’est pas forcément celui qui possédait.
-compose exec -T "$SERVICE_PG" \
+pg_exec \
   pg_dump -U "$UTILISATEUR" -d "$BASE" --format=custom --no-owner > "$partiel"
 
 if [ ! -s "$partiel" ]; then

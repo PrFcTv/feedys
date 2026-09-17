@@ -161,11 +161,15 @@ donne gratuitement — et la réutilisation d’un secret est la seule façon de
 ⚠️ Elle suppose **un VPS où un proxy tourne déjà**, ce qui est le cas ordinaire : la machine héberge
 le logiciel métier. Dans l’ordre, et chaque ligne se coche pour de vrai.
 
+⚠️ **Si le VPS est déployé par Kamal**, les points 3 à 6 se jouent dans §Le cas Kamal, qui les
+remplace un par un : pas de compose, pas de `.env.production`, pas de vhost — deux accessoires dans
+le `deploy.yml` du logiciel métier, et leurs secrets dans `.kamal/secrets`.
+
 - [ ] **1 · Le contrat est signé**, et il porte la phrase du §1 ci-dessus. ⛔ Avant l’installation,
       pas après : après, la parole de quelqu’un est déjà en base ;
 - [ ] **2 · Le DNS** : `feedys.<domaine-du-client>` → l’IP du VPS ;
 - [ ] **3 · Les fichiers**, dans `/srv/feedys` sur le VPS : `docker-compose.production.yml` et les
-      deux scripts de `scripts/`. ⚠️ Le dépôt n’a pas à y être et rien ne se compile sur place —
+      deux scripts de `scripts/` — sous Kamal, **les deux scripts seulement**. ⚠️ Le dépôt n’a pas à y être et rien ne se compile sur place —
       **l’image est publiée** (§Construire et déployer) ;
 - [ ] **4 · `.env.production`**, écrit sur place, jamais recopié d’un autre client (§4). Les deux
       à fabriquer :
@@ -179,7 +183,9 @@ le logiciel métier. Dans l’ordre, et chaque ligne se coche pour de vrai.
       CE client (§Telegram). L’email ensuite, s’il est voulu : `SMTP_URL`, `FEEDYS_EMAIL_DE`,
       `FEEDYS_EMAIL_A` ;
 - [ ] **5 · Le premier démarrage**, puis §Le rôle de connexion — le rôle de service se crée à la
-      main, **une fois**, et les deux `DATABASE_URL` sont renseignées ensuite. ⛔ Tant que la ligne
+      main, **une fois**, et les deux `DATABASE_URL` sont renseignées ensuite. ⚠️ Le premier
+      démarrage se fait **en propriétaire** : `feedys_app`, dont le rôle de service est membre,
+      n’existe qu’après la première migration (§Le cas Kamal · Le premier démarrage le détaille). ⛔ Tant que la ligne
       de journal ne dit pas « membre de feedys_app, propriétaire d’aucune des N tables », les GRANT
       ne mordent pas ;
 - [ ] **6 · Le vhost dans le proxy DÉJÀ EN PLACE** —
@@ -195,8 +201,9 @@ le logiciel métier. Dans l’ordre, et chaque ligne se coche pour de vrai.
 - [ ] **8 · La restauration, une fois, pour de vrai** — §La pose chez un hôte · 2. ⛔ Avant la
       pose, pas après ;
 - [ ] **9 · Le produit, sa clé, la ligne de `<script>`, le CSP, l’identité, et les dix minutes
-      dans un vrai navigateur** — c’est **§La pose chez un hôte**, points 3 à 7, qui ne change pas
-      d’un iota : à ce stade, le fait que l’instance soit chez le client n’a plus d’effet ;
+      dans un vrai navigateur** — c’est **§La pose chez un hôte**, points 3 à 7. ⚠️ Le produit se
+      crée **dans le conteneur**, par `node outils/creer-produit.mjs` : `pnpm` n’est pas sur le VPS
+      (§La pose chez un hôte · 3). Le reste ne dépend plus de l’endroit où tourne l’instance ;
 - [ ] **10 · Consigner** ce qui a été vu dans `03-Bugs/MISE_EN_SERVICE.md`. ⛔ Aucun nom de client,
       aucun domaine réel, aucune clé, aucun chat : le dépôt est public.
 
@@ -316,7 +323,7 @@ que ce client.
 ### Le cas Kamal
 
 Dans `accessories.feedys.env` : `FEEDYS_TELEGRAM_CHAT` en `clear`, `FEEDYS_TELEGRAM_JETON` en
-`secret`. `SMTP_URL` n’y est plus nécessaire si l’email n’est pas voulu.
+`secret`. `SMTP_URL:FEEDYS_SMTP_URL` n’y est nécessaire que si l’email est voulu (§Le cas Kamal).
 
 ## Le service du widget
 
@@ -606,10 +613,27 @@ sans coupure ». C’est la propriété qu’on veut : `kamal deploy` du logicie
 faire à Feedys, et mettre Feedys à jour est une décision distincte, prise par un humain
 (§Une installation par client · 2).
 
-⚠️ **Vérifié le 2026-09-09 contre Kamal 2.12.0**, sur la configuration de référence et sur le code.
-`accessories.<nom>.proxy` **n’existe que depuis Kamal 2.4.0** : avant, un accessoire ne pouvait pas
-être publié par `kamal-proxy` et ce mode d’emploi ne s’applique pas. `kamal accessory boot <nom>`
-enregistre l’accessoire auprès du proxy lorsque le bloc `proxy` est présent.
+⚠️ **Vérifié le 2026-09-09 contre Kamal 2.12.0**, sur la configuration de référence et sur le code,
+puis **rejoué le 2026-09-17** (P-031) : l’image, un Postgres, un `kamal-proxy` 0.10.0 sur un réseau
+dédié, le rôle de service, la création d’un produit. ⚠️ Deux versions minimales, et elles ne se
+confondent pas :
+
+| Kamal | Ce qu’il apporte ici |
+|---|---|
+| **2.4.0** | `accessories.<nom>.proxy` — avant, un accessoire ne pouvait pas être publié par `kamal-proxy`, et ce mode d’emploi ne s’applique pas |
+| **2.6.0** | les **alias de secrets** (`DATABASE_URL:FEEDYS_DATABASE_URL`) — ⛔ sans eux, Feedys et le logiciel métier se disputent les mêmes noms dans `.kamal/secrets` (voir plus bas) |
+
+⛔ **Et Feedys `1.1.0` au minimum.** `1.0.0` n’embarque pas l’outil de création de produit : on ne
+pourrait rien créer chez le client ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 020).
+
+### ⛔ Ce qui cassait le premier montage, et que P-031 a rejoué
+
+| Défaut | Ce qu’on voyait | Corrigé par |
+|---|---|---|
+| la sonde de `kamal-proxy` vise **`/up`** par défaut, Feedys répond sur `/sante` | `kamal accessory boot feedys` échoue sur « target failed to become healthy » — mesuré | `proxy.healthcheck.path: /sante` |
+| `directories:` monte un dossier **créé par l’utilisateur SSH** — root, le plus souvent —, et le conteneur tourne en `node` | `Permission denied` sur `/stockage` — mesuré. ⛔ La capture étant en échec doux, **rien ne se voit** : les retours arrivent sans image, et seul le journal le dit | un **volume nommé** : Docker y recopie le `/stockage` de l’image, propriétaire compris |
+| `.kamal/secrets` est **un seul espace de noms** pour tout le `deploy.yml` | le `DATABASE_URL` du logiciel métier part chez Feedys, ou l’inverse — selon l’ordre des lignes | des **alias** : chaque secret de Feedys porte le préfixe `FEEDYS_` côté `.kamal/secrets` |
+| `pnpm produit:creer` n’existe pas dans l’image | aucun produit, donc aucune clé, donc aucun widget | `node outils/creer-produit.mjs`, dans le conteneur (§Créer le produit ci-dessous) |
 
 ### Les deux accessoires
 
@@ -620,8 +644,8 @@ accessories:
   # ── Feedys ─────────────────────────────────────────────────────────────────
   feedys:
     # ⛔ La version publiée, épinglée. Jamais `latest` : ce qui met à jour le
-    #    serveur de quelqu’un d’autre, c’est un humain.
-    image: ghcr.io/prfctv/feedys:1.4.0
+    #    serveur de quelqu’un d’autre, c’est un humain. 1.1.0 au minimum.
+    image: ghcr.io/prfctv/feedys:1.1.0
     host: <l’hôte qui porte déjà le logiciel métier>
 
     # ⛔ CE BLOC REMPLACE LE VHOST NGINX. kamal-proxy termine TLS et joint le
@@ -634,6 +658,12 @@ accessories:
       # ⚠️ Certificat Let’s Encrypt automatique. Prérequis identiques au Caddy :
       #    le DNS pointe cette machine, et les ports 80 et 443 sont ouverts.
       ssl: true
+      # ⛔ OBLIGATOIRE. kamal-proxy interroge `/up` par défaut ; Feedys n’a pas
+      #    cette route, et le démarrage échouerait sur « target failed to
+      #    become healthy ». `/sante` est la sonde de l’image (§La sonde).
+      healthcheck:
+        path: /sante
+      # ⛔ PAS de `forward_headers: true` — §Les trois réglages, plus bas.
 
     env:
       clear:
@@ -641,31 +671,40 @@ accessories:
         FEEDYS_MODELE: claude-sonnet-5
         # ⛔ La même chaîne que l’étiquette de `image:` ci-dessus. Un écart fait
         #    mentir le pied de back-office — article 13 de l’AGPL, pas cosmétique.
-        FEEDYS_VERSION: '1.4.0'
+        FEEDYS_VERSION: '1.1.0'
         # ⚠️ Telegram d’abord (§Telegram). Le chat n’est pas un secret : sans le
         #    jeton, il ne permet rien.
         FEEDYS_TELEGRAM_CHAT: '<le chat de CE client — §Telegram>'
-        # L’email, s’il est voulu.
-        FEEDYS_EMAIL_DE: feedys@exemple.fr
-        FEEDYS_EMAIL_A: dev@exemple.fr
+        # L’email, s’il est voulu — avec FEEDYS_SMTP_URL plus bas.
+        # FEEDYS_EMAIL_DE: feedys@exemple.fr
+        # FEEDYS_EMAIL_A: dev@exemple.fr
       # ⚠️ Kamal ne met pas ceux-ci dans la ligne de commande : il les écrit sur
       #    l’hôte dans un fichier d’environnement en 0600. Leurs valeurs vivent
       #    dans `.kamal/secrets`, hors de git.
+      #
+      # ⛔ LA FORME `NOM:ALIAS` (Kamal ≥ 2.6.0). À gauche, le nom que Feedys
+      #    lit ; à droite, le nom dans `.kamal/secrets`. Le logiciel métier a
+      #    très probablement SON `DATABASE_URL`, parfois SA clé Anthropic : sans
+      #    alias, l’un des deux reçoit la valeur de l’autre, et rien ne le dit.
+      #
       # ⛔ Et elles sont propres à CETTE installation (§Une installation par
       #    client · 4).
       secret:
-        - DATABASE_URL
-        - DATABASE_URL_MIGRATIONS
-        - ANTHROPIC_API_KEY
+        - DATABASE_URL:FEEDYS_DATABASE_URL
+        - DATABASE_URL_MIGRATIONS:FEEDYS_DATABASE_URL_MIGRATIONS
+        - ANTHROPIC_API_KEY:FEEDYS_ANTHROPIC_API_KEY
         - FEEDYS_BO_MOT_DE_PASSE
         - FEEDYS_CLE_CHIFFREMENT
         - FEEDYS_MCP_JETON
         - FEEDYS_TELEGRAM_JETON
-        - SMTP_URL
+        # - SMTP_URL:FEEDYS_SMTP_URL   # si l’email est voulu
 
-    # ⚠️ Les captures. Kamal crée le dossier sur l’hôte avant de le monter.
-    directories:
-      - stockage:/stockage
+    # ⛔ UN VOLUME NOMMÉ, PAS `directories:`. Kamal crée un dossier d’hôte avec
+    #    l’utilisateur SSH — root, souvent — et le conteneur tourne en `node` :
+    #    l’écriture des captures échouait en silence (mesuré, P-031). Un volume
+    #    nommé neuf reçoit le `/stockage` de l’image, propriétaire compris.
+    volumes:
+      - feedys-stockage:/stockage
 
   # ── Son Postgres, à lui ────────────────────────────────────────────────────
   feedys_postgres:
@@ -673,8 +712,9 @@ accessories:
     host: <le même hôte>
     # ⚠️ Le nom du conteneur EST le nom de service, et c’est lui que le DNS du
     #    réseau `kamal` résout : c’est donc l’hôte à écrire dans les deux
-    #    DATABASE_URL. Sans ce `service:`, il vaudrait `<service>-feedys_postgres`
-    #    — devinable, mais pas à deviner.
+    #    DATABASE_URL. C’est aussi le CONTENEUR_PG de la sauvegarde. Sans ce
+    #    `service:`, il vaudrait `<service>-feedys_postgres` — devinable, mais
+    #    pas à deviner.
     service: feedys-postgres
     # ⛔ AUCUN `port:`. La base ne sort pas de la machine ; Feedys la joint par le
     #    réseau `kamal`, auquel les accessoires sont attachés par défaut.
@@ -683,22 +723,119 @@ accessories:
         POSTGRES_USER: feedys
         POSTGRES_DB: feedys
       secret:
-        - POSTGRES_PASSWORD
+        - POSTGRES_PASSWORD:FEEDYS_POSTGRES_PASSWORD
     directories:
+      # ⚠️ Ici, un dossier d’hôte convient : l’image Postgres démarre en root
+      #    et remet elle-même les droits à `postgres`.
       # ⚠️ /var/lib/postgresql, et non .../data : depuis Postgres 18 l’image range
       #    les données dans un sous-dossier par version majeure.
       - data:/var/lib/postgresql
 ```
 
-Puis, une fois :
+Et dans `.kamal/secrets` du même dépôt — ⛔ des **références** à un gestionnaire de secrets ou à
+l’environnement, jamais des valeurs en clair dans un fichier suivi :
 
 ```bash
-kamal accessory boot feedys_postgres
-kamal accessory boot feedys
+FEEDYS_POSTGRES_PASSWORD=$FEEDYS_POSTGRES_PASSWORD
+FEEDYS_DATABASE_URL=$FEEDYS_DATABASE_URL
+FEEDYS_DATABASE_URL_MIGRATIONS=$FEEDYS_DATABASE_URL_MIGRATIONS
+FEEDYS_ANTHROPIC_API_KEY=$FEEDYS_ANTHROPIC_API_KEY
+FEEDYS_BO_MOT_DE_PASSE=$FEEDYS_BO_MOT_DE_PASSE
+FEEDYS_CLE_CHIFFREMENT=$FEEDYS_CLE_CHIFFREMENT
+FEEDYS_MCP_JETON=$FEEDYS_MCP_JETON
+FEEDYS_TELEGRAM_JETON=$FEEDYS_TELEGRAM_JETON
 ```
 
-⚠️ **`kamal deploy` ne les touchera plus.** Mettre Feedys à jour, c’est changer les deux `1.4.0`
-ci-dessus puis `kamal accessory reboot feedys` — une commande explicite, pour cette installation-là.
+⚠️ Les deux URL visent l’hôte `feedys-postgres` :
+
+```
+FEEDYS_DATABASE_URL_MIGRATIONS=postgresql://feedys:<FEEDYS_POSTGRES_PASSWORD>@feedys-postgres:5432/feedys
+FEEDYS_DATABASE_URL=postgresql://feedys_service:<mot de passe du rôle de service>@feedys-postgres:5432/feedys
+```
+
+### Le premier démarrage — dans cet ordre, et pas un autre
+
+⛔ **Le rôle de service ne peut pas exister avant la première migration** : il est créé
+`in role feedys_app`, et c’est `0001_socle.sql` qui crée `feedys_app`. Et le démarrage **refuse**
+un `DATABASE_URL` qui ne répond pas (§Le rôle de connexion). D’où un premier démarrage en
+propriétaire, puis une bascule :
+
+1. **`FEEDYS_DATABASE_URL` vaut provisoirement l’URL du propriétaire** — la même que
+   `FEEDYS_DATABASE_URL_MIGRATIONS` ;
+2. la base, puis Feedys :
+   ```bash
+   kamal accessory boot feedys_postgres
+   kamal accessory boot feedys
+   ```
+   ⚠️ Le journal dit alors « rôle de connexion · feedys — **propriétaire** … » : c’est attendu, et
+   c’est ce que l’étape 3 corrige ;
+3. **le rôle de service**, une fois — ⛔ le mot de passe se tape dans `psql`, pas dans une ligne de
+   commande qui finirait dans l’historique du shell :
+   ```bash
+   kamal accessory exec feedys_postgres --interactive --reuse "psql -U feedys -d feedys"
+   ```
+   ```sql
+   create role feedys_service login password '…' inherit in role feedys_app;
+   ```
+4. **`FEEDYS_DATABASE_URL` passe à `feedys_service`** dans le gestionnaire de secrets, puis :
+   ```bash
+   kamal accessory reboot feedys
+   ```
+   ⚠️ `reboot` relit les secrets et réécrit le fichier d’environnement de l’hôte ; un simple
+   `docker restart` garderait l’ancien ;
+5. ⛔ **Le journal doit dire** « membre de feedys_app, propriétaire d’aucune des N tables. Les GRANT
+   s’appliquent. » — `kamal accessory logs feedys`. Tant qu’il ne le dit pas, les GRANT ne mordent
+   pas.
+
+### Créer le produit — dans le conteneur
+
+L’image porte l’outil, empaqueté en un seul fichier ([D-031](../00-Projet/DECISIONS_LOG.md)) :
+
+```bash
+kamal accessory exec feedys --reuse \
+  "node outils/creer-produit.mjs --nom 'Nom du logiciel' --domaine app.exemple.fr"
+```
+
+Les options sont celles de `pnpm produit:creer` (`--metier`, `--forge`, `--observabilite`). Il lit
+`DATABASE_URL`, `FEEDYS_CLE_CHIFFREMENT` et `FEEDYS_URL_PUBLIQUE` dans l’environnement du conteneur
+— la balise qu’il imprime porte donc déjà la bonne origine.
+
+⚠️ **`--reuse`** : dans le conteneur qui tourne. Sans lui, Kamal en démarre un neuf, avec le même
+environnement — ça marche aussi, et c’est plus lent.
+
+⛔ **Le secret s’affiche une fois, dans le terminal de qui lance la commande.** Il part dans les
+secrets **du logiciel métier** — il signe l’identité du collaborateur, côté serveur (§La pose chez
+un hôte · 6) — et nulle part ailleurs.
+
+### La sauvegarde, sans compose
+
+Les deux scripts de `scripts/` passent par `docker exec` dès que `CONTENEUR_PG` est posé ; ils
+lisent alors l’utilisateur et la base dans l’environnement du conteneur Postgres. Sur l’hôte, dans
+`/srv/feedys` — seuls les deux scripts y sont, ni compose ni `.env.production` :
+
+```bash
+CONTENEUR_PG=feedys-postgres ./scripts/sauvegarde.sh
+CONTENEUR_PG=feedys-postgres ./scripts/verifier-sauvegarde.sh
+```
+
+```
+12 3 * * * cd /srv/feedys && CONTENEUR_PG=feedys-postgres ./scripts/sauvegarde.sh >> /var/log/feedys-sauvegarde.log 2>&1
+```
+
+⚠️ Rejoué le 2026-09-17 dans les deux montages, compose et `docker exec` : dump, restauration dans
+une base jetable, compte des messages.
+
+### Mettre à jour
+
+Changer les **deux** `1.1.0` du bloc `feedys` — `image:` et `FEEDYS_VERSION` —, puis :
+
+```bash
+kamal accessory reboot feedys
+```
+
+⚠️ **`kamal deploy` ne touche pas aux accessoires.** C’est voulu : mettre Feedys à jour est une
+commande explicite, pour cette installation-là (§Une installation par client · 2). Les migrations
+s’appliquent au démarrage, avec `DATABASE_URL_MIGRATIONS`.
 
 ### ⛔ Les trois réglages, revus pour kamal-proxy
 
@@ -767,7 +904,19 @@ restent en `exemple.fr`. Le dépôt est public.
 
 ### 3 · Le produit et sa clé
 
+⛔ **Sur le serveur, il n’y a pas de `pnpm`** : l’image porte l’outil empaqueté, et on le lance
+dans le conteneur ([D-031](../00-Projet/DECISIONS_LOG.md)).
+
 ```bash
+# compose
+docker compose -f docker-compose.production.yml --env-file .env.production exec feedys \
+  node outils/creer-produit.mjs --nom "Nom du logiciel" --domaine app.exemple.fr
+
+# Kamal — §Le cas Kamal
+kamal accessory exec feedys --reuse \
+  "node outils/creer-produit.mjs --nom 'Nom du logiciel' --domaine app.exemple.fr"
+
+# sur le poste, contre la base de développement
 pnpm produit:creer -- --nom "Nom du logiciel" --domaine app.exemple.fr
 ```
 
@@ -1001,6 +1150,9 @@ par le modèle. Sans Telegram, elle reste dans les journaux (`veille — …`), 
 ./scripts/sauvegarde.sh            # un dump, une rotation. C’est tout.
 ./scripts/verifier-sauvegarde.sh   # le restaure dans une base JETABLE, et compte
 ```
+
+⚠️ **Sous Kamal**, il n’y a pas de compose : `CONTENEUR_PG=feedys-postgres` devant chacune des deux
+commandes, et elles passent par `docker exec` (§Le cas Kamal · La sauvegarde, sans compose).
 
 En cron, une fois par jour — ⚠️ **pas à une heure ronde**, tout le monde sauvegarde à 3 h 00 :
 

@@ -180,6 +180,16 @@ jobs:
           echo "$sortie"
           echo "$sortie" | grep -q 'la base ne répond pas'
 
+      # ⛔ L’outil de création de produit doit exister DANS l’image — sans lui,
+      #    une installation chez un client ne peut créer aucun produit
+      #    (BUGS_LOG 020). Sans arguments, il refuse en donnant son usage :
+      #    c’est la preuve qu’il se charge, dépendances comprises.
+      - name: porte l’outil de création de produit
+        run: |
+          sortie=$(docker run --rm --entrypoint node feedys:ci outils/creer-produit.mjs 2>&1 || true)
+          echo "$sortie"
+          echo "$sortie" | grep -q 'node outils/creer-produit.mjs'
+
   # ═══════════════════════════════════════════════════════════════════════════
   # La publication — le SEUL job qui pousse quelque chose hors de GitHub
   # ═══════════════════════════════════════════════════════════════════════════

@@ -70,6 +70,12 @@ n’appelle jamais.
 `typescript` · `vite` · `vitest` · `happy-dom` · `@playwright/test` · `eslint` · `turbo` · `tsx` —
 tous MIT ou Apache-2.0.
 
+⚠️ `esbuild` (MIT) — **explicite depuis le 2026-09-17** (P-031), en 0.28.2 : la version que `tsx`
+et `vite` tiraient déjà, donc rien de neuf dans l’arbre. Il empaquette l’outil de création de
+produit en un fichier autonome, copié dans l’image ([D-031](../00-Projet/DECISIONS_LOG.md)).
+⚠️ Le fichier produit **embarque** `pg` (MIT), `hash-wasm` (MIT) et `@paralleldrive/cuid2` (MIT) :
+leurs mentions de licence y restent (`legalComments: 'eof'`), c’est la condition de MIT.
+
 ⚠️ `happy-dom` (MIT) sert aux tests DOM du widget, par docbloc `// @vitest-environment happy-dom`
 fichier par fichier. ⛔ L’environnement global des tests reste `node` : un test qui n’a pas besoin
 d’un DOM ne doit pas en payer le montage.

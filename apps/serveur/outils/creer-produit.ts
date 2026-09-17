@@ -67,7 +67,10 @@ async function principal(): Promise<void> {
 
    Une clé neuve   ${nouvelleCleDeChiffrement()}
 
-   ⛔ À ranger dans .env.local, jamais dans le dépôt.`,
+   ⛔ À ranger dans .env.local sur le poste, dans les secrets de l’installation
+      en production — jamais dans le dépôt. ⚠️ En production, en changer fait
+      cesser la vérification d’identité des produits déjà créés
+      (hebergement.md §Les variables).`,
     )
   }
 
