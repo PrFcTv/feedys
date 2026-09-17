@@ -94,6 +94,8 @@ pnpm e2e              # parcours Playwright
 pnpm build            # construit le serveur ET le widget
 pnpm db:migrate       # applique les migrations SQL en attente
 pnpm db:generate      # régénère le client Prisma après édition du schema
+pnpm outils:empaqueter # l’outil de création de produit en un .mjs autonome — c’est ce
+                      # que l’image lance : node outils/creer-produit.mjs (D-031)
 
 pnpm widget:demo      # page de démonstration : le widget dans une fausse app hôte,
                       # sur un autre port. C’est LÀ qu’on recette le widget, jamais

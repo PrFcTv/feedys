@@ -1207,6 +1207,29 @@ est refusée (401).
 
 ---
 
+## P-031 · Feedys en accessoire Kamal, joué pour de vrai — ✅ fait
+
+**Objectif** — rendre possible, et non plus seulement écrite, l’installation de Feedys comme
+**accessoire Kamal** sur le VPS d’un client, à côté du logiciel métier que Kamal y déploie déjà.
+
+**Constaté** ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 020) : la sonde de kamal-proxy vise `/up` ;
+`directories:` rend `/stockage` non inscriptible ; `.kamal/secrets` mélange les `DATABASE_URL` ;
+`pnpm produit:creer` n’existe pas dans l’image ; la sauvegarde ne connaît que compose.
+
+**Fait** ([D-031](../00-Projet/DECISIONS_LOG.md)) —
+
+1. `pnpm outils:empaqueter` : l’outil de création de produit en un `.mjs` autonome, copié dans
+   l’image, prouvé par un test d’intégration lancé hors de tout `node_modules` et par le job
+   `image` de la CI ;
+2. `CONTENEUR_PG` dans les deux scripts de sauvegarde ;
+3. `hebergement.md` §Le cas Kamal réécrit — sonde, volume nommé, alias, premier démarrage,
+   produit, sauvegarde, mise à jour —, validé par `kamal config` 2.12.0 et rejoué avec kamal-proxy ;
+4. publication de `1.1.0`.
+
+**La suite** — le prompt d’intégration, à jouer **dans le dépôt du logiciel métier**, pas ici.
+
+---
+
 # Ce qui n’est pas encore un prompt
 
 ⚠️ Ces sujets sont ouverts et **n’ont volontairement pas de prompt** : leur déclencheur n’est pas

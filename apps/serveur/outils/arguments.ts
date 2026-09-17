@@ -7,10 +7,15 @@
  */
 import { parseArgs } from 'node:util'
 
+/**
+ * ⚠️ Deux formes, parce que l’outil existe à deux endroits : sur le poste, par
+ *    `pnpm` ; dans l’image, empaqueté, par `node` (outils/empaqueter.ts).
+ */
 export const USAGE_PRODUIT =
   'Usage : pnpm produit:creer -- --nom "VictorIA" --domaine victoria.exemple.fr ' +
   '[--metier "Contexte métier"] [--forge https://github.com/org/depot] ' +
-  '[--observabilite "https://outil.exemple.fr/recherche?q={{ref}}"]'
+  '[--observabilite "https://outil.exemple.fr/recherche?q={{ref}}"]\n' +
+  '   Dans le conteneur : node outils/creer-produit.mjs --nom … --domaine … (mêmes options)'
 
 /**
  * ⛔ `--forge` doit être une URL https, et on le dit MAINTENANT plutôt que de

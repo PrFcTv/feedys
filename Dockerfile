@@ -53,6 +53,11 @@ COPY . .
 RUN pnpm db:generate
 RUN pnpm build
 
+# ⛔ L’outil de création de produit, en UN fichier autonome. L’image n’a ni
+#    `pnpm`, ni `tsx` : sans ce paquetage, on ne peut créer aucun produit chez
+#    un client, donc aucune clé, donc aucun widget (BUGS_LOG 020).
+RUN pnpm outils:empaqueter
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. L’image servie
 # ─────────────────────────────────────────────────────────────────────────────
@@ -87,6 +92,10 @@ COPY --from=construction --chown=node:node /depot/apps/serveur/.next/static ./ap
 # ⚠️ Le widget et snapdom dans UN dossier — c’est ce que `FEEDYS_ACTIFS` désigne.
 COPY --from=construction --chown=node:node /depot/packages/widget/dist/widget.js ./actifs/widget.js
 COPY --from=construction --chown=node:node /depot/apps/serveur/node_modules/@zumer/snapdom/dist/snapdom.js ./actifs/snapdom.js
+
+# ⚠️ Les outils d’exploitation, autonomes — lancés par le `node` de l’image :
+#      docker exec <conteneur> node outils/creer-produit.mjs --nom … --domaine …
+COPY --from=construction --chown=node:node /depot/apps/serveur/outils/dist/ ./outils/
 
 # ⚠️ Les deux prompts dans UN dossier, pour la même raison : la hiérarchie du
 #    dépôt n’existe pas ici (apps/serveur/infra/prompts.ts).

@@ -854,3 +854,68 @@ exige que le refus soit dit.
 ⚠️ **La leçon qui vaut au-delà de ce défaut** : une procédure d’exploitation écrite est un code qui
 n’a jamais tourné. Celle-ci citait un outil en lecture seule, absent de l’image, et une requête
 aveugle à la moitié des cas — trois fautes qu’un seul essai aurait montrées.
+
+## 020 — Une installation par Kamal ne peut pas aboutir, et la documentation la décrit comme prête
+
+**Statut** : ✅ Résolu (2026-09-17, PR #32)
+**Constaté le** : 2026-09-17, en vérifiant l’intégration « Feedys en accessoire Kamal, à côté d’un
+logiciel métier », sur `main` à `fbd9e64` — contre le code de Kamal 2.12.0 et de kamal-proxy
+**Où** : `Dockerfile`, `scripts/sauvegarde.sh`, `scripts/verifier-sauvegarde.sh`,
+`04-Architecture/hebergement.md` §Le cas Kamal et §La pose chez un hôte · 3
+
+**Symptôme** — en suivant §Le cas Kamal à la lettre, quatre murs, dans l’ordre où on les rencontre :
+
+1. `kamal accessory boot feedys` échoue sur « target failed to become healthy » ;
+2. une fois ce point contourné, les retours arrivent **sans capture**, et rien ne le montre ailleurs
+   que dans le journal ;
+3. le `DATABASE_URL` de Feedys et celui du logiciel métier sont **le même nom** dans
+   `.kamal/secrets` : l’un des deux reçoit la valeur de l’autre ;
+4. et surtout, **aucun produit ne peut être créé** : pas de clé, donc pas de widget. L’installation
+   s’arrête là.
+
+Et la sauvegarde écrite ne tourne pas : ses deux scripts ne connaissent que `docker compose`.
+
+⚠️ Et la liste d’installation — compose comme Kamal — demandait de restaurer « avant la pose »,
+c’est-à-dire sur une base sans aucun message : `verifier-sauvegarde.sh` refuse ce cas, exprès.
+L’étape ne pouvait pas se cocher. Elle se joue désormais après un premier retour d’essai, et avant
+l’annonce aux collaborateurs.
+
+**Cause** — cinq faits, chacun vérifié :
+
+| Fait | Preuve |
+|---|---|
+| kamal-proxy sonde **`/up`** par défaut (`DefaultHealthCheckPath`), Feedys n’a que `/sante` | rejoué avec kamal-proxy 0.10.0 : échec sur la sonde par défaut, succès avec `--health-check-path /sante` |
+| `directories:` monte un dossier créé par l’utilisateur SSH, le conteneur tourne en `node` | rejoué : `drwxr-xr-x root root /stockage`, `touch: Permission denied`. La capture est en échec doux (`domaine/retours/ingestion.ts`) : rien ne remonte |
+| `.kamal/secrets` est un espace de noms unique pour tout le `deploy.yml` | `Kamal::Configuration::Env#aliased_secrets` |
+| `pnpm produit:creer` demande `pnpm`, `tsx` et `apps/serveur/outils/` — l’image n’a aucun des trois | `Dockerfile` §L’image servie. §Installer chez un client · 9 affirmait pourtant que « le fait que l’instance soit chez le client n’a plus d’effet » |
+| les scripts de sauvegarde n’appellent que `docker compose exec` | `scripts/sauvegarde.sh`, `scripts/verifier-sauvegarde.sh` |
+
+**Correction** — [D-031](../00-Projet/DECISIONS_LOG.md) :
+
+1. l’outil de création de produit est **empaqueté** en un fichier autonome
+   (`pnpm outils:empaqueter`, esbuild) et **copié dans l’image** : `node outils/creer-produit.mjs` ;
+2. les deux scripts de sauvegarde passent par `docker exec` quand `CONTENEUR_PG` est posé, et lisent
+   alors l’utilisateur et la base dans l’environnement du conteneur ;
+3. §Le cas Kamal est réécrit : `healthcheck.path: /sante`, un **volume nommé** pour `/stockage`,
+   des **alias** `NOM:FEEDYS_NOM` pour les secrets (Kamal ≥ 2.6.0), le premier démarrage en
+   propriétaire puis la bascule vers le rôle de service, la création du produit, la sauvegarde et
+   la mise à jour.
+
+**Ce qui le prouve désormais** —
+
+- `apps/serveur/outils/creer-produit.integration.test.ts` empaquette l’outil **dans un dossier
+  temporaire hors du dépôt**, sans `node_modules`, le lance par `node` contre un vrai Postgres, et
+  vérifie le produit écrit **et** son secret — argon2id et chiffrement, donc le WebAssembly de
+  `hash-wasm` embarqué. ⚠️ Vérifié en laissant `pg` en externe : les trois cas rougissent sur
+  `ERR_MODULE_NOT_FOUND` ;
+- le job `image` de la CI lance l’outil **dans l’image construite** ;
+- rejoué à la main le 2026-09-17 : l’image, un Postgres et kamal-proxy sur un réseau dédié, le
+  premier démarrage en propriétaire, le rôle de service (« propriétaire d’aucune des 10 tables »),
+  le produit créé **avec le rôle de service**, `/sante` et `widget.js` en brotli à travers le
+  proxy ; les deux scripts de sauvegarde dans les deux montages ; et le YAML de la doc validé par
+  `kamal config` 2.12.0, dont les commandes générées portent `--health-check-path="/sante"`,
+  `--volume feedys-stockage:/stockage` et un `DATABASE_URL` distinct de celui du logiciel métier.
+
+⚠️ **La leçon est celle de 019, et elle revient** : §Le cas Kamal avait été « vérifié contre
+Kamal 2.12.0 » — sur la configuration de référence et sur le code. **Personne ne l’avait démarré.**
+Une procédure d’installation lue n’est pas une procédure jouée.

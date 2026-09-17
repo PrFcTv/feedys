@@ -1760,3 +1760,51 @@ passe par un autre chemin.
 - **Des alertes qui sonnent à vide** — la part de voix sur un parc Firefox, par exemple ([D-003]) —
   ou **un plafond de reprises mal placé**, qui se lira dans `retours.synthese_reprises` au premier
   vrai incident.
+
+## D-031 — L’image porte ses outils d’exploitation, empaquetés ; Kamal a son montage, joué
+
+**2026-09-17**, P-031.
+
+### Le problème
+
+[D-028] a fait de l’image publiée **la** façon d’installer Feedys chez un client, sans dépôt et sans
+compilation. Personne n’avait alors fait la liste de ce qu’une installation doit **lancer** sur le
+serveur. Il y en a une, et elle ne marchait pas : `pnpm produit:creer`. Sans produit, pas de clé ;
+sans clé, pas de widget ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 020).
+
+Et le montage Kamal, écrit mais jamais démarré, cassait à quatre endroits (même entrée).
+
+### Ce qu’on a choisi
+
+- **L’outil est empaqueté par esbuild en un `.mjs` autonome** — `pg`, `hash-wasm`, `cuid2`
+  dedans —, copié dans `/app/outils/`, lancé par le `node` de l’image.
+- **Un seul outil embarqué** : `creer-produit`. `db:migrate` ne sert à rien (le démarrage migre), et
+  `entretien:rejouer` est un outil de mise au point du prompt, qui n’a rien à faire sur le serveur
+  d’un client.
+- **`esbuild` devient une dépendance de développement explicite** (MIT). Il était déjà dans le
+  lockfile, par `tsx`, à la même version : rien de nouveau n’entre dans l’arbre, mais on ne
+  s’appuie pas sur une dépendance transitive.
+- **Les scripts de sauvegarde gardent une seule forme** et apprennent `CONTENEUR_PG` : compose par
+  défaut, `docker exec` sinon.
+- **Kamal** : sonde `/sante`, volume nommé, alias de secrets, premier démarrage en propriétaire.
+  Détaillé dans [hebergement.md](../04-Architecture/hebergement.md) §Le cas Kamal.
+
+### Ce qu’on n’a pas fait
+
+- ⛔ **Pas de `pnpm` ni de `tsx` dans l’image.** Ce serait remettre dans l’image tout
+  l’outillage de développement que `output: 'standalone'` a retiré, pour lancer un script d’une
+  centaine de lignes.
+- ⛔ **Pas de résolution contre le `node_modules` du serveur autonome.** Il ne contient que ce que
+  Next a tracé, et changerait au premier refactor du serveur. Le test d’intégration lance l’outil
+  **hors de tout `node_modules`** pour empêcher d’y revenir.
+- ⛔ **Pas d’écran de création de produit** — c’est P-023, avec son déclencheur. Une commande dans
+  le conteneur suffit à quatre produits.
+- ⛔ **Pas de route `/up`** pour plaire à kamal-proxy : une ligne de configuration suffit, et deux
+  sondes finiraient par ne plus dire la même chose.
+
+### Ce qui la renverserait
+
+- **Un deuxième outil qui doive tourner chez le client** : il rejoint `OUTILS_EMBARQUES`, rien de
+  plus. S’ils se multiplient, un seul point d’entrée (`node outils/feedys.mjs <commande>`)
+  deviendra plus lisible.
+- **P-023** : l’écran de gestion des produits rendrait l’outil embarqué inutile en production.
