@@ -12,7 +12,7 @@ import { EN_TETE_CLE, analyserCorpsFin } from '../../../../../../../packages/wid
 import type { MotifRefusTour } from '../../../../../domaine/entretien/tour'
 import { terminerEntretien } from '../../../../../domaine/entretien/tour'
 import { portsTour } from '../../../../../infra/composition'
-import { corpsJson, ipDe, json, preflight } from '../../_reponses'
+import { enveloppes, corpsJson, ipDe, json, preflight } from '../../_reponses'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -40,12 +40,12 @@ export async function POST(
 
   const brut = await corpsJson(requete)
   if (brut === undefined) {
-    return json({ motif: 'corps_invalide', message: 'Le corps n’est pas du JSON.' }, 400, origine)
+    return json(enveloppes.erreur('corps_invalide', 'Le corps n’est pas du JSON.'), 400, origine)
   }
 
   const analyse = analyserCorpsFin(brut)
   if (!analyse.ok) {
-    return json({ motif: 'corps_invalide', message: analyse.message }, 400, origine)
+    return json(enveloppes.erreur('corps_invalide', analyse.message), 400, origine)
   }
 
   const resultat = await terminerEntretien(
@@ -60,8 +60,8 @@ export async function POST(
   )
 
   if (!resultat.ok) {
-    return json({ motif: resultat.motif, message: resultat.message }, STATUT[resultat.motif], origine)
+    return json(enveloppes.erreur(resultat.motif, resultat.message), STATUT[resultat.motif], origine)
   }
 
-  return json({ statut: resultat.statut }, 200, origine)
+  return json(enveloppes.finRendue(resultat.statut), 200, origine)
 }

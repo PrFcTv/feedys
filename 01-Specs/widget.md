@@ -324,9 +324,13 @@ jamais son corps, jamais ses en-têtes. Et côté exceptions, jamais le message.
 techniques dit ce que le collecteur s’interdit, et pourquoi.
 
 ⛔ **La liste est close des deux côtés** : le contrat de transport
-(`packages/widget/src/contexte`, `packages/widget/src/contrat.ts`) refuse tout champ inconnu, et
-le serveur répond `400`. Ajouter une donnée est donc une décision de produit, jamais un détail
-d’implémentation.
+(`packages/widget/src/contexte`, `packages/widget/src/contrat.ts`) ne garde que les champs de la
+liste, et ce qui n’y est pas n’atteint jamais la base. Ajouter une donnée est donc une décision de
+produit, jamais un détail d’implémentation.
+
+⚠️ **Depuis P-030, un champ inconnu est retiré plutôt que refusé** — sauf dans un indice, qui reste
+refusé en `400` ([D-026]). C’est ce qui permet à un widget d’avoir une version d’écart avec le
+serveur qui le sert ([01-Specs/ingestion.md](ingestion.md) §La règle des versions).
 
 ⚠️ **`agentBrut` porte la chaîne d’agent entière**, plus la langue et la densité de pixels — trois
 valeurs de `navigator` et `window`, déjà couvertes par la ligne ci-dessus. Elle y est en entier
@@ -481,6 +485,7 @@ donc rester ceux d’une réponse. Les tester dans l’ordre inverse suffisait �
 |---|---|
 | Le premier tour se fait attendre | « Un instant… » — ⛔ seulement tant qu’il n’y a pas de carte à regarder |
 | Le tour n’aboutit pas | « C’est noté. Ajoutez ce que vous voulez, ou envoyez. » |
+| Le serveur refuse le corps (`400`) alors qu’il porte une capture ou des indices | ⚠️ **rien de visible** : le widget renvoie **une fois** la parole sans eux. Un serveur d’une version de retard peut refuser un indice qu’il ne sait pas lire ; la capture et les indices sont des aide-mémoire, la parole doit passer (P-030) |
 | L’envoi n’aboutit pas | le message du serveur, verbatim — ou « L’envoi n’a pas abouti. Réessayez dans un instant. » |
 | Réseau coupé à l’envoi | « Pas de connexion. Votre retour part dès qu’elle revient. » — le brouillon est gardé, l’envoi repart tout seul |
 | Micro refusé | « Le micro est refusé pour ce site. La dictée continue sans l’onde. » |

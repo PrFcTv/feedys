@@ -31,10 +31,11 @@ côté d’eux, **une fois par client** ([D-028](../00-Projet/DECISIONS_LOG.md))
   │   └─ feedys 127.0.0.1 │           │   └─ feedys 127.0.0.1 │
   │        postgres       │           │        postgres       │
   └───────────┬───────────┘           └───────────┬───────────┘
-              │        la note, par email         │
+              │  l’avis et les alertes : Telegram │
+              │      la note entière : email      │
               └─────────────────┬─────────────────┘
                                 ▼
-                     la boîte du développeur
+            le téléphone et la boîte du prestataire
 ```
 
 Le conteneur le permettait déjà : il écoute sur la boucle locale, derrière le proxy en place, et ne
@@ -47,10 +48,12 @@ Ils **vivent sur son serveur** — sa base, son volume, ses sauvegardes — et i
 de personnes, parfois d’immeubles ou de dossiers (CLAUDE.md §Secrets). Ce ne sont pas des métriques
 anonymes : c’est de la parole, dictée par des salariés identifiés.
 
-⛔ **Et deux transmissions les font sortir de sa machine.** Le texte du retour part chez le
+⛔ **Et des transmissions les font sortir de sa machine.** Le texte du retour part chez le
 fournisseur du modèle pour produire les relances et la note ; puis **la note arrive dans la boîte du
-développeur** — avec le nom et le rôle de l’auteur, l’URL où il était, et ⛔ **des citations mot
-pour mot de ce qu’il a dit** (`apps/serveur/domaine/notification/message.ts`).
+développeur** si l’email est configuré — avec le nom et le rôle de l’auteur, l’URL où il était, et
+⛔ **des citations mot pour mot de ce qu’il a dit** (`apps/serveur/domaine/notification/message.ts`).
+Telegram, lui, ne reçoit **aucune parole** : un avis de quatre lignes par retour, et des alertes
+chiffrées ([D-030](../00-Projet/DECISIONS_LOG.md), §Telegram ci-dessous).
 
 ⚠️ **Ça se dit dans un contrat, pas dans une documentation technique.** Voici la phrase que
 l’intégrateur fait lire à son client — à recopier telle quelle, en remplaçant ce qui est entre
@@ -61,22 +64,35 @@ crochets :
 > votre logiciel les transmet — est enregistré dans une base de données que vous hébergez et qui
 > vous appartient.
 >
-> Deux transmissions sortent de votre serveur, et il n’y en a pas d’autres :
+> Trois transmissions sortent de votre serveur, et il n’y en a pas d’autres :
 >
 > 1. le texte du retour est envoyé à **Anthropic PBC (États-Unis)**, fournisseur du modèle de
 >    langage, qui rédige les questions de relance et la note de synthèse. Anthropic est à ce titre
 >    un sous-traitant, à faire figurer dans votre registre des traitements ;
-> 2. la note de synthèse — qui comprend **des citations mot pour mot** de ce qu’a dit le
->    collaborateur, ainsi que son nom et sa fonction — est envoyée par email à
+> 2. [si l’email est configuré] la note de synthèse — qui comprend **des citations mot pour mot**
+>    de ce qu’a dit le collaborateur, ainsi que son nom et sa fonction — est envoyée par email à
 >    [adresse(s) destinataire(s)], dont **[adresse du prestataire]**, qui assure la maintenance de
->    votre logiciel.
+>    votre logiciel ;
+> 3. [si Telegram est configuré] des avis **sans contenu** sont envoyés par la messagerie Telegram
+>    (Telegram Messenger Inc.) à **[prestataire]** : pour chaque retour, son type, le nom du
+>    logiciel, la date et un lien vers votre instance — **ni le texte du retour, ni son titre, ni le
+>    nom de son auteur** ; et des alertes de fonctionnement, qui portent des nombres, des dates et des
+>    identifiants de retour, jamais de parole ni de nom. Deux de ces alertes sont des **indicateurs
+>    d’usage**, et ce sont les seuls : l’absence de tout retour pendant sept jours, et la part des
+>    retours dictés sur trente jours lorsqu’elle passe sous 40 %.
 >
 > Le logiciel Feedys ne communique avec aucun serveur appartenant à son éditeur : il n’émet aucune
-> donnée d’usage, aucune statistique, et aucune vérification de version.
+> vérification de version, et aucune donnée d’usage en dehors des deux indicateurs nommés au
+> point 3, adressés au prestataire.
 
 ⚠️ **Le dernier paragraphe est vérifiable, et c’est ce qui lui donne sa valeur** : le code est
 public, et §La forme interdit toute dépendance extérieure. ⛔ Il cesse d’être vrai le jour où
 quelqu’un ajoute un « phone home », si discret soit-il.
+
+⚠️ **Il a été amendé le 2026-09-17** ([D-030](../00-Projet/DECISIONS_LOG.md)). Il disait « aucune
+donnée d’usage, aucune statistique » ; les deux indicateurs du point 3 le rendaient faux. Ils sont
+nommés un par un plutôt que glissés sous « des alertes » : un client doit pouvoir lire exactement
+ce qui part.
 
 ### 2 · La mise à jour est manuelle, et multiple
 
@@ -91,16 +107,26 @@ il n’y a donc jamais d’écart entre les deux. Les cinq minutes de cache du �
 gardent tout leur sens — elles propagent un correctif chez cet hôte-là, dès qu’on a déployé chez
 lui, et chez lui seulement.
 
+⚠️ **Corrigé le 2026-09-17** ([T-012](../00-Projet/TICKETS_DIFFERES.md)) : « jamais d’écart » est
+**faux**. Même image, mais pas le même instant chez le navigateur : `widget.js` est gardé un jour en
+`stale-while-revalidate`, et un onglet de logiciel métier reste ouvert toute la journée avec le
+widget du matin. Après une mise à jour — ou un retour arrière —, le widget d’hier parle au serveur
+d’aujourd’hui. C’est sûr, et c’est tenu par un test : [01-Specs/ingestion.md](../01-Specs/ingestion.md)
+§La règle des versions. ⛔ **Un retour arrière ne demande donc aucune consigne** — ni attendre, ni
+faire recharger les onglets.
+
 ⛔ **Le corollaire ne se voit pas, et il coûte cher : une régression ne se rattrape plus d’un seul
 déploiement.** Sur une instance unique, un correctif touchait tout le monde en cinq minutes. Ici il
 faut se rendre chez chacun. C’est un argument pour publier **peu et sûrement**, pas souvent.
 
 ### 3 · Le back-office et MCP se démultiplient
 
-N adresses, N mots de passe de back-office, N jetons MCP. Le développeur ouvre l’instance du client
-dont il s’occupe, et **l’email est le seul canal qui centralise** : c’est lui qui rassemble dans une
-boîte ce que N bases contiennent séparément. Le sujet porte `[Feedys · <produit>]`, ce qui suffit à
-trier (§La sauvegarde, et `01-Specs/synthese.md`).
+N adresses, N mots de passe de back-office, N jetons MCP, N bots Telegram. Le développeur ouvre
+l’instance du client dont il s’occupe, et **Telegram et l’email sont les deux seuls canaux qui
+centralisent** : ce que N bases contiennent séparément arrive sur un téléphone et dans une boîte.
+Chaque avis commence par `Feedys · <produit>`, chaque alerte par `Feedys · <produit> · <origine>`,
+chaque email par `[Feedys · <produit>]` — et chaque bot porte le nom du client. Ça suffit à trier
+(`01-Specs/synthese.md`).
 
 ⛔ **On ne construit pas d’agrégateur.** Une console qui verrait plusieurs installations, ce sont
 des organisations, des comptes et une isolation à prouver à des tiers — c’est-à-dire du
@@ -122,10 +148,11 @@ Aucun de ceux-ci ne se réutilise d’un client à l’autre :
 | `FEEDYS_BO_MOT_DE_PASSE` | un mot de passe qui fuit chez un client ouvre les retours de tous |
 | `FEEDYS_MCP_JETON` | pareil, par une API qui rend le fil brut |
 | `POSTGRES_PASSWORD`, et le mot de passe de `feedys_service` | pareil, et sans qu’aucune session de back-office en garde trace |
+| `FEEDYS_TELEGRAM_JETON` | un bot partagé : une installation compromise **écrit au nom de toutes** — de fausses alertes, de faux avis, un lien vers n’importe quoi —, et peut **brancher un webhook** qui détourne tout ce que le bot reçoit. Et une révocation, chez BotFather, coupe **toutes** les installations d’un coup (§Telegram) |
 | `SMTP_URL` | un relais partagé fait qu’une instance compromise envoie du courrier au nom de toutes |
 | `ANTHROPIC_API_KEY` | le seul dont la fuite se paie en argent, et il a sa propre décision : [D-029](../00-Projet/DECISIONS_LOG.md) |
 
-⛔ **La raison est unique et elle vaut pour les six : un secret partagé transforme un incident chez
+⛔ **La raison est unique et elle vaut pour les sept : un secret partagé transforme un incident chez
 un client en incident chez tous.** L’étanchéité entre clients est la seule chose que cette topologie
 donne gratuitement — et la réutilisation d’un secret est la seule façon de la perdre.
 
@@ -148,6 +175,9 @@ le logiciel métier. Dans l’ordre, et chaque ligne se coche pour de vrai.
       ```
       ⛔ `FEEDYS_VERSION` vaut **la version publiée** : c’est elle qui choisit l’image *et* qui rend
       le pied de back-office conforme à l’article 13 ;
+      ⚠️ **Telegram d’abord** : `FEEDYS_TELEGRAM_JETON` et `FEEDYS_TELEGRAM_CHAT`, d’un bot créé pour
+      CE client (§Telegram). L’email ensuite, s’il est voulu : `SMTP_URL`, `FEEDYS_EMAIL_DE`,
+      `FEEDYS_EMAIL_A` ;
 - [ ] **5 · Le premier démarrage**, puis §Le rôle de connexion — le rôle de service se crée à la
       main, **une fois**, et les deux `DATABASE_URL` sont renseignées ensuite. ⛔ Tant que la ligne
       de journal ne dit pas « membre de feedys_app, propriétaire d’aucune des N tables », les GRANT
@@ -156,13 +186,19 @@ le logiciel métier. Dans l’ordre, et chaque ligne se coche pour de vrai.
       [`deploiement/nginx-feedys.conf.exemple`](../deploiement/nginx-feedys.conf.exemple), ou
       §Le cas Kamal si le VPS est déployé par Kamal. ⛔ Pas de second proxy, et les trois réglages
       de §Le proxy et TLS ne sont pas décoratifs ;
-- [ ] **7 · La restauration, une fois, pour de vrai** — §La pose chez un hôte · 2. ⛔ Avant la
+- [ ] **7 · Le message d’essai, reçu sur un téléphone** — `/bo/installation`, « Envoyer un message
+      d’essai ». ⛔ Il se coche quand le message est LU sur le téléphone, pas quand le bouton dit
+      « Parti ». La page dit aussi, sans une valeur, ce qui manque ou est mal formé. ⚠️ Un refus
+      `403` ou `400` nomme la variable à reprendre ; un « injoignable » dit que le réseau du VPS
+      bloque `api.telegram.org` — alors les alertes ne partiront pas, et il faut le savoir **avant**
+      la pose ;
+- [ ] **8 · La restauration, une fois, pour de vrai** — §La pose chez un hôte · 2. ⛔ Avant la
       pose, pas après ;
-- [ ] **8 · Le produit, sa clé, la ligne de `<script>`, le CSP, l’identité, et les dix minutes
+- [ ] **9 · Le produit, sa clé, la ligne de `<script>`, le CSP, l’identité, et les dix minutes
       dans un vrai navigateur** — c’est **§La pose chez un hôte**, points 3 à 7, qui ne change pas
       d’un iota : à ce stade, le fait que l’instance soit chez le client n’a plus d’effet ;
-- [ ] **9 · Consigner** ce qui a été vu dans `03-Bugs/MISE_EN_SERVICE.md`. ⛔ Aucun nom de client,
-      aucun domaine réel, aucune clé : le dépôt est public.
+- [ ] **10 · Consigner** ce qui a été vu dans `03-Bugs/MISE_EN_SERVICE.md`. ⛔ Aucun nom de client,
+      aucun domaine réel, aucune clé, aucun chat : le dépôt est public.
 
 ## Le démarrage
 
@@ -188,7 +224,8 @@ remarque pas côté serveur : il se remarque chez les quatre hôtes, en même te
 | `FEEDYS_URL_PUBLIQUE` | l’origine servie — sert à composer les liens dans les emails |
 | `ANTHROPIC_API_KEY` | le modèle |
 | `FEEDYS_MODELE` | l’identifiant du modèle. **Explicite, jamais un défaut implicite** — il est journalisé dans chaque synthèse |
-| `SMTP_URL`, `FEEDYS_EMAIL_DE`, `FEEDYS_EMAIL_A` | l’envoi de la note. ⚠️ `?pool=true` dans l’URL demande le bassin de connexions |
+| `FEEDYS_TELEGRAM_JETON`, `FEEDYS_TELEGRAM_CHAT` | **le canal recommandé** — l’avis de chaque retour, et les alertes ([D-030](../00-Projet/DECISIONS_LOG.md)). Les deux, ou aucun. ⚠️ Le chat d’un groupe est **négatif** : c’est normal. ⛔ Un bot **par installation** (§Une installation par client · 4, §Telegram) |
+| `SMTP_URL`, `FEEDYS_EMAIL_DE`, `FEEDYS_EMAIL_A` | l’envoi de la note entière par email. Les trois, ou aucun. ⚠️ `?pool=true` dans l’URL demande le bassin de connexions |
 | `FEEDYS_BO_MOT_DE_PASSE` | l’accès au back-office — une personne, un mot de passe. ⚠️ Le changer invalide toutes les sessions ouvertes |
 | `FEEDYS_VERSION` | la version déployée, affichée en pied de back-office avec le lien vers la source. ⚠️ **C’est l’article 13 de l’AGPL**, pas une décoration : un lien vers le dépôt sans la version ne suffit pas. Posée à la construction de l’image ; absente sur un poste, où « dev » est la réponse honnête |
 | `FEEDYS_CLE_CHIFFREMENT` | 32 octets en base64url. Chiffre le secret des produits en base — c’est elle qui permet de vérifier l’identité signée par l’hôte ([D-015](../00-Projet/DECISIONS_LOG.md)). ⚠️ **La perdre ne perd aucun retour** : les identités cessent simplement d’être vérifiées, et `pnpm produit:creer` refuse de créer un produit de plus |
@@ -204,11 +241,18 @@ remarque pas côté serveur : il se remarque chez les quatre hôtes, en même te
 démarrer** en la nommant. La liste vit dans `apps/serveur/domaine/demarrage/controles.ts` — un seul
 endroit, testé.
 
-⚠️ **Les autres dégradent quelque chose de nommé, et le démarrage le dit** : sans SMTP la note ne
-part pour personne, sans `FEEDYS_MCP_JETON` l’API MCP répond 503, sans `FEEDYS_VERSION` le pied de
-back-office affiche « dev », sans `DATABASE_URL_MIGRATIONS` on migre avec le rôle de service. Aucune n’empêche de servir — **un retour qui arrive sans email est un
-retour reçu**, lisible au back-office et par MCP. Refuser de démarrer pour ça perdrait de la parole
-au nom d’un confort.
+⚠️ **Les autres dégradent quelque chose de nommé, et le démarrage le dit** : sans aucun canal la
+note ne part pour personne, sans Telegram les alertes restent en console, sans `FEEDYS_MCP_JETON`
+l’API MCP répond 503, sans `FEEDYS_VERSION` le pied de back-office affiche « dev », sans
+`DATABASE_URL_MIGRATIONS` on migre avec le rôle de service. Aucune n’empêche de servir — **un retour
+qui arrive sans notification est un retour reçu**, lisible au back-office et par MCP. Refuser de
+démarrer pour ça perdrait de la parole au nom d’un confort.
+
+⚠️ **Telegram sans SMTP n’est PAS une dégradation** : c’est la configuration recommandée, et le
+démarrage n’en dit rien. Un canal à moitié configuré — un jeton sans chat, un SMTP sans
+destinataire — est dit en nommant ce qui manque ; une variable Telegram mal formée aussi, **sans
+jamais citer sa valeur** (`domaine/demarrage/controles.ts` §verdictCanaux). `/bo/installation`
+montre le même verdict.
 
 ⛔ **Aucun secret dans le dépôt.** Il est **public** : la règle est absolue, elle vaut aussi pour
 la documentation, les exemples et les fixtures. Les exemples utilisent `exemple.fr`.
@@ -219,6 +263,60 @@ l’humain de recoller un secret dans la conversation : il l’a déjà donné.
 ```bash
 node --env-file-if-exists=.env.local -e '…'   # s’en servir sans afficher la valeur
 ```
+
+## Telegram — le bot de l’installation
+
+**Le canal recommandé** ([D-030](../00-Projet/DECISIONS_LOG.md)) : deux variables, un bot créé en
+une minute, et ce qui arrive sur le téléphone du prestataire, c’est l’avis de chaque retour et les
+alertes de CETTE installation.
+
+### ⛔ Ce qu’il porte, et ce qu’il ne porte pas
+
+| Message | Contenu | ⛔ Jamais |
+|---|---|---|
+| **l’avis d’un retour** | `Feedys · <produit>`, `Nouveau retour · <type>`, la date du collaborateur, le lien vers la fiche | le titre, le résumé, une citation, le nom, l’URL de la page de l’hôte |
+| **une alerte** | le produit et l’origine, des nombres, des dates, des identifiants de retour | la parole, un nom |
+| **le message d’essai** | le produit et l’origine | — |
+
+⚠️ **Pourquoi pas la note entière.** Vérifié le 2026-09-17 sur telegram.org/privacy (mise à jour du
+2026-08-21) : le responsable de traitement est **Telegram Messenger Inc.**, hors de l’EEE ; les
+messages de bot **ne sont pas chiffrés de bout en bout** ; les données des comptes de l’EEE sont aux
+Pays-Bas ; **aucun contrat de sous-traitance n’est proposé**. La parole des salariés d’un client n’a
+rien à y faire. ⛔ Ces faits se **revérifient** à chaque installation — ils ne se supposent pas.
+
+⛔ **Sens unique.** Feedys appelle `sendMessage`, et rien d’autre : ni `getUpdates`, ni webhook, ni
+commande. Le bot ne lit rien — Feedys n’est pas un canal de support.
+
+⛔ **Texte brut**, aucun `parse_mode`, et l’aperçu de lien désactivé : sans lui, les robots de
+Telegram iraient chercher l’URL du back-office du client.
+
+⛔ **Le jeton ne sort jamais.** Il est dans l’URL de l’API ; toute erreur est nettoyée avant d’aller
+dans `notifications.erreur`, dans les journaux ou à l’écran.
+
+### Créer le bot, et trouver le chat — une fois par client
+
+⚠️ **Documenté, pas codé** : c’est un geste humain, fait une fois, sur le poste du prestataire.
+⛔ Aucun jeton, aucun chat réel ne rejoint le dépôt, même en exemple.
+
+1. Dans Telegram, ouvrir **@BotFather**, `/newbot`, lui donner un nom qui dit le client — il
+   s’affichera au-dessus de chaque message. BotFather rend le **jeton** : c’est
+   `FEEDYS_TELEGRAM_JETON`. ⛔ Un bot **par installation** (§Une installation par client · 4) ;
+2. **Le chat** : soit une conversation privée — écrire un premier message au bot —, soit un
+   **groupe** où l’on ajoute le bot, puis un message dans le groupe ;
+3. **Lire son identifiant**, une fois, **depuis le navigateur du prestataire** :
+   `https://api.telegram.org/bot<JETON>/getUpdates`, et relever `chat.id` dans la réponse. ⚠️ C’est
+   un humain qui appelle `getUpdates`, pour lui-même, une fois — Feedys, jamais. Un groupe a un
+   identifiant **négatif** (`-100…` pour un supergroupe) : c’est `FEEDYS_TELEGRAM_CHAT` tel quel ;
+4. Poser les deux variables dans `.env.production`, redémarrer, puis **le message d’essai**
+   (§Installer chez un client, point 7).
+
+⚠️ Pour révoquer : BotFather, `/revoke`. Un bot par installation fait que cette révocation ne coupe
+que ce client.
+
+### Le cas Kamal
+
+Dans `accessories.feedys.env` : `FEEDYS_TELEGRAM_CHAT` en `clear`, `FEEDYS_TELEGRAM_JETON` en
+`secret`. `SMTP_URL` n’y est plus nécessaire si l’email n’est pas voulu.
 
 ## Le service du widget
 
@@ -544,6 +642,10 @@ accessories:
         # ⛔ La même chaîne que l’étiquette de `image:` ci-dessus. Un écart fait
         #    mentir le pied de back-office — article 13 de l’AGPL, pas cosmétique.
         FEEDYS_VERSION: '1.4.0'
+        # ⚠️ Telegram d’abord (§Telegram). Le chat n’est pas un secret : sans le
+        #    jeton, il ne permet rien.
+        FEEDYS_TELEGRAM_CHAT: '<le chat de CE client — §Telegram>'
+        # L’email, s’il est voulu.
         FEEDYS_EMAIL_DE: feedys@exemple.fr
         FEEDYS_EMAIL_A: dev@exemple.fr
       # ⚠️ Kamal ne met pas ceux-ci dans la ligne de commande : il les écrit sur
@@ -558,6 +660,7 @@ accessories:
         - FEEDYS_BO_MOT_DE_PASSE
         - FEEDYS_CLE_CHIFFREMENT
         - FEEDYS_MCP_JETON
+        - FEEDYS_TELEGRAM_JETON
         - SMTP_URL
 
     # ⚠️ Les captures. Kamal crée le dossier sur l’hôte avant de le monter.
@@ -789,44 +892,70 @@ toujours. Le **filet** balaie toutes les cinq minutes et referme ce qui est muet
 trente minutes ([D-018](../00-Projet/DECISIONS_LOG.md)). Il tourne **dans le processus qui sert**,
 pas dans un ordonnanceur : il n’y a rien à installer.
 
-⚠️ **Une passe est bornée deux fois** : vingt retours au plus, et trois minutes d’horloge au plus.
-La seconde borne n’est pas une redite — une synthèse peut coûter trois minutes à elle seule
-(délai de 60 s × trois tentatives), et vingt lentes faisaient une passe d’une heure pendant
-laquelle les onze passes suivantes ne partaient pas.
+⚠️ **Une passe fait trois choses, dans cet ordre** (P-030) : elle referme les entretiens muets, elle
+**redemande les notes que le modèle n’a pas rendues**, et elle **veille** — ouvre ou referme les
+incidents de §Ce qui doit être surveillé, et prévient par Telegram.
+
+⚠️ **Une passe est bornée deux fois** : vingt retours au plus, et trois minutes d’horloge au plus,
+balayage et reprises **ensemble**. La seconde borne n’est pas une redite — une synthèse peut coûter
+trois minutes à elle seule (délai de 60 s × trois tentatives), et vingt lentes faisaient une passe
+d’une heure pendant laquelle les onze passes suivantes ne partaient pas.
+
+### ⛔ Aucune note ne se perd — les reprises
+
+**Jusqu’au 2026-09-17, une panne du modèle perdait la note pour toujours**, et personne ne le savait
+([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 019). Désormais, le filet reprend tout retour **clos**
+(`envoye`, `abandonne`) **sans note** — refermé par le widget comme par le filet — et redemande la
+note par le chemin ordinaire, qui notifie ensuite.
+
+| | |
+|---|---|
+| **Quand** | cinq minutes après la clôture, puis en doublant : 5, 10, 20, … 640 minutes — environ vingt et une heures en tout |
+| **Combien** | huit reprises. ⚠️ Comptées en base (`retours.synthese_reprises`), une à la fois : une reprise comptée est une reprise tentée |
+| **Au plafond** | le filet renonce (`synthese_impossible_le`, motif `plafond`), la liste et la fiche le disent, et l’alerte `notes_impossibles` part |
+| **Sans parole** | un retour dicté sans transcript ne produira jamais de note : abandonné tout de suite (motif `rien_a_synthetiser`), **jamais retenté**, sans alerte |
+| **À plusieurs conteneurs** | la réservation est un `update … for update skip locked` : un retour n’est repris que par un seul |
+
+### Refaire une note à la main — dans l’image, sans `pnpm`
+
+⛔ **La requête de rattrapage qui était écrite ici ne pouvait pas marcher**, pour trois raisons
+indépendantes : elle renvoyait à `pnpm entretien:rejouer --synthese`, qui n’écrit rien ; ni `pnpm`,
+ni `tsx`, ni `outils/` ne sont dans l’image, et le dépôt n’est pas sur le VPS ; et elle ne voyait que
+les retours refermés **par le filet**, pas ceux qu’a refermés le widget ([BUGS_LOG] 019).
+
+**Le chemin qui marche** : la liste du back-office dit « sans note — le modèle n’a pas répondu, à
+refaire » ; la fiche porte le bouton **« Refaire la note »**. Il demande la note par le chemin
+ordinaire, dit ce qui s’est passé, et ⛔ refuse un retour qui a déjà sa note ou un entretien encore
+en cours. Il se joue **une fois le modèle rétabli** — l’alerte de fin d’incident donne la liste.
+
+⚠️ Pour voir en base ce qui reste à refaire :
+
+```sql
+select id, cree_le, synthese_reprises, synthese_impossible_le
+  from retours
+ where synthese_impossible_motif = 'plafond'
+   and not exists (select 1 from syntheses s where s.retour_id = retours.id)
+ order by cree_le;
+```
 
 ### ⛔ Ce qu’il faut lire dans les journaux
 
 ```
 Feedys · filet — 20 entretien(s) refermé(s) par silence, 18 passé(s) en aval, 0 en échec, 2 reporté(s).
-Feedys ⚠️  filet — 2 entretien(s) refermé(s) sans note. La requête de rattrapage est dans …
+Feedys · filet — 2 note(s) pas encore écrite(s) : les passes suivantes les redemanderont …
+Feedys · filet — 5 note(s) redemandée(s) : 4 écrite(s), 0 encore en attente, 1 devenue(s) impossible(s), 0 sans parole à synthétiser.
+Feedys ⚠️  filet — 1 note(s) devenue(s) impossible(s) : <id>. La parole est en base ; « Refaire la note » …
+Feedys ⚠️  veille — ⚠️ Feedys · <produit> · <origine> · Le modèle échoue : 4 appel(s) sur 4 depuis une heure. …
 ```
 
-⛔ **« En échec » et « reporté » veulent dire la même chose pour l’exploitant : une note qui ne
-partira jamais toute seule.** Le retour est passé en `abandonne`, qui est terminal, et le balayage
-ne regarde que les `en_cours` — **aucune passe suivante ne le reprendra.** Une panne de modèle de
-dix minutes couvre deux passes, soit jusqu’à quarante notes.
+⚠️ **« En échec » et « reporté » ne sont plus une perte** : les reprises y reviendront. Ce qui
+s’alerte, c’est le **renoncement** — une note que le filet ne redemandera plus.
 
 ⚠️ Chaque échec nomme son retour dans le journal (`balayage — aval de <id> …`). Un identifiant
 n’est pas de la parole ; le corps du retour, lui, ne sort jamais dans un journal.
 
-### La requête de rattrapage
-
-Les retours refermés par le filet, sans note :
-
-```sql
-select r.id, r.cree_le
-  from retours r
-  join audit a on a.retour_id = r.id and a.action = 'cloture_balayage'
-  left join syntheses s on s.retour_id = r.id
- where s.id is null
- order by r.cree_le;
-```
-
-Puis, pour chacun : `pnpm entretien:rejouer -- --retour <id> --synthese`.
-
 ⚠️ **`synthetises` dans le journal ne compte pas des notes écrites**, mais des avals qui n’ont pas
-jeté — la synthèse d’un retour dicté sans transcript ne produit rien, et c’est normal. Le compte
-des notes se prend en base, par la requête ci-dessus.
+jeté. Le compte des notes se prend en base, dans `syntheses`.
 
 ### ⛔ Ce que le filet a failli coûter
 
@@ -839,17 +968,32 @@ si la note n’est pas encore partie ([03-Bugs/BUGS_LOG.md](../03-Bugs/BUGS_LOG.
 
 ## Ce qui doit être surveillé
 
-Trois choses, et une seule est technique :
+⚠️ **Jusqu’au 2026-09-17, rien de ce tableau n’était codé** (relecture du 2026-09-17). Il l’est
+désormais, et chaque ligne dit où elle se calcule et qui la lit
+([D-030](../00-Projet/DECISIONS_LOG.md), `apps/serveur/domaine/veille/`).
 
-| Signal | Ce qu’il dit | Seuil |
-|---|---|---|
-| **Retours par semaine** | si ça tombe à zéro, le produit est mort — bien avant qu’une erreur ne le dise | alerte à 0 sur 7 jours |
-| **Part de `source = voix`** | la thèse du produit ([VISION.md](../00-Projet/VISION.md)) | alerte sous 40 % |
-| Échecs d’appel au modèle | la boucle d’entretien | alerte au-delà de 5 % |
+| Signal | Ce qu’il dit | Seuil | Calculé | Lu par |
+|---|---|---|---|---|
+| **Retours par semaine** | si ça tombe à zéro, le produit est mort — bien avant qu’une erreur ne le dise | alerte à 0 sur 7 jours — jugé sur la création du produit s’il n’a jamais rien reçu | à chaque passe du filet, en base (`max(retours.cree_le)`) | le prestataire, par Telegram |
+| **Part de `source = voix`** | la thèse du produit ([VISION.md](../00-Projet/VISION.md)) | alerte sous 40 % sur 30 jours, à partir de 10 retours ; rétablie à 45 % | à chaque passe, en base | le prestataire, par Telegram |
+| **Échecs d’appel au modèle** | la boucle d’entretien et la note | alerte au-delà de 5 % sur une heure, à partir de 20 appels — **ou trois échecs sans une réussite** ; rétablie sous 2 % | à chaque appel, **en mémoire** : un redémarrage l’oublie, et « inconnu » n’ouvre ni ne ferme rien | le prestataire, par Telegram |
+| **Notes devenues impossibles** | le filet a renoncé : il faut refaire ces notes à la main | dès la première | à chaque passe, en base (`synthese_impossible_motif = 'plafond'`) | le prestataire, par Telegram — la fin d’incident liste ce qui reste à refaire |
 
 ⚠️ **Les deux premiers ne sont pas de la supervision technique, et c’est le point.** Feedys peut
 fonctionner parfaitement et ne servir à personne — c’est le mode de défaillance le plus probable,
-et aucune sonde d’erreur ne le verra.
+et aucune sonde d’erreur ne le verra. ⛔ Ce sont les **seuls** indicateurs d’usage qui quittent le
+serveur, et la phrase de contrat les nomme (§1).
+
+⛔ **Une alerte par incident, pas une par passe.** Un incident s’ouvre une fois — c’est l’alerte —
+et se referme une fois — c’est la ligne « rétabli ». L’état vit en base (table `alertes`) : un
+conteneur qui redémarre ne renvoie pas une alerte déjà partie, et deux conteneurs ne préviennent
+pas deux fois.
+
+⛔ **Telegram, et lui seul.** Une alerte ne passe pas par ce qu’elle surveille — ni par le SMTP, ni
+par le modèle. Sans Telegram, elle reste dans les journaux (`veille — …`), le démarrage le dit, et
+`/bo/installation` montre les incidents ouverts et pourquoi ils n’ont pas été annoncés.
+
+⛔ **Une alerte ne contient ni parole ni nom.**
 
 ## La sauvegarde
 
@@ -871,8 +1015,8 @@ En cron, une fois par jour — ⚠️ **pas à une heure ronde**, tout le monde 
 C’est l’objection naturelle, et elle est **à moitié juste** — mais dans le mauvais sens.
 
 Ce qui part par email, c’est la **synthèse** : le résumé, l’attendu, le constaté, quelques
-citations. C’est-à-dire le **dérivé**, et précisément la seule chose qui se **régénère**
-(`pnpm entretien:rejouer --synthese`).
+citations. C’est-à-dire le **dérivé**, et précisément la seule chose qui se **régénère** — par le
+filet, ou par « Refaire la note » (§Le filet). Telegram, lui, n’en porte rien.
 
 ⛔ Ce qui n’existe nulle part ailleurs qu’en base, c’est **le fil brut** : ce que la personne a
 réellement dit, ses hésitations, le transcript avant correction. C’est la matière qui sert à régler

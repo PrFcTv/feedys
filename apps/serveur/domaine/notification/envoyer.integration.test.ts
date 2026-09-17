@@ -21,8 +21,9 @@ import { appliquerMigrations } from '../../infra/base/migrations'
 import { identifiant } from '../../infra/identifiants'
 import type { Synthese } from '../synthese/schema'
 
-import type { PortSmtp, PortsNotification } from './envoyer'
-import { envoyerNote } from './envoyer'
+import type { PortCanal, PortSmtp, PortsNotification } from './envoyer'
+import { canalEmail, envoyerNote, notifierParCanaux } from './envoyer'
+import { canalTelegram } from './telegram'
 import type { MessageEmail } from './message'
 import { urlBaseDessai } from '../../../../tests/base-dessai'
 
@@ -220,5 +221,87 @@ describe('quand il n’y a rien à envoyer', () => {
       sansNote,
     ])
     expect(rows).toHaveLength(0)
+  })
+})
+
+describe('⛔ deux canaux — une ligne chacun, et l’index qui le tient', () => {
+  const JETON = '000000123:jeton-invente-pour-les-tests-sans-valeur'
+
+  function telegram(textes: string[], statut = 200): PortCanal {
+    return canalTelegram(
+      { jeton: JETON, chat: '-1000000000042' },
+      {
+        fetch: async (_url, init) => {
+          textes.push(String((JSON.parse(init.body) as { text: string }).text))
+          return {
+            status: statut,
+            json: async () =>
+              statut === 200 ? { ok: true } : { ok: false, description: 'Forbidden: bot was blocked by the user' },
+          }
+        },
+        attendre: async () => undefined,
+      },
+    )
+  }
+
+  async function lignes() {
+    const { rows } = await client.query(
+      'select canal, destinataire, statut, erreur from notifications where retour_id = $1 order by canal',
+      [retourId],
+    )
+    return rows
+  }
+
+  it('les deux partent : l’avis par Telegram, la note par email', async () => {
+    const textes: string[] = []
+    const recus: MessageEmail[] = []
+
+    await notifierParCanaux(retourId, {
+      depot: creerDepotNotifications(bassin, URL_PUBLIQUE),
+      canaux: [telegram(textes), canalEmail(smtpQuiMarche(recus), DESTINATAIRE)],
+    })
+
+    expect(await lignes()).toEqual([
+      { canal: 'email', destinataire: DESTINATAIRE, statut: 'envoye', erreur: null },
+      { canal: 'telegram', destinataire: '-1000000000042', statut: 'envoye', erreur: null },
+    ])
+    expect(recus[0]?.corps).toContain('« il se remet à zéro »')
+    expect(textes[0]).toContain(`${URL_PUBLIQUE}/bo/r/${retourId}`)
+    expect(textes[0]).not.toContain('il se remet à zéro')
+    expect(textes[0]).not.toContain('Camille')
+  })
+
+  it('⛔ un Telegram refusé n’empêche pas l’email — et le jeton n’est pas en base', async () => {
+    const recus: MessageEmail[] = []
+
+    await notifierParCanaux(retourId, {
+      depot: creerDepotNotifications(bassin, URL_PUBLIQUE),
+      canaux: [telegram([], 403), canalEmail(smtpQuiMarche(recus), DESTINATAIRE)],
+      signaler: () => undefined,
+    })
+
+    const [email, tg] = await lignes()
+    expect(email).toMatchObject({ statut: 'envoye' })
+    expect(tg).toMatchObject({ statut: 'echoue' })
+    expect(String(tg?.['erreur'])).toContain('403')
+
+    const { rows } = await client.query(
+      `select count(*)::int as n from notifications where erreur like '%' || $1 || '%' or destinataire like '%' || $1 || '%'`,
+      [JETON],
+    )
+    expect(rows[0]?.['n']).toBe(0)
+  })
+
+  it('⛔ l’index refuse une seconde ligne du même canal — ouvrir rend `null`, sans erreur', async () => {
+    const depot = creerDepotNotifications(bassin, URL_PUBLIQUE)
+
+    const [a, b] = await Promise.all([
+      depot.ouvrir(retourId, DESTINATAIRE, 'email'),
+      depot.ouvrir(retourId, DESTINATAIRE, 'email'),
+    ])
+
+    expect([a, b].filter((id) => id !== null)).toHaveLength(1)
+    expect(await depot.dejaEnvoyee(retourId, 'email')).toBe(true)
+    expect(await depot.dejaEnvoyee(retourId, 'telegram')).toBe(false)
   })
 })

@@ -23,6 +23,15 @@ const CONFIGURATION: Configuration = {
   indices: true,
 }
 
+/**
+ * ⚠️ La collecte est bouchonnée : la vraie tenterait de charger `snapdom.js`
+ *    depuis l’origine Feedys, happy-dom le refuse (« JavaScript file loading is
+ *    disabled »), et `pnpm test` imprimait une pile d’erreur alors qu’il est vert
+ *    (relecture du 2026-09-17). ⛔ Réglé ICI, pas dans `capture.ts` : le chargeur
+ *    fait exactement ce qu’il doit, c’est ce test qui n’avait pas à capturer.
+ */
+const SANS_CAPTURE = { collecter: async () => ({ url: 'https://victoria.exemple.fr/dossiers' }) }
+
 const vraiAttachShadow = Element.prototype.attachShadow
 let racines: ShadowRoot[] = []
 
@@ -69,6 +78,7 @@ describe('Restitution du retour au collaborateur dans le widget', () => {
     await act(async () => {
       montage = monter(CONFIGURATION, {
         ports: {
+          ...SANS_CAPTURE,
           releverReponses: async () => reponses,
           accuserReception: async () => true,
         },
@@ -88,6 +98,7 @@ describe('Restitution du retour au collaborateur dans le widget', () => {
     await act(async () => {
       montage = monter(CONFIGURATION, {
         ports: {
+          ...SANS_CAPTURE,
           releverReponses: async () => [],
           accuserReception: async () => true,
         },
@@ -117,6 +128,7 @@ describe('Restitution du retour au collaborateur dans le widget', () => {
     await act(async () => {
       montage = monter(CONFIGURATION, {
         ports: {
+          ...SANS_CAPTURE,
           releverReponses: async () => reponses,
           accuserReception: async () => true,
         },
@@ -158,6 +170,7 @@ describe('Restitution du retour au collaborateur dans le widget', () => {
     await act(async () => {
       montage = monter(CONFIGURATION, {
         ports: {
+          ...SANS_CAPTURE,
           releverReponses: async () => reponses,
           accuserReception: accuserSpy,
         },
@@ -197,6 +210,7 @@ describe('Restitution du retour au collaborateur dans le widget', () => {
     await act(async () => {
       montage = monter(CONFIGURATION, {
         ports: {
+          ...SANS_CAPTURE,
           releverReponses: async () => reponses,
           accuserReception: async () => true,
         },
@@ -268,6 +282,7 @@ describe('⛔ les cartes ne noient pas le micro', () => {
     await act(async () => {
       montage = monter(CONFIGURATION, {
         ports: {
+          ...SANS_CAPTURE,
           releverReponses: async () => reponses,
           accuserReception: async () => true,
         },
@@ -290,6 +305,7 @@ describe('⛔ les cartes ne noient pas le micro', () => {
     await act(async () => {
       montage = monter(CONFIGURATION, {
         ports: {
+          ...SANS_CAPTURE,
           releverReponses: async () => reponses,
           accuserReception: async () => true,
         },
@@ -321,6 +337,7 @@ describe('⛔ les cartes ne noient pas le micro', () => {
     await act(async () => {
       montage = monter(CONFIGURATION, {
         ports: {
+          ...SANS_CAPTURE,
           releverReponses: async () => reponses,
           accuserReception: async () => true,
         },

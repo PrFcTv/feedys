@@ -12,13 +12,34 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { PortsBalayage } from '../domaine/entretien/balayage'
+import type { PortsReprise } from '../domaine/synthese/reprise'
 
+import type { PortsFilet } from './filet'
 import { arreterFilet, demarrerFilet, passe } from './filet'
 
 const JOURNAL = { info: vi.fn(), alerte: vi.fn(), erreur: vi.fn() }
 
-function portsQui(clore: PortsBalayage['clore'], aval: PortsBalayage['aval'] = async () => undefined) {
-  return () => ({ clore, aval, signaler: () => undefined })
+function portsQui(
+  clore: PortsBalayage['clore'],
+  aval: PortsBalayage['aval'] = async () => undefined,
+): () => PortsFilet {
+  return () => ({ balayage: { clore, aval, signaler: () => undefined } })
+}
+
+/** Une file de retours à reprendre, et un modèle qui répond ce qu’on lui dit. */
+function reprisesDe(
+  file: Array<{ retourId: string; reprises: number }>,
+  synthetiser: PortsReprise['synthetiser'],
+): PortsReprise & { renonces: string[] } {
+  const renonces: string[] = []
+  return {
+    renonces,
+    reserver: async () => file.shift() ?? null,
+    synthetiser,
+    renoncer: async (retourId, motif) => {
+      renonces.push(`${retourId}:${motif}`)
+    },
+  }
 }
 
 afterEach(() => {
@@ -90,6 +111,117 @@ describe('ce que le filet dit', () => {
 
     await expect(passe({ ports, journal: JOURNAL })).resolves.toBeUndefined()
     expect(JOURNAL.erreur).toHaveBeenCalledOnce()
+  })
+
+  it('⚠️ une note pas encore écrite n’est plus une alerte — les reprises y reviendront', async () => {
+    const ports = portsQui(
+      async () => ['r1'],
+      async () => {
+        throw new Error('modèle muet')
+      },
+    )
+
+    await passe({ ports, journal: JOURNAL })
+
+    expect(JOURNAL.alerte).not.toHaveBeenCalled()
+    expect(JOURNAL.info.mock.calls.map((appel) => appel[0]).join('\n')).toContain('redemanderont')
+  })
+})
+
+describe('les reprises, dans la même passe', () => {
+  it('reprend ce que le balayage a laissé, et dit ce qu’elle a fait', async () => {
+    const reprise = reprisesDe([{ retourId: 'r9', reprises: 1 }], async () => 'ecrite')
+
+    await passe({
+      ports: () => ({ balayage: portsQui(async () => [])().balayage, reprise }),
+      journal: JOURNAL,
+    })
+
+    expect(JOURNAL.info.mock.calls[0]?.[0]).toContain('1 note(s) redemandée(s) : 1 écrite(s)')
+    expect(JOURNAL.alerte).not.toHaveBeenCalled()
+  })
+
+  it('⛔ un renoncement s’alerte, et nomme ses retours', async () => {
+    const reprise = reprisesDe([{ retourId: 'r_plafond', reprises: 8 }], async () => 'modele_indisponible')
+
+    await passe({
+      ports: () => ({ balayage: portsQui(async () => [])().balayage, reprise }),
+      journal: JOURNAL,
+    })
+
+    expect(reprise.renonces).toEqual(['r_plafond:plafond'])
+    expect(JOURNAL.alerte).toHaveBeenCalledOnce()
+    expect(JOURNAL.alerte.mock.calls[0]?.[0]).toContain('r_plafond')
+  })
+
+  it('⚠️ a lieu même quand le balayage a échoué', async () => {
+    const reprise = reprisesDe([{ retourId: 'r1', reprises: 1 }], async () => 'ecrite')
+
+    await passe({
+      ports: () => ({
+        balayage: portsQui(async () => {
+          throw new Error('Postgres injoignable')
+        })().balayage,
+        reprise,
+      }),
+      journal: JOURNAL,
+    })
+
+    expect(JOURNAL.erreur).toHaveBeenCalledOnce()
+    expect(JOURNAL.info.mock.calls[0]?.[0]).toContain('1 écrite(s)')
+  })
+
+  it('⛔ partage le budget de la passe : le temps que le balayage a pris est perdu pour elle', async () => {
+    let temps = 0
+    const synthetiser = vi.fn(async () => 'ecrite' as const)
+    const reprise = reprisesDe([{ retourId: 'r1', reprises: 1 }], synthetiser)
+
+    await passe({
+      horloge: () => temps,
+      ports: () => ({
+        balayage: {
+          clore: async () => {
+            // Le balayage mange les trois minutes à lui seul.
+            temps += 3 * 60 * 1000
+            return []
+          },
+          aval: async () => undefined,
+        },
+        reprise,
+      }),
+      journal: JOURNAL,
+    })
+
+    expect(synthetiser).not.toHaveBeenCalled()
+  })
+
+  it('⛔ deux passes qui se chevauchent n’appellent pas deux fois le modèle', async () => {
+    let relacher: (() => void) | undefined
+    const bloquee = new Promise<void>((resoudre) => {
+      relacher = resoudre
+    })
+    const synthetiser = vi.fn(async () => {
+      await bloquee
+      return 'ecrite' as const
+    })
+    // ⚠️ La même file pour les deux passes : si la seconde entrait, elle
+    //    trouverait encore un retour à reprendre.
+    const file = [
+      { retourId: 'r1', reprises: 1 },
+      { retourId: 'r2', reprises: 1 },
+    ]
+    const reprise = reprisesDe(file, synthetiser)
+    const ports = () => ({ balayage: portsQui(async () => [])().balayage, reprise })
+
+    const premiere = passe({ ports, journal: JOURNAL })
+    await vi.waitFor(() => expect(synthetiser).toHaveBeenCalledOnce())
+
+    await passe({ ports, journal: JOURNAL })
+    expect(synthetiser).toHaveBeenCalledOnce()
+
+    relacher?.()
+    await premiere
+    expect(synthetiser).toHaveBeenCalledTimes(2)
   })
 })
 

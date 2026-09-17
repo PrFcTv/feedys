@@ -379,8 +379,12 @@ export async function terminerEntretien(entree: EntreeFin, ports: PortsTour): Pr
  * L’aval, joué sans jamais pouvoir faire échouer ce qui l’a déclenché.
  *
  * ⛔ Son échec ne remonte pas : le message est en base, et c’est lui qui compte.
- *    Une note qui manque se rattrape — la requête est dans
- *    04-Architecture/hebergement.md §Le filet ; une phrase perdue, non.
+ *    Une note qui manque se rattrape — le filet la redemande tout seul, et le
+ *    back-office a « Refaire la note » (04-Architecture/hebergement.md §Le
+ *    filet) ; une phrase perdue, non.
+ *
+ * ⚠️ Cette phrase a été FAUSSE jusqu’à P-030 : elle renvoyait à une requête de
+ *    rattrapage qui ne pouvait pas marcher (BUGS_LOG 019).
  *
  * ⚠️ `retourId` est dans le message, et ce n’est pas un détail : sans lui, les
  *    journaux disent qu’une note a manqué sans dire laquelle. Un cuid n’est pas

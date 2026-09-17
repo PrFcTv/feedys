@@ -114,13 +114,49 @@ compte ici et ne s’inscrit nulle part.
 
 Champs `auteur_ref`, `auteur_nom`, `auteur_role` sur `retours`.
 
+## Les mots de l’exploitation
+
+Arrivés avec P-030 ([D-030](../00-Projet/DECISIONS_LOG.md)). Ils ne parlent pas de ce que quelqu’un
+a dit, mais de ce que l’installation en fait.
+
+### Avis
+
+**Ce que Telegram reçoit pour un retour** : le produit, le type, la date, le lien vers la fiche.
+⛔ Un avis ne porte **aucune parole** — ni titre, ni citation, ni nom. Ce n’est pas une « note » : la
+note est la synthèse, et elle ne passe pas par Telegram.
+
+⛔ Pas « notification » pour le désigner seul : une notification est la **ligne** de la table
+`notifications`, qu’elle porte un avis (canal `telegram`) ou une note (canal `email`).
+
+### Reprise
+
+**Le filet qui redemande une note** que le modèle n’a pas rendue. Espacée, comptée, plafonnée à
+huit. Au plafond, le filet **renonce** — la note est « devenue impossible » pour lui, jamais pour un
+humain, qui peut toujours la refaire.
+
+⛔ Pas « retry », pas « relance » — une relance est une question du bot pendant l’entretien, et le
+mot est déjà pris.
+
+Colonnes `synthese_reprises`, `synthese_reprise_le`, `synthese_impossible_le`,
+`synthese_impossible_motif` sur `retours`.
+
+### Alerte
+
+**Ce qui prévient le prestataire qu’un incident a commencé** — une note devenue impossible, le
+modèle qui échoue, plus aucun retour, la voix qui recule. Une alerte par **incident**, pas une par
+passe du filet. ⛔ Elle ne contient ni parole ni nom, et elle ne passe que par Telegram.
+
+⛔ Pas « erreur » (une alerte d’usage n’en est pas une), pas « log ».
+
+Table `alertes`.
+
 ## Les états d’un retour
 
 | État | Ce qu’il veut dire |
 |---|---|
 | `en_cours` | l’entretien n’est pas terminé — la personne est encore là |
 | `abandonne` | le panneau a été fermé en cours d’entretien. **Le retour part quand même** |
-| `envoye` | la synthèse est produite, la note est partie |
+| `envoye` | la personne a envoyé, ou la limite de relances est atteinte. La note suit — ou le filet la redemande (§Reprise) |
 | `lu` | le développeur l’a ouverte |
 | `traite` | quelque chose a été fait |
 | `ecarte` | rien ne sera fait. ⚠️ C’est un état **légitime**, pas un échec — mais il n’efface rien |

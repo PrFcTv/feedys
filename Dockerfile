@@ -46,6 +46,10 @@ COPY --from=deps /depot/packages/mcp/node_modules ./packages/mcp/node_modules
 COPY . .
 
 # ⚠️ Le client Prisma est un miroir typé, généré — il n’est pas dans le dépôt.
+#    Personne ne l’importe (le serveur parle à Postgres par `pg`) : cette étape
+#    prouve seulement que `prisma/schema.prisma` se génère encore. Elle n’a
+#    besoin que du CLI `prisma`, dépendance de développement — `@prisma/client`
+#    a quitté les dépendances de production (P-030, dependances.md).
 RUN pnpm db:generate
 RUN pnpm build
 

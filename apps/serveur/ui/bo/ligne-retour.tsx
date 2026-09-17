@@ -6,11 +6,13 @@
  *
  * ⚠️ Un retour SANS TITRE est un retour sans synthèse : la note a raté, ou
  *    l’entretien n’a rien produit. On le dit, plutôt que de laisser une ligne
- *    vide qu’on prendrait pour un défaut d’affichage.
+ *    vide qu’on prendrait pour un défaut d’affichage — et depuis P-030, on dit
+ *    lequel : le filet la redemande, il a renoncé, ou il n’y a rien à dire.
  */
 import Link from 'next/link'
 
 import { age } from '../../domaine/backoffice/dates'
+import { LIBELLES_SANS_NOTE } from '../../domaine/backoffice/sans-note'
 import type { LigneListe } from '../../infra/base/depot-bo'
 import { Meta, PastilleConfiance, PastilleStatut, PastilleType } from '../pastille'
 
@@ -28,7 +30,11 @@ export function LigneRetour({
     >
       <div className="flex items-baseline gap-3">
         <span className="min-w-0 flex-1 truncate font-medium text-encre">
-          {retour.titre ?? <span className="text-encre-3 italic">sans note — synthèse absente</span>}
+          {retour.titre ?? (
+            <span className={retour.sansNote === 'impossible' ? 'text-signal italic' : 'text-encre-3 italic'}>
+              {LIBELLES_SANS_NOTE[retour.sansNote]}
+            </span>
+          )}
         </span>
         <Meta>{age(retour.creeLe, maintenant)}</Meta>
       </div>

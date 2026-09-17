@@ -57,9 +57,13 @@ l’importe — jamais l’inverse ([licences.md](../04-Architecture/licences.md
 transcription s’est faite chez le client : c’est ce qui ouvrira Whisper le jour où Chrome n’est
 plus tenable, sans réécriture ni migration.
 
-⛔ **Les deux listes de champs sont closes**, et le schéma refuse tout champ inconnu. La liste du
-contexte est celle de [widget.md](widget.md) §Ce que le widget joint tout seul, mot pour mot. Le
-dépôt est public : elle doit pouvoir être lue par n’importe qui sans gêne.
+⛔ **Les deux listes de champs sont closes** : ce qui n’y est pas **n’atteint jamais la base**. La
+liste du contexte est celle de [widget.md](widget.md) §Ce que le widget joint tout seul, mot pour
+mot. Le dépôt est public : elle doit pouvoir être lue par n’importe qui sans gêne.
+
+⚠️ **Depuis P-030, un champ inconnu est RETIRÉ, plus refusé** — sauf dans un indice (juste en
+dessous). Refuser le corps entier faisait perdre la parole d’un widget plus récent que le serveur,
+après un retour arrière (§La règle des versions).
 
 ⛔ **`indices` est plafonné à TROIS par le serveur** ([D-026](../00-Projet/DECISIONS_LOG.md)), pas
 par le widget : un widget forgé ne doit pas pouvoir transformer un retour en déversoir de journal —
@@ -71,6 +75,11 @@ pas ignoré, refusé. `error.message` est écrit par le code de l’hôte et por
 de personnes et de dossiers ; le `.strict()` du schéma est ce qui transforme cette règle en mur
 plutôt qu’en intention. Les trois lignes sont rangées dans la table `indices`, dans la même
 transaction que la parole.
+
+⚠️ **C’est le seul schéma resté `.strict()`**, et c’est ce mur qui le veut. Conséquence : un indice
+ne gagne jamais de champ. Et pour qu’un refus d’indice ne coûte jamais la parole, **le widget, sur
+un `400`, renvoie une fois le retour sans capture ni indices** (`packages/widget/src/envoi.ts`) —
+ce sont des aide-mémoire, la parole est ce qui doit passer.
 
 ⚠️ **`source` est déclaré par le widget**, parce qu’un transcript Web Speech est de la voix **sans
 fichier audio** — le serveur ne peut pas le deviner. Avec un audio, il vaut `voix` quoi qu’il
@@ -84,7 +93,7 @@ arrive. Ce n’est pas décoratif : c’est la mesure du pari du produit.
 | Code | Motif | Quand |
 |---|---|---|
 | `201` | — | `{ "retour": "<id>" }` — les trois lignes sont écrites |
-| `400` | `corps_invalide` | JSON illisible, champ inconnu, ni texte ni audio, borne dépassée |
+| `400` | `corps_invalide` | JSON illisible, champ inconnu **dans un indice**, ni texte ni audio, borne dépassée |
 | `401` | `cle_absente` | pas de `x-feedys-cle`, ou une valeur qui n’est pas une `fdy_pub_…` |
 | `403` | `origine_refusee` | l’`Origin` n’est pas celle du produit |
 | `404` | `produit_inconnu` | clé inexistante **ou** produit désactivé |
@@ -97,6 +106,38 @@ dirait à un curieux qu’une clé trouvée dans un HTML existe encore.
 
 ⚠️ **Les en-têtes CORS accompagnent aussi les refus.** Sans eux, le navigateur cacherait la
 réponse au widget, qui n’aurait qu’une « erreur réseau » à afficher au lieu du motif.
+
+## La règle des versions
+
+⚠️ **Un widget et le serveur qui le sert peuvent avoir une version d’écart**
+([T-012](../00-Projet/TICKETS_DIFFERES.md), [D-030](../00-Projet/DECISIONS_LOG.md)). `widget.js` est
+gardé un jour en `stale-while-revalidate`, et un onglet de logiciel métier reste ouvert toute la
+journée : après une mise à jour du serveur, le widget d’hier envoie encore ; après un retour
+arrière, c’est le widget de demain qui parle à l’ancien serveur.
+
+⛔ **La règle, pour toute route que le widget appelle :**
+
+1. **un champ de requête nouveau est toujours facultatif** — le widget d’hier ne l’enverra pas ;
+2. **une enveloppe de requête ignore ce qu’elle ne connaît pas** — le serveur d’hier ne doit pas
+   refuser la parole pour un champ de demain. `SchemaCorpsRetour`, `SchemaContexte`,
+   `SchemaCorpsTour` et `SchemaCorpsFin` ne sont plus `.strict()` ;
+3. **un champ de réponse ne se renomme ni ne disparaît** — le widget lit ses réponses à la main,
+   sans zod, et un renommage casserait en silence tous les onglets ouverts. Un champ de réponse
+   **nouveau** est libre ;
+4. ⛔ **`SchemaIndice` reste `.strict()`** — le mur de [D-026](../00-Projet/DECISIONS_LOG.md). Un
+   indice ne gagne donc jamais de champ, et le widget renvoie la parole sans indices sur un `400`.
+
+⛔ **Un retour arrière ne demande aucune consigne** — ni attendre un jour, ni faire recharger les
+onglets, ce que personne ne pourrait imposer aux salariés d’un client.
+
+**Ce qui la tient** : `apps/serveur/app/api/retours/compatibilite.test.ts`. Il relit les corps que
+le widget `1.0.0` envoie — **écrits à la main et figés** dans `tests/versions/widget-1.0.0.ts` —
+contre les schémas d’aujourd’hui, en exigeant que **rien n’en soit retiré** ; et il relit les
+réponses d’aujourd’hui — les enveloppes des routes (`_reponses.ts`), `jouerTour`, le dépôt de
+relève — avec ce que `1.0.0` en lit. Vérifié en renommant un champ de requête : il rougit.
+
+⚠️ **À chaque version publiée, un fichier de plus** dans `tests/versions/`, et le test le relit
+aussi. On ne réécrit jamais celui d’une version déjà chez un client.
 
 ## Ce qui est écrit, et où
 

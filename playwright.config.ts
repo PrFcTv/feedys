@@ -140,6 +140,18 @@ export default defineConfig({
       //    pour deux raisons différentes ne recette ni l’une ni l’autre.
       ANTHROPIC_API_KEY: CLE_MODELE_E2E,
       ANTHROPIC_BASE_URL: ORIGINE_MODELE_MORTE,
+      // ⛔ AUCUN CANAL NE PART D’UN PARCOURS — même faute, autre fournisseur.
+      //    `next.config.ts` charge le `.env.local` du poste, qui peut porter le
+      //    vrai bot et le vrai relais. Une variable déjà posée, MÊME VIDE, n’est
+      //    pas écrasée par `process.loadEnvFile` (vérifié le 2026-09-17) : la
+      //    vider ici suffit. Sans elle, le modèle mort de ce parcours pourrait
+      //    ouvrir l’incident `modele_en_echec`, et Telegram recevrait l’alerte
+      //    pour de bon (P-030).
+      FEEDYS_TELEGRAM_JETON: '',
+      FEEDYS_TELEGRAM_CHAT: '',
+      SMTP_URL: '',
+      FEEDYS_EMAIL_DE: '',
+      FEEDYS_EMAIL_A: '',
     },
     },
     {

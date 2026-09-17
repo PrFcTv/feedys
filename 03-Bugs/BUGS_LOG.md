@@ -761,3 +761,96 @@ coupe la parole, et `style-src`/`img-src` fermés au plus dur qui ne gênent rie
 ⚠️ **Ce que le parcours a trouvé en plus, et qui reste ouvert** : la capture d’écran, elle, exige
 encore `style-src 'unsafe-inline'` et `img-src data:` — c’est snapdom, pas nous.
 [T-010](../00-Projet/TICKETS_DIFFERES.md).
+
+---
+
+## 019 — Une panne du modèle perd la note pour toujours, et le rattrapage écrit ne peut pas marcher
+
+**Statut** : ✅ Résolu (2026-09-17, PR #31)
+**Constaté le** : 2026-09-17, à la relecture de `main` à `0da28df`, **après** la publication de
+`1.0.0` — les six checks verts
+**Où** : `apps/serveur/infra/composition.ts`, `apps/serveur/domaine/entretien/balayage.ts`,
+`apps/serveur/infra/filet.ts`, `04-Architecture/hebergement.md` §La requête de rattrapage
+
+**Symptôme** — le modèle ne répond plus pendant dix minutes : plafond de workspace atteint, clé
+révoquée, panne du fournisseur — les trois modes de panne que [D-029](../00-Projet/DECISIONS_LOG.md)
+a choisi d’assumer. Tous les entretiens refermés pendant ce temps restent **sans note, pour
+toujours**. Aucun email ne part, aucune passe ne les reprend, et la seule trace est une ligne de
+console sur le VPS d’un client, que personne ne lit ([D-028](../00-Projet/DECISIONS_LOG.md)).
+
+⛔ **Personne ne le sait.** Le développeur ne reçoit rien, donc il ne sait pas que des notes
+manquent — ni que des collaborateurs ont parlé. La parole est en base, mais rien ne dit à
+quiconque d’aller l’y chercher.
+
+⛔ **Et le jour où quelqu’un s’en aperçoit, la procédure écrite ne marche pas.**
+
+**Cause** — cinq faits, justes chacun de son côté, et qui ensemble ne laissent aucune issue :
+
+| Fait | Où |
+|---|---|
+| Une synthèse en `modele_indisponible` écrit une ligne de console, puis **s’arrête** | `apps/serveur/infra/composition.ts:158-169` |
+| Sans synthèse, **aucune notification ne part** : `charger` rend `null` | `apps/serveur/domaine/notification/envoyer.ts:23` |
+| Les trois tentatives (60 s chacune) vivent **dans** l’appel ; après, plus rien ne retente | `apps/serveur/domaine/entretien/modele.ts:141,185` |
+| Le filet ne regarde que les `en_cours` : un retour `envoye` ou `abandonne` sans note n’est **jamais** repris | `apps/serveur/domaine/entretien/balayage.ts:68,144` |
+| La seule alerte est un `console.warn` | `apps/serveur/infra/filet.ts:89` |
+
+La requête de rattrapage de [hebergement.md](../04-Architecture/hebergement.md) (l. 812-829)
+échoue pour **trois raisons indépendantes** :
+
+1. elle renvoie à `pnpm entretien:rejouer --synthese`, qui **n’écrit rien**, par construction
+   (`apps/serveur/outils/entretien-rejouer.ts:9-11`) ;
+2. l’image de production ne contient **ni `pnpm`, ni `tsx`, ni `outils/`** (étage `production` du
+   `Dockerfile`), et le dépôt n’est pas sur le VPS du client (hebergement.md l. 140-142) ;
+3. sa requête ne voit que les retours refermés **par le filet** (`audit.action =
+   'cloture_balayage'`). Un entretien refermé **normalement** par le widget, dont la synthèse a
+   échoué, ne laisse aucune ligne dans `audit` : il est invisible.
+
+⚠️ **Ce n’est pas un cas d’école, c’est la conséquence directe de D-029.** D-029 reproche à
+l’option (b) que « personne côté développeur n’est prévenu » quand le plafond tombe. C’est
+exactement aussi vrai de l’option (a), celle qu’on a retenue.
+
+⚠️ **Et le code affirme le contraire.** Le commentaire de `rejouerAval`
+(`apps/serveur/domaine/entretien/tour.ts:382`) dit « Une note qui manque se rattrape — la requête
+est dans hebergement.md ». C’est faux.
+
+**Correctif** — trois pièces, et aucune ne passe par un outil absent de l’image
+([D-030](../00-Projet/DECISIONS_LOG.md)) :
+
+1. **Le filet reprend** tout retour clos (`envoye`, `abandonne`) sans note, **quelle que soit la
+   façon dont il a été clos** — il ne regarde plus `audit`, seulement le statut et l’absence de
+   note. Huit reprises, en doublant à partir de cinq minutes (environ vingt et une heures),
+   comptées en base (`0011_notes_et_telegram.sql`), une à la fois, sous une réservation
+   `for update skip locked`. La note reprise part par **le** chemin d’une note
+   (`domaine/synthese/chaine.ts`), qui notifie. ⛔ `rien_a_synthetiser` n’est jamais retenté.
+2. **Le renoncement se voit** : au plafond, le retour porte `synthese_impossible_le`, la liste et la
+   fiche le disent, et l’alerte Telegram `notes_impossibles` part — une par incident.
+3. **Le rattrapage à la main marche dans l’image** : « Refaire la note » sur la fiche. ⛔ Il refuse
+   un retour qui a déjà sa note et un entretien en cours. `entretien:rejouer` reste en lecture
+   seule.
+
+`synthetiser()` rend désormais son issue au lieu de `void` : c’est ce qui permet au filet de savoir
+s’il doit reprendre. `hebergement.md` §Le filet est réécrit avec le chemin qui marche, et les deux
+textes qui mentaient — le commentaire de `rejouerAval` et le message d’alerte du filet — sont
+corrigés.
+
+⚠️ **Pourquoi pas une file de reprises, ou un worker** : [D-018] les refuse, et le travail tient
+dans la passe existante — même budget, même verrou `enCours`, en série.
+
+**Ce qui l’a laissé passer** — les tests prouvaient que l’échec de la synthèse est **avalé** —
+`produire.test.ts` rend `modele_indisponible`, `tour.test.ts` referme quand même. C’est
+l’invariant d’ingestion, et il tenait. ⛔ **Aucun ne demandait ce qui se passe ENSUITE** : aucun ne
+coupait le modèle, le rétablissait, et attendait la note. Et la procédure de rattrapage avait été
+**écrite sans jamais être jouée** : un seul essai sur l’image l’aurait fait tomber sur la raison 2.
+
+Désormais, `domaine/synthese/reprise.integration.test.ts` fait exactement ça, contre un vrai
+Postgres et **par le vrai chemin** — `synthetiserEtNotifier`, les dépôts de production,
+`canalTelegram` —, seuls le modèle et `fetch` étant bouchonnés : le modèle échoue, la passe
+suivante ne rappelle rien, le modèle revient, la note est écrite et l’avis part. Il couvre aussi le
+retour refermé par le widget **sans aucune ligne d’audit**, le `rien_a_synthetiser` jamais retenté,
+le plafond, et des passes simultanées — ⚠️ ce dernier vérifié en retirant le verrou : il rougit cinq
+fois sur cinq. Et `/bo` porte un parcours e2e qui clique « Refaire la note » sur un modèle mort, et
+exige que le refus soit dit.
+
+⚠️ **La leçon qui vaut au-delà de ce défaut** : une procédure d’exploitation écrite est un code qui
+n’a jamais tourné. Celle-ci citait un outil en lecture seule, absent de l’image, et une requête
+aveugle à la moitié des cas — trois fautes qu’un seul essai aurait montrées.

@@ -6,13 +6,14 @@ back-office est chez lui. Il peut avoir du caractère, et il doit avoir de la **
 ⛔ **Ce n’est pas un tableau de bord.** Ni compteur, ni graphique, ni « retours cette semaine ». Le
 lecteur ne vient pas mesurer, il vient chercher un retour précis et décider quoi en faire.
 
-## Les trois écrans
+## Les quatre écrans
 
 | Route | Ce que c’est |
 |---|---|
 | `/connexion` | un champ, un bouton |
 | `/bo` | la liste — filtres statut, type, zone, date |
 | `/bo/r/:id` | la fiche — la note, le fil, le contexte |
+| `/bo/installation` | les canaux configurés, le message d’essai de Telegram, les incidents ouverts (P-030) |
 
 ⚠️ `GET /bo/r/:id/capture` sert la capture d’écran. **Le client donne l’id du retour, jamais un
 chemin** : le chemin est lu en base, et la lecture refuse de toute façon tout ce qui sort de la
@@ -32,6 +33,15 @@ pour l’apprendre est trop tard.
 ⚠️ **Un retour sans titre est un retour sans note** : la synthèse a échoué, ou l’entretien s’est
 refermé sans un mot. On le dit à la place du titre, plutôt que de laisser une ligne vide qu’on
 prendrait pour un défaut d’affichage.
+
+⚠️ **Et on dit lequel** (P-030) — ce ne sont pas les mêmes gestes :
+
+| À la place du titre | Ce que ça veut dire |
+|---|---|
+| « sans note — le modèle sera relancé » | le filet la redemande tout seul. Rien à faire |
+| « sans note — le modèle n’a pas répondu, à refaire » | ⛔ le filet a renoncé : **« Refaire la note »** sur la fiche. En rouge |
+| « sans note — rien à synthétiser » | le fil ne contient aucune parole écrite — il n’y aura pas de note |
+| « sans note — synthèse absente » | pas encore de note, et le filet n’y est pas encore revenu |
 
 ### Les filtres vivent dans l’URL
 
@@ -65,6 +75,25 @@ reformulation du modèle vaut mieux que la parole d’origine.
 
 ⚠️ Le `transcript_brut` est montré sous le message **quand il en diffère** : on garde les
 hésitations, elles portent du sens.
+
+### La note qui manque — et « Refaire la note »
+
+Quand un retour n’a pas de note, la fiche dit **où en est le filet** — combien de reprises, depuis
+quand, s’il a renoncé — et ⛔ ne renvoie plus à `pnpm entretien:rejouer`, qui n’écrit rien et
+n’existe pas dans l’image ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 019).
+
+Elle porte le bouton **« Refaire la note »**, qui demande la note par le chemin ordinaire — elle est
+écrite, puis notifiée — et dit ce qui s’est passé, à côté du bouton.
+
+- ⛔ **Il refuse un retour qui a déjà sa note** — une note par retour, et elle ne se refait pas —, et
+  ce refus est posé **avant** tout appel au modèle ;
+- ⛔ **il refuse un entretien encore en cours** : sa note sera rédigée à la fin, et une note écrite
+  maintenant ferait refuser la vraie ;
+- ⚠️ il n’est pas proposé quand il ne peut que refuser — un entretien en cours, un fil sans parole ;
+- ⛔ **il ne touche à rien d’autre** : ni au statut, ni au fil, ni aux reprises du filet.
+
+⚠️ Les notifications sont affichées **par canal** : « Avis par Telegram », « Note par email », chacune
+avec son statut et, en cas d’échec, sa raison — nettoyée de tout jeton.
 
 ### Les verbatims ont leur typographie
 
@@ -122,6 +151,16 @@ se supprime jamais, ni par le back-office, ni par le MCP, ni pour corriger une t
 ⛔ **`en_cours`, `abandonne` et `envoye` ne se posent pas à la main.** Ils décrivent le déroulé de
 l’entretien : les réécrire falsifierait l’histoire du retour. Même liste que celle du MCP.
 
+### Deux gestes qui ne sont pas des corrections (P-030)
+
+| Geste | Ce qu’il fait | ⛔ Ce qu’il ne fait pas |
+|---|---|---|
+| **Refaire la note** | demande la note d’un retour qui n’en a pas | régénérer une note existante ; toucher au statut, aux étiquettes à la main, au fil |
+| **Envoyer un message d’essai** (`/bo/installation`) | vérifie que CE bot arrive sur le téléphone | écrire quoi que ce soit en base ; afficher une valeur de variable |
+
+Ils sont gardés comme les corrections — la session est exigée **dans l’action**, pas seulement à
+l’affichage.
+
 ### Le refus est côté serveur, et il est dit
 
 Les schémas de `domaine/backoffice/correction.ts` sont `.strict()`, et le `FormData` leur est passé
@@ -164,6 +203,18 @@ tourne**. Un lien vers le dépôt sans la version ne suffit pas.
 
 `FEEDYS_VERSION` est posée à la construction de l’image ; sur un poste elle est absente, et « dev »
 est la réponse honnête.
+
+## `/bo/installation` — l’état de CETTE installation
+
+⛔ **Ce n’est pas un tableau de bord.** Deux blocs, et des faits d’exploitation :
+
+- **Les canaux** — Telegram (recommandé) et l’email : configuré, non configuré, incomplet — avec
+  les noms des variables qui manquent — ou mal formé. ⛔ **Aucune valeur n’est affichée**, ni un
+  jeton, ni un chat, ni une adresse. Le bouton du message d’essai n’apparaît que si Telegram est
+  configuré.
+- **Les incidents ouverts** — ceux de la veille ([hebergement.md](../04-Architecture/hebergement.md)
+  §Ce qui doit être surveillé), depuis quand, et s’ils ont été annoncés ou pourquoi pas. C’est ce
+  qu’on regarde quand Telegram n’est pas là.
 
 ## Ce que ça n’a pas, et n’aura pas
 

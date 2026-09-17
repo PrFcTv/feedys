@@ -7,7 +7,36 @@
  * ⚠️ Un fichier `_préfixé` dans `app/` n’est pas une route : c’est la convention
  *    Next pour un module privé.
  */
+import type {
+  Erreur,
+  FinRendue,
+  ReponseCollaborateur,
+  RetourCree,
+} from '../../../../../packages/widget/src/contrat'
 import { EN_TETE_CLE, EN_TETE_IDENTITE } from '../../../../../packages/widget/src/contrat'
+
+/**
+ * Les enveloppes de réponse — ce que le widget LIT.
+ *
+ * ⛔ UN CHAMP DE RÉPONSE NE SE RENOMME NI NE DISPARAÎT. Le widget lit ses réponses
+ *    à la main, sans zod : un renommage casserait en silence tous les onglets
+ *    ouverts avec le widget de la veille (règle des versions, `contrat.ts` ;
+ *    [T-012], P-030). Les enveloppes sont nommées ici pour que
+ *    `tests/versions/` puisse les relire avec ce que lit chaque widget publié —
+ *    et que ce test rougisse le jour où l’une d’elles change.
+ *
+ * ⚠️ Le TOUR n’a pas d’enveloppe : sa réponse est `TourRendu`, rendu tel quel par
+ *    le domaine (`domaine/entretien/tour.ts`).
+ */
+export const enveloppes = {
+  retourCree: (retour: string): RetourCree => ({ retour }),
+  erreur: (motif: string, message: string): Erreur => ({ motif, message }),
+  finRendue: (statut: FinRendue['statut']): FinRendue => ({ statut }),
+  reponses: (retours: readonly ReponseCollaborateur[]): { readonly retours: readonly ReponseCollaborateur[] } => ({
+    retours,
+  }),
+  accuse: (): { readonly ok: true } => ({ ok: true }),
+}
 
 /**
  * ⚠️ Le préflight ne porte PAS la clé — `Access-Control-Request-Headers` ne

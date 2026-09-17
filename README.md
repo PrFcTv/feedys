@@ -27,8 +27,9 @@ capture d’écran. Feedys le supprime.
    plus deux questions.
 4. Il joint tout seul ce que personne ne pense à dire : l’écran, l’URL, le composant, le
    navigateur.
-5. Le développeur reçoit **une note** — le problème, le contexte, ce qui reste incertain, et les
-   mots exacts du collaborateur.
+5. Le développeur est **prévenu sur son téléphone** (Telegram) et lit **une note** — le problème,
+   le contexte, ce qui reste incertain, et les mots exacts du collaborateur. Si le modèle ne
+   répond pas, la note est redemandée toute seule, et une alerte part si elle devient impossible.
 6. Son agent de code lit les retours par **MCP**, sans quitter l’éditeur.
 
 ## Ce que ce n’est pas
@@ -42,8 +43,8 @@ des milliers d’inconnus. Détail : [00-Projet/VISION.md](00-Projet/VISION.md).
 ## Statut
 
 🚧 **En construction.** Le parcours complet tient debout — le widget, l’entretien, la synthèse,
-l’email, le back-office, le MCP, l’identité signée et le conteneur. Reste la recette de bout en
-bout. La séquence de travail est dans
+Telegram et l’email, les alertes, le back-office, le MCP, l’identité signée et le conteneur. Reste
+la première pose chez un hôte réel. La séquence de travail est dans
 [05-Prompts/MVP.md](05-Prompts/MVP.md), et l’avancement dans
 [00-Projet/ROADMAP.md](00-Projet/ROADMAP.md).
 
@@ -202,6 +203,13 @@ vérification qui va avec :
 
 L’image est **publiée sur GHCR**, sur tag de version : il n’y a rien à compiler chez le client.
 
+**Les notifications, Telegram d’abord** ([D-030](00-Projet/DECISIONS_LOG.md)) : un bot créé chez
+@BotFather pour CE client, deux variables — `FEEDYS_TELEGRAM_JETON` et `FEEDYS_TELEGRAM_CHAT` —, et
+le prestataire reçoit sur son téléphone l’avis de chaque retour et les alertes de l’installation.
+⛔ L’avis ne porte aucune parole : le type, le produit, la date et le lien vers la fiche. L’email
+vient ensuite, s’il est voulu — `SMTP_URL`, `FEEDYS_EMAIL_DE`, `FEEDYS_EMAIL_A` — et lui porte la
+note entière. `/bo/installation` envoie un message d’essai.
+
 ```bash
 cp .env.example .env.production                      # puis renseigner — aucune valeur ne va dans git
 docker pull ghcr.io/prfctv/feedys:1.0.0              # ⛔ l’étiquette EST la version, et FEEDYS_VERSION vaut la même
@@ -245,8 +253,9 @@ Puis la sauvegarde — un dump quotidien, gardé 7 jours :
 ./scripts/verifier-sauvegarde.sh   # ⛔ une sauvegarde jamais restaurée n’existe pas
 ```
 
-⚠️ **Ce qu’on protège n’est pas la note** — elle part par email et se régénère depuis le fil. C’est
-le **fil brut** : ce qui a été dit, qui ne se reconstitue pas ([D-022](00-Projet/DECISIONS_LOG.md)).
+⚠️ **Ce qu’on protège n’est pas la note** — elle se régénère depuis le fil, par le filet ou par
+« Refaire la note ». C’est le **fil brut** : ce qui a été dit, qui ne se reconstitue pas
+([D-022](00-Projet/DECISIONS_LOG.md)).
 
 Le détail, et les trois réglages de proxy qui décident :
 [04-Architecture/hebergement.md](04-Architecture/hebergement.md).

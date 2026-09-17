@@ -121,3 +121,64 @@ describe('envoyer', () => {
     expect(resultat.ok).toBe(false)
   })
 })
+
+describe('⛔ la parole d’abord — un serveur d’une version de retard (P-030)', () => {
+  const AVEC_CONFORT: CorpsRetour = {
+    ...CORPS,
+    contexte: {
+      ...CORPS.contexte,
+      capture: { type: 'image/webp', donnees: 'AAAA' },
+      indices: [{ genre: 'js', nom: 'TypeError', ecartMs: 1200 }],
+    },
+  }
+
+  const REFUS = { motif: 'corps_invalide', message: 'contexte.indices.0 — champ inconnu' }
+
+  function requete(corps: CorpsRetour, appel: typeof globalThis.fetch) {
+    return { origine: 'https://feedys.exemple.fr', cle: 'fdy_pub_a', corps, fetch: appel }
+  }
+
+  it('sur un 400, renvoie UNE fois la parole sans capture ni indices', async () => {
+    const appel = vi
+      .fn()
+      .mockResolvedValueOnce(reponse(400, REFUS))
+      .mockResolvedValueOnce(reponse(201, { retour: 'ret_sauve' }))
+
+    const resultat = await envoyer(requete(AVEC_CONFORT, appel))
+
+    expect(resultat).toEqual({ ok: true, retour: 'ret_sauve' })
+    expect(appel).toHaveBeenCalledTimes(2)
+
+    const second = JSON.parse(
+      String((appel.mock.calls[1] as [string, RequestInit])[1].body),
+    ) as CorpsRetour
+    expect(second.texte).toBe(CORPS.texte)
+    expect(second.contexte).toEqual(CORPS.contexte)
+  })
+
+  it('⛔ ne renvoie pas une troisième fois — un refus qui tient est rendu tel quel', async () => {
+    // ⚠️ Une réponse NEUVE à chaque appel : un corps ne se lit qu’une fois.
+    const appel = vi.fn(async () => reponse(400, REFUS))
+
+    const resultat = await envoyer(requete(AVEC_CONFORT, appel))
+
+    expect(appel).toHaveBeenCalledTimes(2)
+    expect(resultat).toEqual({ ok: false, message: REFUS.message, reessayable: false })
+  })
+
+  it('ne renvoie rien quand il n’y avait aucun confort à retirer', async () => {
+    const appel = vi.fn(async () => reponse(400, REFUS))
+
+    await envoyer(requete(CORPS, appel))
+
+    expect(appel).toHaveBeenCalledOnce()
+  })
+
+  it('ne renvoie rien sur un autre refus que 400 — ce n’est pas le contenu qui est en cause', async () => {
+    const appel = vi.fn(async () => reponse(403, { motif: 'origine_refusee', message: 'Refusé.' }))
+
+    await envoyer(requete(AVEC_CONFORT, appel))
+
+    expect(appel).toHaveBeenCalledOnce()
+  })
+})

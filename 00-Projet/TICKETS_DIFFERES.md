@@ -108,6 +108,10 @@ d’intégration, qui fait `set role feedys_app` avant de tenter un `DELETE`.
 c’est de **s’en servir** — un déploiement à un conteneur migre avec un rôle propriétaire, et rien
 n’oblige encore `DATABASE_URL` à pointer sur un rôle membre. Le ticket reste ouvert pour ça.
 
+⚠️ **Annoté le 2026-09-17** (relecture du 2026-09-17) : le paragraphe ci-dessus est **antérieur à
+la clôture**. « Le ticket reste ouvert pour ça » n’est plus vrai — P-018 a outillé l’usage (deux
+URL, [D-019](DECISIONS_LOG.md)), et le ticket est clos, comme le dit son titre.
+
 ---
 
 ## T-005 — snapdom écrit un avertissement dans la console de l’hôte
@@ -224,6 +228,12 @@ que rien ne la reprenne — ni BUGS_LOG, ni ce registre. C’est exactement ce q
 **En attendant** : rien. Le mode dégradé est censé être rare, et c’est précisément sa fréquence
 qui rouvrira le sujet.
 
+⚠️ **Mis à jour le 2026-09-17 (P-030)** : la ligne dit désormais **quel** mode dégradé — « le
+modèle sera relancé », « le modèle n’a pas répondu, à refaire » (en rouge), « rien à synthétiser »
+([back-office.md](../01-Specs/back-office.md) §La liste). Ce qui reste est l’observation d’origine :
+entre elles, cinq lignes sans titre restent indiscernables, et il faut les ouvrir. Le déclencheur
+ne change pas.
+
 ---
 
 ## T-009 — Rien ne consigne un correctif quand l’agent oublie de marquer
@@ -330,3 +340,91 @@ Un retour réel où le développeur constate que l’indice manquait **parce qu�
 du démarrage**. Alors seulement, et pour ce cas-là, on documentera le stub d’hôte comme intégration
 optionnelle — jamais comme intégration par défaut.
 
+---
+
+## ~~T-012 — Le widget et le serveur qui le sert peuvent avoir une version d’écart~~ · ✅ clos
+
+**Différé le** : 2026-09-09, pendant P-027 — **annoncé, jamais écrit**. Ouvert le 2026-09-17, à la
+relecture de `main` à `0da28df`
+**Clos le** : 2026-09-17, pendant P-030, par [D-030](DECISIONS_LOG.md)
+**Déclencheur de reprise** : déjà tombé — `1.0.0` est publiée, et un retour arrière chez un client
+se décide en une commande. Traité par P-030, partie 4 ; ce qui en restera sera requalifié ici
+**Coût si plus tard** : plus cher — chaque version publiée sans règle ajoute une paire
+widget / serveur à tenir compatible, et le premier retour arrière chez un client perd de la parole
+
+⛔ **Ce ticket aurait dû exister depuis P-027.** Le prompt l’annonçait deux fois — « il a son
+ticket » (§P-027, « Ce que tu ne fais pas »), puis « à ouvrir en ticket » (§Hors périmètre) — et
+ce registre s’arrêtait à T-011.
+
+**L’écart existe, et deux textes disent le contraire.** [D-028](DECISIONS_LOG.md) (l. 1376-1378) et
+[hebergement.md](../04-Architecture/hebergement.md) §2 (l. 88-92) affirment qu’il n’y a « jamais
+d’écart entre le widget et le serveur qui le sert », puisqu’ils sortent de la même image. C’est
+faux, deux fois :
+
+- `widget.js` est servi en `stale-while-revalidate=86400`
+  (`apps/serveur/domaine/actifs/entetes.ts:20`) : un navigateur peut encore exécuter l’ancien
+  widget une journée après le déploiement ;
+- et P-027 le dit lui-même : **un onglet de logiciel métier reste ouvert toute la journée**, avec
+  le widget chargé le matin.
+
+**Ce que ça coûte, dans les deux sens :**
+
+- ⛔ **après un retour arrière**, un widget plus récent qui envoie un champ inconnu voit son retour
+  **entier** refusé en `400` : `packages/widget/src/contrat.ts` porte **douze `.strict()`**. Et
+  `packages/widget/src/envoi.ts:80` ne classe réessayables que `429` et `5xx` — **la parole
+  n’entre pas en base** ;
+- ⚠️ **après une mise à jour**, le widget lit les réponses **sans zod** : renommer un champ de
+  réponse casse en silence tous les onglets ouverts.
+
+**En attendant** : aucune règle n’est écrite, et aucun test ne relit un corps de requête d’une
+version publiée contre les schémas du jour.
+
+### Comment il a été fermé
+
+- **La règle est écrite** — [ingestion.md](../01-Specs/ingestion.md) §La règle des versions : un champ
+  de requête nouveau est toujours facultatif ; une enveloppe de requête ignore ce qu’elle ne connaît
+  pas ; un champ de réponse ne se renomme ni ne disparaît.
+- **Les enveloppes de requête ne sont plus `.strict()`** : `SchemaCorpsRetour`, `SchemaContexte`,
+  `SchemaCorpsTour`, `SchemaCorpsFin`. Un champ inconnu est retiré — il n’atteint toujours pas la
+  base.
+- ⛔ **`SchemaIndice` reste `.strict()`** — le mur de [D-026](DECISIONS_LOG.md). Et le widget, sur un
+  `400`, **renvoie une fois la parole sans capture ni indices** : un indice refusé ne coûte plus la
+  parole.
+- **Un test la tient** : `apps/serveur/app/api/retours/compatibilite.test.ts` relit les corps et les
+  lecteurs du widget `1.0.0`, **écrits à la main et figés** dans `tests/versions/widget-1.0.0.ts`,
+  contre les schémas et les réponses d’aujourd’hui. Vérifié en renommant un champ : il rougit.
+- [D-028] et hebergement.md §2 sont **annotés**, pas réécrits.
+
+### Ce qui reste, et ce qui le rouvrirait
+
+- ⚠️ **Un fichier par version publiée** : à chaque tag, `tests/versions/` gagne le sien, et le test
+  le relit. Oublier de l’ajouter ne casse rien tout de suite — c’est la version suivante qui ne
+  serait plus protégée. C’est une ligne de la liste de publication, pas un automatisme.
+- ⚠️ **`SchemaIdentite` reste `.strict()`**, et ce n’est pas un écart de version : la charge est
+  signée par le serveur de l’**hôte**, pas par le widget. Un hôte qui y ajoute un champ fait
+  arriver ses retours sans auteur — rien n’est perdu ([ingestion.md](../01-Specs/ingestion.md)
+  §L’identité signée).
+- **Déclencheur de réouverture** : un retour arrivé sans parole, ou une carte qui ne s’affiche plus,
+  dans un onglet resté ouvert pendant une mise à jour.
+
+
+---
+
+## T-013 — Aucun vrai message Telegram n’est encore arrivé sur un vrai téléphone
+
+**Différé le** : 2026-09-17, pendant P-030, par décision du développeur
+**Déclencheur de reprise** : la première intégration de Feedys dans un ERP client — point 7 de la
+liste d’installation, le message d’essai de `/bo/installation`
+**Coût si plus tard** : identique — le message d’essai existe pour ça, dans l’image
+
+Le canal Telegram est éprouvé **hors ligne** : `fetch` bouchonné, les refus `400`/`403`/`429`, le
+jeton nettoyé des erreurs, le texte brut, la troncature ([D-030](DECISIONS_LOG.md)). ⚠️ **Rien n’a
+encore parlé à la vraie API** : ni `link_preview_options`, ni la forme réelle des refus, ni un chat
+de groupe négatif.
+
+⛔ **Ce n’est pas un oubli** : un bot par installation, et son jeton se pose à l’intégration dans
+chaque ERP, jamais dans le `.env.local` du dépôt.
+
+**En attendant** : le point 7 de la liste d’installation se coche quand le message est **lu sur le
+téléphone**, pas quand le bouton dit « Parti ». Un écart constaté ce jour-là devient une entrée de
+[BUGS_LOG](../03-Bugs/BUGS_LOG.md).

@@ -19,11 +19,18 @@ import { creerDepotBackOffice } from '../../../../../infra/base/depot-bo'
 import { Fil } from '../../../../../ui/bo/fil'
 import { BlocContexte } from '../../../../../ui/bo/contexte'
 import { FormulaireEtiquettes, FormulaireStatut } from '../../../../../ui/bo/corrections'
+import { BoutonRefaireNote } from '../../../../../ui/bo/refaire-note'
 import { BlocSynthese, SansSynthese } from '../../../../../ui/bo/synthese'
 import { Meta, PastilleStatut } from '../../../../../ui/pastille'
 
-import { changerStatut, corrigerEtiquettes } from '../../actions'
+import { changerStatut, corrigerEtiquettes, refaireNote } from '../../actions'
 import type { Issue } from '../../actions'
+
+/** ⚠️ Les mots du produit : Telegram porte un avis, l’email porte la note. */
+const LIBELLES_CANAL: Record<Fiche['notifications'][number]['canal'], string> = {
+  telegram: 'Avis par Telegram',
+  email: 'Note par email',
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -112,6 +119,11 @@ export default async function FicheRetour({ params }: { params: Promise<{ id: st
     return corrigerEtiquettes(id, donnees)
   }
 
+  async function redemanderNote(_etat: Issue | null): Promise<Issue> {
+    'use server'
+    return refaireNote(id)
+  }
+
   const auteur = fiche.auteurNom
     ? `${fiche.auteurNom}${fiche.auteurRole ? ` (${fiche.auteurRole})` : ''}`
     : 'auteur inconnu'
@@ -143,7 +155,13 @@ export default async function FicheRetour({ params }: { params: Promise<{ id: st
       {/* ── 1. LA SYNTHÈSE ─────────────────────────────────────────────────── */}
       <Section titre="La note" note={fiche.modele ? `modèle ${fiche.modele}` : undefined}>
         {fiche.synthese === null ? (
-          <SansSynthese type={fiche.type} />
+          <SansSynthese
+            type={fiche.type}
+            statut={fiche.statut}
+            suivi={fiche.suiviNote}
+            fuseau={fiche.contexte?.fuseau}
+            bouton={<BoutonRefaireNote action={redemanderNote} />}
+          />
         ) : (
           <BlocSynthese synthese={fiche.synthese} />
         )}
@@ -189,12 +207,13 @@ export default async function FicheRetour({ params }: { params: Promise<{ id: st
         />
       </Section>
 
-      {fiche.notification === null ? null : (
-        <p className="text-[13px] text-encre-3">
-          Notification par email : <span className="font-mono">{fiche.notification.statut}</span>
-          {fiche.notification.erreur ? ` — ${fiche.notification.erreur}` : ''}
+      {fiche.notifications.map((notification) => (
+        <p key={notification.canal} className="text-[13px] text-encre-3">
+          {LIBELLES_CANAL[notification.canal]} :{' '}
+          <span className="font-mono">{notification.statut}</span>
+          {notification.erreur ? ` — ${notification.erreur}` : ''}
         </p>
-      )}
+      ))}
     </div>
   )
 }
