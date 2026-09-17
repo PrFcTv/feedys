@@ -330,3 +330,41 @@ Un retour réel où le développeur constate que l’indice manquait **parce qu�
 du démarrage**. Alors seulement, et pour ce cas-là, on documentera le stub d’hôte comme intégration
 optionnelle — jamais comme intégration par défaut.
 
+---
+
+## T-012 — Le widget et le serveur qui le sert peuvent avoir une version d’écart
+
+**Différé le** : 2026-09-09, pendant P-027 — **annoncé, jamais écrit**. Ouvert le 2026-09-17, à la
+relecture de `main` à `0da28df`
+**Déclencheur de reprise** : déjà tombé — `1.0.0` est publiée, et un retour arrière chez un client
+se décide en une commande. Traité par P-030, partie 4 ; ce qui en restera sera requalifié ici
+**Coût si plus tard** : plus cher — chaque version publiée sans règle ajoute une paire
+widget / serveur à tenir compatible, et le premier retour arrière chez un client perd de la parole
+
+⛔ **Ce ticket aurait dû exister depuis P-027.** Le prompt l’annonçait deux fois — « il a son
+ticket » (§P-027, « Ce que tu ne fais pas »), puis « à ouvrir en ticket » (§Hors périmètre) — et
+ce registre s’arrêtait à T-011.
+
+**L’écart existe, et deux textes disent le contraire.** [D-028](DECISIONS_LOG.md) (l. 1376-1378) et
+[hebergement.md](../04-Architecture/hebergement.md) §2 (l. 88-92) affirment qu’il n’y a « jamais
+d’écart entre le widget et le serveur qui le sert », puisqu’ils sortent de la même image. C’est
+faux, deux fois :
+
+- `widget.js` est servi en `stale-while-revalidate=86400`
+  (`apps/serveur/domaine/actifs/entetes.ts:20`) : un navigateur peut encore exécuter l’ancien
+  widget une journée après le déploiement ;
+- et P-027 le dit lui-même : **un onglet de logiciel métier reste ouvert toute la journée**, avec
+  le widget chargé le matin.
+
+**Ce que ça coûte, dans les deux sens :**
+
+- ⛔ **après un retour arrière**, un widget plus récent qui envoie un champ inconnu voit son retour
+  **entier** refusé en `400` : `packages/widget/src/contrat.ts` porte **douze `.strict()`**. Et
+  `packages/widget/src/envoi.ts:80` ne classe réessayables que `429` et `5xx` — **la parole
+  n’entre pas en base** ;
+- ⚠️ **après une mise à jour**, le widget lit les réponses **sans zod** : renommer un champ de
+  réponse casse en silence tous les onglets ouverts.
+
+**En attendant** : aucune règle n’est écrite, et aucun test ne relit un corps de requête d’une
+version publiée contre les schémas du jour.
+

@@ -761,3 +761,62 @@ coupe la parole, et `style-src`/`img-src` fermés au plus dur qui ne gênent rie
 ⚠️ **Ce que le parcours a trouvé en plus, et qui reste ouvert** : la capture d’écran, elle, exige
 encore `style-src 'unsafe-inline'` et `img-src data:` — c’est snapdom, pas nous.
 [T-010](../00-Projet/TICKETS_DIFFERES.md).
+
+---
+
+## 019 — Une panne du modèle perd la note pour toujours, et le rattrapage écrit ne peut pas marcher
+
+**Statut** : 🔴 Ouvert
+**Constaté le** : 2026-09-17, à la relecture de `main` à `0da28df`, **après** la publication de
+`1.0.0` — les six checks verts
+**Où** : `apps/serveur/infra/composition.ts`, `apps/serveur/domaine/entretien/balayage.ts`,
+`apps/serveur/infra/filet.ts`, `04-Architecture/hebergement.md` §La requête de rattrapage
+
+**Symptôme** — le modèle ne répond plus pendant dix minutes : plafond de workspace atteint, clé
+révoquée, panne du fournisseur — les trois modes de panne que [D-029](../00-Projet/DECISIONS_LOG.md)
+a choisi d’assumer. Tous les entretiens refermés pendant ce temps restent **sans note, pour
+toujours**. Aucun email ne part, aucune passe ne les reprend, et la seule trace est une ligne de
+console sur le VPS d’un client, que personne ne lit ([D-028](../00-Projet/DECISIONS_LOG.md)).
+
+⛔ **Personne ne le sait.** Le développeur ne reçoit rien, donc il ne sait pas que des notes
+manquent — ni que des collaborateurs ont parlé. La parole est en base, mais rien ne dit à
+quiconque d’aller l’y chercher.
+
+⛔ **Et le jour où quelqu’un s’en aperçoit, la procédure écrite ne marche pas.**
+
+**Cause** — cinq faits, justes chacun de son côté, et qui ensemble ne laissent aucune issue :
+
+| Fait | Où |
+|---|---|
+| Une synthèse en `modele_indisponible` écrit une ligne de console, puis **s’arrête** | `apps/serveur/infra/composition.ts:158-169` |
+| Sans synthèse, **aucune notification ne part** : `charger` rend `null` | `apps/serveur/domaine/notification/envoyer.ts:23` |
+| Les trois tentatives (60 s chacune) vivent **dans** l’appel ; après, plus rien ne retente | `apps/serveur/domaine/entretien/modele.ts:141,185` |
+| Le filet ne regarde que les `en_cours` : un retour `envoye` ou `abandonne` sans note n’est **jamais** repris | `apps/serveur/domaine/entretien/balayage.ts:68,144` |
+| La seule alerte est un `console.warn` | `apps/serveur/infra/filet.ts:89` |
+
+La requête de rattrapage de [hebergement.md](../04-Architecture/hebergement.md) (l. 812-829)
+échoue pour **trois raisons indépendantes** :
+
+1. elle renvoie à `pnpm entretien:rejouer --synthese`, qui **n’écrit rien**, par construction
+   (`apps/serveur/outils/entretien-rejouer.ts:9-11`) ;
+2. l’image de production ne contient **ni `pnpm`, ni `tsx`, ni `outils/`** (étage `production` du
+   `Dockerfile`), et le dépôt n’est pas sur le VPS du client (hebergement.md l. 140-142) ;
+3. sa requête ne voit que les retours refermés **par le filet** (`audit.action =
+   'cloture_balayage'`). Un entretien refermé **normalement** par le widget, dont la synthèse a
+   échoué, ne laisse aucune ligne dans `audit` : il est invisible.
+
+⚠️ **Ce n’est pas un cas d’école, c’est la conséquence directe de D-029.** D-029 reproche à
+l’option (b) que « personne côté développeur n’est prévenu » quand le plafond tombe. C’est
+exactement aussi vrai de l’option (a), celle qu’on a retenue.
+
+⚠️ **Et le code affirme le contraire.** Le commentaire de `rejouerAval`
+(`apps/serveur/domaine/entretien/tour.ts:382`) dit « Une note qui manque se rattrape — la requête
+est dans hebergement.md ». C’est faux.
+
+**Correctif** — à venir : P-030, partie 1 ([05-Prompts/APRES-MVP.md](../05-Prompts/APRES-MVP.md)).
+
+**Ce qui l’a laissé passer** — les tests prouvent que l’échec de la synthèse est **avalé** —
+`produire.test.ts` rend `modele_indisponible`, `tour.test.ts` referme quand même. C’est
+l’invariant d’ingestion, et il tient. ⛔ **Aucun ne demande ce qui se passe ENSUITE** : aucun ne
+coupe le modèle, le rétablit, et attend la note. Et la procédure de rattrapage a été **écrite
+sans jamais être jouée** : un seul essai sur l’image l’aurait fait tomber sur la raison 2.
