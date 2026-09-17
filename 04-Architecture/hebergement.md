@@ -198,8 +198,10 @@ le `deploy.yml` du logiciel métier, et leurs secrets dans `.kamal/secrets`.
       `403` ou `400` nomme la variable à reprendre ; un « injoignable » dit que le réseau du VPS
       bloque `api.telegram.org` — alors les alertes ne partiront pas, et il faut le savoir **avant**
       la pose ;
-- [ ] **8 · La restauration, une fois, pour de vrai** — §La pose chez un hôte · 2. ⛔ Avant la
-      pose, pas après ;
+- [ ] **8 · La restauration, une fois, pour de vrai** — §La pose chez un hôte · 2. ⛔ Avant
+      d’annoncer le widget aux collaborateurs, pas après. ⚠️ Elle demande **un retour en base** —
+      zéro message restauré est un échec, exprès : elle se joue donc après le premier retour
+      d’essai du point 9, et avant que quiconque d’autre ne parle ;
 - [ ] **9 · Le produit, sa clé, la ligne de `<script>`, le CSP, l’identité, et les dix minutes
       dans un vrai navigateur** — c’est **§La pose chez un hôte**, points 3 à 7. ⚠️ Le produit se
       crée **dans le conteneur**, par `node outils/creer-produit.mjs` : `pnpm` n’est pas sur le VPS
@@ -891,7 +893,13 @@ restent en `exemple.fr`. Le dépôt est public.
 
 ### 2 · ⛔ La restauration, une fois, pour de vrai
 
-⛔ **Avant la pose, pas après.** Une sauvegarde jamais restaurée n’existe pas (§La sauvegarde).
+⛔ **Avant l’annonce aux collaborateurs, pas après.** Une sauvegarde jamais restaurée n’existe pas
+(§La sauvegarde).
+
+⚠️ **Mais pas sur une base vide** : `verifier-sauvegarde.sh` refuse zéro message, et c’est voulu —
+un dump vide et plausible est exactement ce qu’il doit attraper. Sur une installation neuve, créer
+le produit (point 3) et envoyer **un retour d’essai** d’abord, puis revenir ici. Corrigé le
+2026-09-17 : la liste disait « avant la pose », ce qui ne pouvait pas passer.
 
 ```bash
 ./scripts/sauvegarde.sh

@@ -875,6 +875,11 @@ logiciel métier », sur `main` à `fbd9e64` — contre le code de Kamal 2.12.0 
 
 Et la sauvegarde écrite ne tourne pas : ses deux scripts ne connaissent que `docker compose`.
 
+⚠️ Et la liste d’installation — compose comme Kamal — demandait de restaurer « avant la pose »,
+c’est-à-dire sur une base sans aucun message : `verifier-sauvegarde.sh` refuse ce cas, exprès.
+L’étape ne pouvait pas se cocher. Elle se joue désormais après un premier retour d’essai, et avant
+l’annonce aux collaborateurs.
+
 **Cause** — cinq faits, chacun vérifié :
 
 | Fait | Preuve |
