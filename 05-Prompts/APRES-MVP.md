@@ -24,6 +24,7 @@ ce qu’on imagine.
 | P-022 · l’audio réécoutable | [ROADMAP] ③ | 🔒 après P-019 |
 | P-023 · l’écran de gestion des produits | [ROADMAP] ⑤ | 🔒 après P-019 |
 | P-024 · la traçabilité du correctif | prolonge P-020 côté MCP | ✅ fait — **hors séquence** |
+| P-030 · aucune note ne se perd, et Telegram prévient | [BUGS_LOG] 019, T-012, la relecture du 2026-09-17 | ⏳ **à jouer AVANT P-019** |
 
 ⚠️ **P-024 n’a pas de section de prompt ci-dessous, et c’est normal** : il est né d’une relecture
 de P-020, pas de la planification. Ce qu’il fait tient dans
@@ -832,6 +833,349 @@ porte la ligne de CSP **mesurée**, ni plus large ni plus étroite · le bundle 
 ⚠️ **Hors périmètre, à ouvrir en ticket** : l’invariant « le serveur tolère un `widget.js` vieux
 d’un jour », conséquence du `stale-while-revalidate` de 86 400 s. Réel, mais c’est un autre sujet
 que ce que Feedys impose à son hôte.
+
+---
+
+## P-030 · Aucune note ne se perd, et Telegram prévient
+
+**Objectif** — fermer ce que la relecture du 2026-09-17 a trouvé **après** la publication de
+`1.0.0` : une panne du modèle qui perd des notes pour toujours sans que personne le sache, un
+rattrapage documenté qui ne peut pas marcher, des alertes écrites mais jamais codées, un contrat
+widget ↔ serveur qui se trompe sur son propre écart de version. Et faire de **Telegram** le canal
+recommandé : deux variables, là où l’email demande un relais SMTP par client.
+
+⛔ **À jouer AVANT P-019.** Poser chez un vrai client une version qui perd des notes en silence,
+c’est découvrir le défaut chez lui, sans aucun moyen de le voir.
+
+⚠️ **L’email reste dans le code.** Il n’est ni retiré ni déprécié : il cesse seulement d’être le
+canal qu’on recommande et qu’on documente en premier.
+
+### ⚠️ Ce qui est déjà CONSTATÉ — ⛔ ne le remesure pas, ne le rediscute pas
+
+Relecture du 2026-09-17, sur `main` à `0da28df`. Les six checks étaient **verts** — 825 tests
+unitaires, 136 d’intégration, 26 parcours, `docker build` compris. ⛔ **Aucun des défauts
+ci-dessous ne se voit dans les tests.**
+
+**1. 🔴 Une panne du modèle perd la note pour toujours, et personne ne le sait.**
+
+| Fait | Où |
+|---|---|
+| Une synthèse en `modele_indisponible` écrit une ligne de console, puis **s’arrête** | `apps/serveur/infra/composition.ts:158-169` |
+| Sans synthèse, **aucune notification ne part** : `charger` rend `null` | `apps/serveur/domaine/notification/envoyer.ts:23` |
+| Les trois tentatives (60 s chacune) vivent **dans** l’appel ; après, plus rien ne retente | `apps/serveur/domaine/entretien/modele.ts:141,185` |
+| Le filet ne regarde que les `en_cours` : un retour `envoye` ou `abandonne` sans note n’est **jamais** repris | `apps/serveur/domaine/entretien/balayage.ts:68,144` |
+| La seule alerte est un `console.warn` — sur le VPS d’un client, que personne ne lit ([D-028]) | `apps/serveur/infra/filet.ts:89` |
+
+⛔ **Et le rattrapage documenté ne peut pas marcher**
+([hebergement.md](../04-Architecture/hebergement.md) §La requête de rattrapage, l. 812-829), pour
+trois raisons indépendantes :
+
+- il appelle `pnpm entretien:rejouer --synthese`, qui **n’écrit rien**, par construction
+  (`apps/serveur/outils/entretien-rejouer.ts:9-11`) ;
+- l’image de production ne contient **ni `pnpm`, ni `tsx`, ni `outils/`** (étage `production` du
+  `Dockerfile`), et le dépôt n’est pas sur le VPS du client (hebergement.md l. 140-142) ;
+- sa requête ne voit que les retours refermés **par le filet** (`audit.action =
+  'cloture_balayage'`). Un entretien refermé **normalement** par le widget, dont la synthèse a
+  échoué, ne laisse aucune ligne `audit` : il est invisible.
+
+⚠️ **Ce n’est pas un cas d’école, c’est la conséquence directe de [D-029]** : un plafond de
+workspace atteint, une clé révoquée, une panne du fournisseur — et toutes les notes de la période
+disparaissent. D-029 reproche à l’option (b) que « personne côté développeur n’est prévenu » ; c’est
+exactement aussi vrai de l’option (a), celle qu’on a retenue.
+
+⚠️ Le commentaire de `rejouerAval` (`apps/serveur/domaine/entretien/tour.ts:382`) affirme « Une
+note qui manque se rattrape — la requête est dans hebergement.md ». **C’est faux aujourd’hui.**
+
+**2. 🟠 Les alertes de hebergement.md n’existent pas.** §Ce qui doit être surveillé (l. 840-852)
+fixe trois seuils — zéro retour sur 7 jours, moins de 40 % de `voix`, plus de 5 % d’échecs du
+modèle. **Aucun n’est codé** : un `grep` ne trouve que les `console.warn` du filet et du démarrage.
+Avec une installation par client et aucun « phone home » ([D-028]), **rien ne remonte**.
+
+**3. 🟠 L’écart widget ↔ serveur existe, et D-028 affirme le contraire.**
+
+- [D-028] (DECISIONS_LOG.md l. 1376-1378) et hebergement.md §2 (l. 88-92) : « il n’y a **jamais**
+  d’écart entre le widget et le serveur qui le sert ». Faux, deux fois : `widget.js` est servi en
+  `stale-while-revalidate=86400` (`apps/serveur/domaine/actifs/entetes.ts:20`), et P-027 le dit
+  lui-même — **un onglet de logiciel métier reste ouvert toute la journée**, avec le widget chargé
+  le matin.
+- `packages/widget/src/contrat.ts` porte **douze `.strict()`**. Après un **retour arrière** de
+  version, un widget plus récent qui envoie un champ inconnu voit son retour **entier** refusé en
+  400 — et `packages/widget/src/envoi.ts:80` ne classe réessayables que 429 et 5xx : ⛔ **la parole
+  n’entre pas en base.**
+- Le widget lit les réponses **sans zod** : renommer un champ de réponse casse en silence tous les
+  onglets ouverts.
+- ⛔ P-027 annonçait « il a son ticket » (§P-027, « Ce que tu ne fais pas » et « Hors
+  périmètre »). **Il n’a jamais été ouvert** : [TICKETS_DIFFERES] s’arrête à T-011.
+
+**4. 🟡 `1.0.0` a été publiée sans recette à la voix.** [RECETTE_MVP] l. 181-183 exige de rejouer
+le point 1 après toute modification de `dictee/` ou de `useDictee.ts`. La dernière dictée humaine
+date du 2026-09-05 (P-015) ; P-017 (`41a5393`) a modifié `useDictee.ts` ensuite, et P-020, P-02X,
+P-026, P-027 et P-028 ont tous touché le widget.
+
+**5. 🟡 Le ménage.**
+
+- **La doc a décroché.** Le tableau d’en-tête de ce fichier marque P-020 « 🔒 après P-019 » alors
+  qu’il est fait, et ne liste ni P-025 à P-029 ; P-028 et P-029 n’ont pas de section. La
+  [ROADMAP] n’a pas P-029, et dit encore « P-015 à P-026, dont le premier est joué ». T-004 est
+  clos, mais son corps (l. 106-109) dit « Le ticket reste ouvert pour ça ».
+- **`@prisma/client` est une dépendance de production que personne n’importe.** Seuls deux
+  commentaires le citent (`apps/serveur/next.config.ts:24`, `apps/serveur/infra/base/migrations.ts:8`) ;
+  le serveur parle à Postgres par `pg`. `04-Architecture/dependances.md` l. 45 le dit pourtant
+  « accès base ». Il apporte à lui seul les trois alertes de `pnpm audit --prod`, toutes via
+  `prisma@7.10.0` : `deepmerge-ts <8.0.0` (high), `mysql2 <3.22.0` (high), `mysql2 <=3.23.0`
+  (moderate).
+- **`pnpm test` imprime une pile d’erreur alors qu’il est vert** : happy-dom refuse de charger
+  `snapdom.js` (`packages/widget/src/contexte/capture.ts:136`, « JavaScript file loading is
+  disabled »).
+- **`origin/deploiement-tls`** est une branche distante dont le contenu est déjà dans `main` (PR
+  #23).
+
+### Telegram — ce qu’il faut savoir avant d’écrire une ligne
+
+- L’envoi est un `fetch` HTTPS vers `api.telegram.org/bot<JETON>/sendMessage`. **Aucune
+  dépendance** n’est nécessaire.
+- ⛔ **Le jeton est DANS l’URL.** Toute erreur réseau qui recopie l’URL le fait fuir — dans
+  `notifications.erreur`, dans `signaler`, dans les journaux.
+- ⛔ **La note contient du texte dicté.** `parse_mode: 'MarkdownV2'` exige d’échapper dix-huit
+  caractères, et un seul oubli rend 400. Texte brut, ou HTML avec `& < >` échappés — rien d’autre.
+- Un message est limité à **4 096 caractères**.
+- ⚠️ **L’aperçu de lien** enverrait les robots de Telegram sur l’URL du back-office du client :
+  `link_preview_options: { is_disabled: true }`.
+- Les refus à traiter : `429` avec `parameters.retry_after`, `403` (bot bloqué, ou retiré du
+  groupe), `400` (`chat not found`).
+- ⛔ **Sens unique.** Pas de `getUpdates`, pas de webhook, pas de commande : le bot ne lit rien.
+  Sinon Feedys devient un canal de support ([ROADMAP] §Ce qui n’arrivera pas, D-021).
+- ⚠️ **Les données.** Les échanges avec un bot sont stockés chez Telegram, sans chiffrement de bout
+  en bout. Si la note passe par Telegram, Telegram devient un **sous-traitant** des données des
+  salariés du client, et la phrase de contrat (hebergement.md §1, l. 59-75) doit le nommer. ⛔
+  L’entité juridique et l’existence d’un contrat de sous-traitance se **vérifient** ; elles ne se
+  supposent pas.
+
+```
+Joue P-030 : aucune note ne se perd, et Telegram prévient.
+
+⛔ Les constats sont dans 05-Prompts/APRES-MVP.md §P-030 : ne les remesure
+pas, sers-t’en, et cite-les dans les entrées que tu écris.
+
+Lis 05-Prompts/APRES-MVP.md §P-030, 00-Projet/DECISIONS_LOG.md D-007, D-018,
+D-021, D-026, D-028 et D-029, 04-Architecture/hebergement.md (§Une
+installation par client, §Les variables, §Le filet, §Ce qui doit être
+surveillé), 04-Architecture/conventions-db.md, 01-Specs/synthese.md §Le rendu
+par email, 01-Specs/back-office.md, 01-Specs/ingestion.md et
+03-Bugs/RECETTE_MVP.md.
+
+⚠️ Plusieurs sessions travaillent sur ce dépôt : worktree dès le départ, en
+chemin court — git worktree add X:/wt-p030 -b p-030-notes-et-telegram.
+⛔ Jamais de checkout dans X:\Feedys BOT.
+
+═══ ÉTAPE 0 — CE QUI SE TRANCHE AVEC MOI, PUIS TU T’ARRÊTES ═══
+
+Écris d’abord les deux entrées que les constats exigent. Elles datent du
+constat, pas du correctif :
+- 03-Bugs/BUGS_LOG.md 019 — la note perdue sur panne du modèle, et le
+  rattrapage qui ne peut pas marcher. Statut 🔴 Ouvert.
+- 00-Projet/TICKETS_DIFFERES.md T-012 — l’écart de version widget ↔ serveur,
+  promis par P-027 et jamais ouvert.
+
+Puis pose-moi ces choix, chacun avec ses conséquences. ⛔ Tu ne les décides
+pas seul.
+
+1. CE QUE PORTE LE MESSAGE TELEGRAM. Que Telegram devienne le canal
+   recommandé, c’est décidé. Le contenu ne l’est pas :
+   (a) la note entière, comme l’email — Telegram devient sous-traitant, la
+       phrase de contrat change, et il faut tenir dans 4 096 caractères ;
+   (b) un pointeur — type, produit, lien vers la fiche, sans titre ni
+       citation : la parole ne quitte pas le serveur du client.
+2. QUAND LES DEUX CANAUX SONT CONFIGURÉS : les deux partent, ou Telegram seul ?
+3. QUELLES ALERTES. Celles d’exploitation (une note devenue impossible, un
+   taux d’échec du modèle) ne disent rien de l’usage. Les deux autres seuils
+   de hebergement.md (zéro retour en 7 jours, part de voix) SONT des
+   statistiques d’usage — or la phrase de contrat promet « aucune donnée
+   d’usage, aucune statistique » (hebergement.md l. 74-75). On amende la
+   phrase, ou ces deux-là restent LOCALES, dans un panneau « État de
+   l’installation » du back-office ?
+4. LE RETOUR ARRIÈRE DE VERSION. Soit les enveloppes du contrat tolèrent un
+   champ inconnu (`.strip()`) — ⛔ mais SchemaIndice reste `.strict()`, c’est
+   le mur de D-026 contre `message` —, soit on écrit qu’un retour arrière
+   impose d’attendre un jour et de faire recharger les onglets.
+5. LA MIGRATION. Lis la structure réelle (notifications, syntheses, retours,
+   audit, l’enum canal_notification), liste ce qui change, propose le SQL.
+   ⚠️ `ALTER TYPE … ADD VALUE` : la nouvelle valeur n’est pas utilisable dans
+      la transaction qui l’ajoute. Vérifie comment
+      apps/serveur/infra/base/migrations.ts découpe ses transactions avant
+      d’écrire — ne le suppose pas.
+   ⚠️ `dejaEnvoyee(retourId)` suppose UNE notification par retour, et aucune
+      contrainte ne le tient en base. Avec deux canaux, ça devient par canal.
+
+═══ PARTIE 1 — AUCUNE NOTE NE SE PERD ═══
+
+- Le filet reprend les retours clos (`envoye`, `abandonne`) SANS synthèse,
+  quelle que soit la façon dont ils ont été clos — par le widget comme par
+  le filet. Tentatives comptées EN BASE, en colonnes nullables typées
+  (⛔ jamais de metadata), espacées, plafonnées.
+- ⛔ `rien_a_synthetiser` n’est JAMAIS retenté : un retour dicté sans
+  transcript ne produira jamais de note.
+- Même budget que le filet (vingt retours, trois minutes), en série, sous le
+  même verrou `enCours`. ⛔ Deux passes qui se chevauchent doubleraient les
+  appels au modèle. `syntheses_retour_uniq` reste le vrai garde-fou contre la
+  double note.
+- Une note reprise part ensuite par le chemin ordinaire — `synthetiser()`
+  appelle déjà `notifier()`. ⛔ Pas de second chemin.
+- Plafond atteint → le retour est marqué définitivement sans note, le
+  back-office le dit sur la liste ET sur la fiche, et une alerte part
+  (partie 3).
+- Un moyen MANUEL qui marche DANS L’IMAGE — ni pnpm, ni tsx, ni dépôt sur le
+  VPS : un bouton « Refaire la note » sur la fiche d’un retour SANS note.
+  ⛔ Il ne régénère jamais une note existante (une note par retour), et il ne
+     touche à rien d’autre. 01-Specs/back-office.md dit ce qu’une main
+     humaine a le droit de faire : mets-le à jour.
+- ⛔ `entretien:rejouer` reste en lecture seule. Ne le fais pas écrire.
+- Réécris hebergement.md §La requête de rattrapage avec le chemin qui marche,
+  et corrige les textes qui mentent : le commentaire de `rejouerAval`
+  (tour.ts:382) et le message d’alerte de filet.ts:89.
+
+Tests, modèle en bouchon :
+- il échoue, puis revient → la note est écrite et la notification part à la
+  passe suivante ;
+- un retour clos par le widget, sans ligne audit, est repris ;
+- `rien_a_synthetiser` n’est jamais retenté ;
+- le plafond de tentatives tient ;
+- deux passes simultanées n’appellent pas deux fois le modèle ;
+- le bouton refuse un retour qui a déjà sa note.
+
+═══ PARTIE 2 — TELEGRAM, LE CANAL RECOMMANDÉ ═══
+
+- `FEEDYS_TELEGRAM_JETON` et `FEEDYS_TELEGRAM_CHAT` (un chat_id peut être
+  négatif : c’est un groupe). Derrière un port de canal dans
+  domaine/notification, à côté du SMTP. ⛔ Module pur, `fetch` injecté.
+- ⛔ Aucune dépendance : le `fetch` natif suffit. Si tu en envisages une,
+  CLAUDE.md §Dépendances s’applique, fichier LICENSE lu.
+- ⛔ LE JETON NE SORT JAMAIS. Toute erreur est nettoyée AVANT d’aller dans
+  `notifications.erreur` ou dans `signaler`. Écris le test : une erreur qui
+  recopie l’URL ne laisse pas passer le jeton.
+- Texte brut, ou HTML échappé. Écris le test avec un transcript qui contient
+  `<b>`, `&`, `_*[` et un emoji.
+- 4 096 caractères : on tronque proprement, et le lien vers la fiche reste.
+- Aperçu de lien désactivé. Délai borné (AbortSignal.timeout) — ⛔ jamais
+  l’attente infinie : BUGS_LOG 013 dit ce qu’elle coûte.
+- 429 → on respecte `retry_after`. 403 et 400 → `echoue`, avec une raison
+  lisible, sans boucle.
+- ⛔ Sens unique : ni `getUpdates`, ni webhook, ni commande.
+- Un message d’essai qui marche DANS L’IMAGE, pour la liste d’installation —
+  un bouton du back-office, par exemple. ⛔ La sonde `/sante` n’appelle
+  toujours aucun fournisseur.
+- Le démarrage : domaine/demarrage/controles.ts:44-46 dit « la note ne part
+  par email pour personne » dès que SMTP manque. Telegram configuré sans SMTP
+  n’est PAS une dégradation. Aucun canal configuré en est une, et le
+  démarrage le dit.
+- ⛔ `pnpm test` et `pnpm e2e` restent hors ligne : aucun appel réel à
+  api.telegram.org. La relecture du lot 7 a trouvé un e2e qui appelait
+  api.anthropic.com pour de vrai — ne refais pas cette faute.
+- ⚠️ Un bot par installation : ajoute FEEDYS_TELEGRAM_JETON au tableau de
+  hebergement.md §4, avec ce que sa réutilisation coûterait.
+- La procédure pour obtenir le jeton et le chat_id est DOCUMENTÉE, pas codée.
+  ⛔ Aucun jeton, aucun chat_id réel dans le dépôt, même en exemple.
+- L’email reste, tel quel, et ses tests aussi.
+
+═══ PARTIE 3 — LES ALERTES QUI MANQUENT ═══
+
+Selon ce qu’on a tranché à l’étape 0, question 3.
+- Le canal des alertes est Telegram, et lui seul. ⛔ Une alerte ne passe
+  pas par ce qu’elle surveille — ni par le SMTP, ni par le modèle. Sans
+  Telegram, elles restent en console, et le démarrage le dit.
+- ⛔ Une alerte ne contient jamais de parole ni de nom. Un identifiant de
+  retour n’est pas de la parole (hebergement.md §Le filet) ; le produit et
+  l’origine publique disent de quelle installation il s’agit.
+- ⛔ Une alerte par incident, pas une par passe : un filet qui parle toutes
+  les cinq minutes finit par ne plus être lu. Dis où vit l’état qui
+  l’empêche, et ce qu’il devient quand le conteneur redémarre.
+- ⛔ Aucune nouvelle infrastructure : ni worker, ni cron, ni file (D-018).
+- hebergement.md §Ce qui doit être surveillé devient VRAI : chaque seuil dit
+  où il est calculé, et qui le lit.
+
+═══ PARTIE 4 — L’ÉCART DE VERSION ═══
+
+Selon ce qu’on a tranché à l’étape 0, question 4.
+- La règle, dans 01-Specs/ingestion.md : un champ de requête nouveau est
+  toujours facultatif ; un champ de réponse ne se renomme ni ne disparaît.
+- Un test qui la tient : des corps de requête du widget `1.0.0`, ÉCRITS À LA
+  MAIN et figés par version, validés contre les schémas d’aujourd’hui ; et
+  les réponses d’aujourd’hui relues avec ce que le widget `1.0.0` en lit.
+  ⛔ Aucun retour réel en fixture.
+- D-028 et hebergement.md §2 : on ne réécrit pas le passé, on ANNOTE
+  (« ⚠️ Corrigé le … »). La phrase « jamais d’écart » est fausse — dis
+  pourquoi.
+- T-012 est clos ou requalifié, avec ce qui reste.
+
+═══ PARTIE 5 — LE MÉNAGE ═══
+
+- Ce fichier : le tableau d’en-tête à jour (P-020 fait, P-025 à P-030
+  listés), et une note pour P-028 et P-029 sur le modèle de celle de P-024.
+  La ROADMAP : P-029, P-030, et la phrase « dont le premier est joué ».
+  T-004 : le paragraphe l. 106-109 est annoté comme antérieur à la clôture.
+  §Ce qui n’est pas encore un prompt : la ligne « Slack, les webhooks » dit
+  que Telegram en est sorti, et pourquoi.
+- `@prisma/client` : vérifie ce dont `pnpm db:generate` et l’étape
+  `RUN pnpm db:generate` du Dockerfile ont réellement besoin, puis sors-le
+  des dépendances de production, ou retire-le.
+  ⛔ Si le miroir prisma/schema.prisma cesse de se générer, arrête-toi et
+     dis-le-moi.
+  Cible : `pnpm audit --prod` propre, ou chaque alerte restante justifiée
+  dans 04-Architecture/dependances.md — dont la ligne « accès base » est
+  fausse.
+- La pile happy-dom dans la sortie de `pnpm test` : fais-la taire DANS LE
+  TEST, jamais dans capture.ts.
+- `origin/deploiement-tls` : ⛔ demande-moi avant de supprimer une branche
+  distante.
+
+═══ PARTIE 6 — CE QUI RESTE UNE MANIPULATION HUMAINE ═══
+
+Une fois l’image construite, prépare le montage, puis demande-moi :
+- le point 1 de RECETTE_MVP, à la voix, dans un vrai Chrome, sur
+  `pnpm widget:demo` branché sur l’image ;
+- un vrai message reçu sur mon téléphone, par un vrai bot.
+  ⛔ Les secrets sont dans .env.local : ne me les redemande pas, ne les
+     affiche pas.
+Tu consignes ce que je rapporte dans RECETTE_MVP.md, dans une section datée.
+Tout écart → une entrée BUGS_LOG.
+
+═══ CE QUE TU NE FAIS PAS ═══
+
+⛔ Tu ne retires pas l’email, et tu ne le déprécies pas.
+⛔ Tu ne touches ni à la boucle d’entretien, ni au prompt du bot.
+⛔ Aucun « phone home », aucun agrégateur des installations (ROADMAP §Ce qui
+   n’arrivera pas) : chaque installation parle à SON bot, et à rien d’autre.
+⛔ Tu ne poses aucun tag. `1.0.1` est une décision humaine : propose-la, avec
+   la liste de ce qu’elle corrige (D-028 : semver nu, sans « v »).
+
+═══ DOCUMENTATION, DANS LE MÊME COMMIT ═══
+
+- 00-Projet/DECISIONS_LOG.md D-030 — Telegram, canal recommandé : ce qu’il
+  renverse de D-007, ce qu’on a tranché à l’étape 0, et ce qui le
+  renverserait ;
+- 03-Bugs/BUGS_LOG.md 019 → ✅ Résolu, avec « ce qui l’a laissé passer » ;
+- 01-Specs/synthese.md (le rendu Telegram à côté du rendu email),
+  01-Specs/back-office.md, 01-Specs/ingestion.md ;
+- 04-Architecture/hebergement.md : §Les variables, §4, la liste
+  d’installation (Telegram en premier), la phrase de contrat si elle change,
+  §Le filet, §Ce qui doit être surveillé ;
+- README.md et .env.example : Telegram d’abord, email ensuite ;
+- CLAUDE.md §Commandes si une commande apparaît ;
+- 02-Metier/glossaire.md si un mot apparaît. ⛔ Jamais « ticket ».
+
+⛔ Les six checks en local, intégralement, et tu colles la sortie.
+```
+
+**Acceptation** — un modèle coupé puis rétabli : la note arrive **sans intervention**, y compris
+pour un entretien refermé par le widget · « Refaire la note » marche dans l’image, sans `pnpm` · une
+note devenue impossible fait partir **une** alerte Telegram, sans parole ni nom · un vrai message
+Telegram est arrivé sur un vrai téléphone · le jeton n’apparaît dans aucune erreur, aucune ligne de
+base, aucun journal · un corps de requête du widget `1.0.0` passe toujours · `pnpm audit --prod`
+est propre, ou justifié · la dictée à la voix est rejouée et consignée · BUGS_LOG 019 est ✅ et
+T-012 clos ou requalifié · les six checks sont verts.
+
+[D-028]: ../00-Projet/DECISIONS_LOG.md
+[D-029]: ../00-Projet/DECISIONS_LOG.md
 
 ---
 
