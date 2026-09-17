@@ -857,7 +857,7 @@ aveugle à la moitié des cas — trois fautes qu’un seul essai aurait montré
 
 ## 020 — Une installation par Kamal ne peut pas aboutir, et la documentation la décrit comme prête
 
-**Statut** : ✅ Résolu (2026-09-17, PR #@@PR@@)
+**Statut** : ✅ Résolu (2026-09-17, PR #32)
 **Constaté le** : 2026-09-17, en vérifiant l’intégration « Feedys en accessoire Kamal, à côté d’un
 logiciel métier », sur `main` à `fbd9e64` — contre le code de Kamal 2.12.0 et de kamal-proxy
 **Où** : `Dockerfile`, `scripts/sauvegarde.sh`, `scripts/verifier-sauvegarde.sh`,
