@@ -17,6 +17,14 @@
  *    ne produira jamais de note : le redemander toutes les cinq minutes
  *    mangerait la passe pour rien.
  *
+ * ⛔ `requete_refusee` N’EST RETENTÉ QU’UNE FOIS ([BUGS_LOG] 021, [D-032]). Le
+ *    fournisseur a refusé la requête pour ce qu’elle est : elle le sera à
+ *    l’identique jusqu’à un correctif de Feedys. La reprise qui le constate
+ *    renonce aussitôt, et c’est l’alerte qui dit pourquoi — au lieu de huit
+ *    reprises muettes et d’un « le modèle n’a pas répondu » qui mentait.
+ *    ⚠️ Une fois, pas zéro : la tentative de fin d’entretien n’a pas de port
+ *    pour renoncer, et un refus isolé et bizarre ne doit pas condamner une note.
+ *
  * ⛔ Module pur : ni base, ni réseau (architecture.md §3). L’horloge du budget
  *    est injectée, comme celle du balayage.
  */
@@ -30,8 +38,16 @@ import type { MotifRefusSynthese } from './produire'
  */
 export type IssueSynthese = 'ecrite' | MotifRefusSynthese
 
-/** Pourquoi le filet a renoncé. ⛔ La liste est celle du CHECK de 0011. */
-export type MotifRenoncement = 'plafond' | 'rien_a_synthetiser'
+/**
+ * Pourquoi le filet a renoncé. ⛔ La liste est celle du CHECK, posé par 0011 et
+ * élargi par 0013.
+ *
+ * ⚠️ `requete_refusee` n’est PAS `plafond` : le modèle a répondu, il a refusé
+ *    la requête. Les confondre faisait dire à l’alerte « le modèle n’a pas
+ *    répondu après toutes les reprises », et chercher une panne qui n’existait
+ *    pas (BUGS_LOG 021, D-032).
+ */
+export type MotifRenoncement = 'plafond' | 'rien_a_synthetiser' | 'requete_refusee'
 
 /**
  * Le nombre de reprises au-delà duquel le filet renonce.
@@ -145,6 +161,11 @@ export interface BilanReprise {
   impossibles: string[]
   /** Auxquels le filet vient de renoncer parce qu’il n’y a rien à synthétiser. */
   sansParole: number
+  /**
+   * Auxquels le filet vient de renoncer parce que le fournisseur REFUSE la
+   * requête. ⚠️ Alerte aussi — mais pas pour la même raison que `impossibles`.
+   */
+  refusees: string[]
 }
 
 /**
@@ -169,7 +190,14 @@ export async function reprendre(
 
   const debut = horloge()
   const limites = limitesDeReprise(maintenant, plafond)
-  const bilan: BilanReprise = { reprises: 0, ecrites: 0, enAttente: 0, impossibles: [], sansParole: 0 }
+  const bilan: BilanReprise = {
+    reprises: 0,
+    ecrites: 0,
+    enAttente: 0,
+    impossibles: [],
+    sansParole: 0,
+    refusees: [],
+  }
 
   // ⛔ Le budget se regarde AVANT de réserver : on ne compte jamais une reprise
   //    qu’on n’a pas le temps de tenter.
@@ -200,6 +228,13 @@ export async function reprendre(
       case 'rien_a_synthetiser':
         await ports.renoncer(reserve.retourId, 'rien_a_synthetiser')
         bilan.sansParole += 1
+        break
+
+      // ⛔ Confirmé : la requête est refusée pour ce qu’elle est. On ne la
+      //    redemande plus, et l’alerte dira pourquoi (BUGS_LOG 021).
+      case 'requete_refusee':
+        await ports.renoncer(reserve.retourId, 'requete_refusee')
+        bilan.refusees.push(reserve.retourId)
         break
 
       default:

@@ -142,16 +142,54 @@ function pourcent(part: number): string {
 export interface NotesImpossibles {
   readonly ids: readonly string[]
   readonly total: number
+  /**
+   * Dont combien parce que le fournisseur a REFUSÉ la requête (BUGS_LOG 021).
+   * ⚠️ Le reste est `plafond` : le modèle n’a pas répondu.
+   */
+  readonly refusees?: number
+}
+
+/**
+ * ⛔ UN REFUS N’EST PAS UNE PANNE, ET L’ALERTE LE DIT (BUGS_LOG 021). Elle disait
+ *    « le modèle n’a pas répondu » et « si ça dure : la clé » sur un 400 que le
+ *    fournisseur rendait à chaque appel : l’exploitant cherchait une panne
+ *    d’Anthropic qui n’existait pas. Le geste n’est pas le même — attendre le
+ *    modèle dans un cas, mettre Feedys à jour dans l’autre.
+ *
+ * ⚠️ La cause est celle du fournisseur — statut, type, message —, bornée par
+ *    `classerEchec`. Elle décrit la REQUÊTE, jamais la parole. Absente après un
+ *    redémarrage (elle vit en mémoire, comme la fenêtre du modèle) : l’alerte
+ *    renvoie alors au journal.
+ */
+function lignesRefus(n: number, cause: string | null | undefined): string[] {
+  return [
+    `${n} note(s) refusée(s) par le fournisseur du modèle : il rejette la requête que Feedys lui envoie. Ce n’est pas une panne, ni du fournisseur, ni de la clé.`,
+    cause ? `Cause : ${cause}` : 'Cause exacte : le journal du conteneur, « requête refusée par le fournisseur ».',
+    'Elle sera refusée à l’identique : mettre Feedys à jour, puis « Refaire la note » sur chaque fiche.',
+  ]
 }
 
 /** Les messages d’ouverture. ⛔ Aucune parole, aucun nom — des nombres et des identifiants. */
 export const OUVERTURES = {
-  notes_impossibles(installation: Installation, notes: NotesImpossibles): string {
+  notes_impossibles(
+    installation: Installation,
+    notes: NotesImpossibles,
+    dernierRefus?: string | null,
+  ): string {
+    const refusees = Math.min(notes.refusees ?? 0, notes.total)
+    const plafond = notes.total - refusees
+
     return tronquer(
       [
         entete('⚠️', installation),
-        `${notes.total} note(s) devenue(s) impossible(s) : le modèle n’a pas répondu après toutes les reprises.`,
-        'La parole est en base. Sur chaque fiche : « Refaire la note », une fois le modèle rétabli.',
+        ...(plafond > 0
+          ? [
+              `${plafond} note(s) devenue(s) impossible(s) : le modèle n’a pas répondu après toutes les reprises.`,
+              'La parole est en base. Sur chaque fiche : « Refaire la note », une fois le modèle rétabli.',
+            ]
+          : []),
+        ...(refusees > 0 ? lignesRefus(refusees, dernierRefus) : []),
+        ...(refusees > 0 && plafond === 0 ? ['La parole est en base.'] : []),
         ...listeRetours(installation, notes.ids, notes.total),
       ].join('\n'),
       lienListe(installation),
@@ -159,12 +197,26 @@ export const OUVERTURES = {
   },
 
   modele_en_echec(installation: Installation, etat: EtatModele): string {
-    return [
-      entete('⚠️', installation),
-      `Le modèle échoue : ${etat.echecs} appel(s) sur ${etat.appels} depuis une heure.`,
-      'Les notes manquantes seront redemandées toutes seules. Si ça dure : la clé, et le plafond du workspace (D-029).',
+    const refus = etat.refus ?? 0
+    const conseil =
+      refus === 0
+        ? ['Les notes manquantes seront redemandées toutes seules. Si ça dure : la clé, et le plafond du workspace (D-029).']
+        : [
+            `Dont ${refus} refus de la requête par le fournisseur — ce n’est pas une panne, et ça ne passera pas en attendant.`,
+            ...(etat.dernierRefus ? [`Dernier refus : ${etat.dernierRefus}`] : []),
+            refus < etat.echecs
+              ? 'Pour les autres échecs : la clé, et le plafond du workspace (D-029).'
+              : 'Ni la clé, ni le plafond : c’est Feedys qu’il faut mettre à jour.',
+          ]
+
+    return tronquer(
+      [
+        entete('⚠️', installation),
+        `Le modèle échoue : ${etat.echecs} appel(s) sur ${etat.appels} depuis une heure.`,
+        ...conseil,
+      ].join('\n'),
       lienListe(installation),
-    ].join('\n')
+    )
   },
 
   aucun_retour(installation: Installation, dernierRetourLe: Date | null): string {
@@ -330,7 +382,9 @@ export async function veiller(ports: PortsVeille, maintenant: Date = new Date())
     if (incident === undefined) {
       const notes = await ports.impossiblesDepuis(await ports.derniereFermeture('notes_impossibles'))
       if (notes.total > 0) {
-        await ouvrirEtAnnoncer('notes_impossibles', () => OUVERTURES.notes_impossibles(installation, notes))
+        await ouvrirEtAnnoncer('notes_impossibles', () =>
+          OUVERTURES.notes_impossibles(installation, notes, ports.etatModele().dernierRefus),
+        )
       }
     } else if (await ports.noteEcriteDepuis(incident.ouverteLe)) {
       // ⚠️ Ce que l’ouverture n’avait pas encore vu est dit à la fermeture : ce

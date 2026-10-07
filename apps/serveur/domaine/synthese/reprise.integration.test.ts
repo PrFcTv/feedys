@@ -23,6 +23,7 @@ import { Client, Pool } from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import type { Modele } from '../entretien/modele'
+import { modeleBouchon } from '../entretien/modele'
 import { MAX_RELANCES } from '../entretien/tour'
 import { notifierParCanaux } from '../notification/envoyer'
 import { canalTelegram } from '../notification/telegram'
@@ -400,5 +401,92 @@ describe('⛔ « Refaire la note »', () => {
       ok: false,
       motif: 'retour_inconnu',
     })
+  })
+})
+
+/**
+ * ⛔ BUGS_LOG 021, contre un vrai Postgres et par le vrai chemin.
+ *
+ * ⚠️ Ici le modèle est `modeleBouchon`, et pas le bouchon permissif du haut du
+ *    fichier : c’est lui qui refuse, comme l’API, une conversation qui ne finit
+ *    pas sur la parole. Le bouchon permissif aurait laissé passer l’incident —
+ *    c’est exactement ce qui s’est produit.
+ */
+describe('⛔ le panneau refermé sur une question du bot', () => {
+  function synthetiserAvec(modeleFidele: Modele) {
+    return (retourId: string) =>
+      synthetiserEtNotifier(retourId, {
+        synthese: { depot: creerDepotSyntheses(bassin), modele: modeleFidele },
+        notifier: (id) =>
+          notifierParCanaux(id, {
+            depot: creerDepotNotifications(bassin, URL_PUBLIQUE),
+            canaux: [canalTelegram(REGLAGES, { fetch: FETCH, attendre: async () => undefined })],
+          }),
+        maximumRelances: MAX_RELANCES,
+      })
+  }
+
+  function portsAvec(modeleFidele: Modele): PortsReprise {
+    return { ...ports(), synthetiser: synthetiserAvec(modeleFidele) }
+  }
+
+  /** Un retour abandonné juste après la première relance : le fil finit sur `bot`. */
+  async function abandonneSurUneRelance(): Promise<string> {
+    const id = await retourClos({ statut: 'abandonne' })
+    await client.query(
+      `insert into messages (id, retour_id, ordre, role, texte) values ($1, $2, 1, 'bot', $3)`,
+      [identifiant(), id, 'C’est arrivé depuis un moment, ou c’est nouveau ?'],
+    )
+    return id
+  }
+
+  it('la note est écrite à la fin de l’entretien, et l’avis part', async () => {
+    const id = await abandonneSurUneRelance()
+
+    const issue = await synthetiserAvec(modeleBouchon({ synthese: SYNTHESE }))(id)
+
+    expect(issue).toBe('ecrite')
+    expect(await etat(id)).toMatchObject({ notes: 1, avis: 1, synthese_impossible_motif: null })
+  })
+
+  it('⛔ une requête refusée : UNE reprise, puis le filet renonce avec son motif — pas huit', async () => {
+    const id = await abandonneSurUneRelance()
+    const refuse = modeleBouchon({ refuseSynthese: true })
+
+    // La tentative ordinaire échoue ; le filet confirme une fois.
+    expect(await synthetiserAvec(refuse)(id)).toBe('requete_refusee')
+    const bilan = await reprendre(portsAvec(refuse))
+
+    expect(bilan).toMatchObject({ reprises: 1, refusees: [id], enAttente: 0, impossibles: [] })
+    // ⚠️ Le CHECK de 0013 l’accepte : sans lui, cette écriture échouait.
+    expect(await etat(id)).toMatchObject({
+      synthese_reprises: 1,
+      synthese_impossible_motif: 'requete_refusee',
+      notes: 0,
+    })
+
+    // ⛔ Et il n’y revient plus, même une semaine plus tard.
+    for (let passe = 0; passe < 5; passe += 1) {
+      await reprendre(portsAvec(refuse), { maintenant: plusTard(7 * 24 * 60 * MINUTE) })
+    }
+    expect(await etat(id)).toMatchObject({ synthese_reprises: 1 })
+    expect(refuse.recuesSynthese).toHaveLength(2)
+  })
+
+  it('« Refaire la note », une fois Feedys corrigé, l’écrit — le refus n’est terminal que pour le filet', async () => {
+    const id = await abandonneSurUneRelance()
+    const refuse = modeleBouchon({ refuseSynthese: true })
+    await synthetiserAvec(refuse)(id)
+    await reprendre(portsAvec(refuse))
+
+    const syntheses = creerDepotSyntheses(bassin)
+    const issue = await refaireLaNote(id, {
+      statut: async (retourId) => (await syntheses.charger(retourId))?.statut ?? null,
+      aSaNote: (retourId) => syntheses.dejaFaite(retourId),
+      synthetiser: synthetiserAvec(modeleBouchon({ synthese: SYNTHESE })),
+    })
+
+    expect(issue).toEqual({ ok: true })
+    expect(await etat(id)).toMatchObject({ notes: 1, synthese_impossible_motif: 'requete_refusee' })
   })
 })

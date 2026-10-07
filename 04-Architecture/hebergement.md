@@ -464,8 +464,17 @@ infinie.
 ### Ce qui le prouve
 
 `apps/serveur/infra/base/roles.integration.test.ts` crée un vrai rôle de login membre de
-`feedys_app`, **s’y connecte**, et vérifie qu’un `DELETE` échoue sur les sept tables, qu’un `UPDATE`
-sur `audit` échoue, qu’un `INSERT` passe, et que la sonde peut lire le registre des migrations.
+`feedys_app`, **s’y connecte**, et vérifie qu’un `DELETE` échoue sur toutes les tables, qu’un
+`UPDATE` sur `audit` échoue, qu’un `INSERT` passe, et que la sonde peut lire le registre des
+migrations.
+
+⛔ **Et que `feedys_app` a ses droits sur CHAQUE table** — `SELECT`, `INSERT`, `UPDATE`, ni plus ni
+moins, sauf `audit` et `migrations` —, la liste des tables étant **lue dans le catalogue**, pas
+recopiée. C’est ce qui manquait : `0010_indices.sql` a créé `indices` sans aucun GRANT, la liste
+recopiée du test vérifiait seulement qu’un `DELETE` y échouait — ce qui était vrai, et pour la
+mauvaise raison —, et sous le rôle de service tout chargement de retour tombait en `42501`. Le droit
+a dû être posé à la main en production ; c’est désormais `0012_droits_indices.sql`, idempotent, qui
+le pose ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021). ⛔ Une table qui arrive sans son GRANT rougit ici.
 
 ⚠️ Le test voisin de `migrations.integration.test.ts` fait un `set role` depuis la session du
 propriétaire : c’est probant sur les GRANT du groupe, et ça ne dit rien de l’authentification, de
@@ -625,8 +634,11 @@ confondent pas :
 | **2.4.0** | `accessories.<nom>.proxy` — avant, un accessoire ne pouvait pas être publié par `kamal-proxy`, et ce mode d’emploi ne s’applique pas |
 | **2.6.0** | les **alias de secrets** (`DATABASE_URL:FEEDYS_DATABASE_URL`) — ⛔ sans eux, Feedys et le logiciel métier se disputent les mêmes noms dans `.kamal/secrets` (voir plus bas) |
 
-⛔ **Et Feedys `1.1.0` au minimum.** `1.0.0` n’embarque pas l’outil de création de produit : on ne
-pourrait rien créer chez le client ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 020).
+⛔ **Et Feedys `1.1.1` au minimum.** `1.0.0` n’embarque pas l’outil de création de produit : on ne
+pourrait rien créer chez le client ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 020). `1.1.0` ne donne
+aucun droit sur `indices` au rôle de service — tout chargement de retour échoue en `42501` —, et
+perd la note de tout panneau refermé sur une question du bot ([BUGS_LOG](../03-Bugs/BUGS_LOG.md)
+021).
 
 ### ⛔ Ce qui cassait le premier montage, et que P-031 a rejoué
 
@@ -646,8 +658,8 @@ accessories:
   # ── Feedys ─────────────────────────────────────────────────────────────────
   feedys:
     # ⛔ La version publiée, épinglée. Jamais `latest` : ce qui met à jour le
-    #    serveur de quelqu’un d’autre, c’est un humain. 1.1.0 au minimum.
-    image: ghcr.io/prfctv/feedys:1.1.0
+    #    serveur de quelqu’un d’autre, c’est un humain. 1.1.1 au minimum.
+    image: ghcr.io/prfctv/feedys:1.1.1
     host: <l’hôte qui porte déjà le logiciel métier>
 
     # ⛔ CE BLOC REMPLACE LE VHOST NGINX. kamal-proxy termine TLS et joint le
@@ -673,7 +685,7 @@ accessories:
         FEEDYS_MODELE: claude-sonnet-5
         # ⛔ La même chaîne que l’étiquette de `image:` ci-dessus. Un écart fait
         #    mentir le pied de back-office — article 13 de l’AGPL, pas cosmétique.
-        FEEDYS_VERSION: '1.1.0'
+        FEEDYS_VERSION: '1.1.1'
         # ⚠️ Telegram d’abord (§Telegram). Le chat n’est pas un secret : sans le
         #    jeton, il ne permet rien.
         FEEDYS_TELEGRAM_CHAT: '<le chat de CE client — §Telegram>'
@@ -829,7 +841,7 @@ une base jetable, compte des messages.
 
 ### Mettre à jour
 
-Changer les **deux** `1.1.0` du bloc `feedys` — `image:` et `FEEDYS_VERSION` —, puis :
+Changer les **deux** `1.1.1` du bloc `feedys` — `image:` et `FEEDYS_VERSION` —, puis :
 
 ```bash
 kamal accessory reboot feedys
@@ -1071,6 +1083,7 @@ note par le chemin ordinaire, qui notifie ensuite.
 | **Combien** | huit reprises. ⚠️ Comptées en base (`retours.synthese_reprises`), une à la fois : une reprise comptée est une reprise tentée |
 | **Au plafond** | le filet renonce (`synthese_impossible_le`, motif `plafond`), la liste et la fiche le disent, et l’alerte `notes_impossibles` part |
 | **Sans parole** | un retour dicté sans transcript ne produira jamais de note : abandonné tout de suite (motif `rien_a_synthetiser`), **jamais retenté**, sans alerte |
+| **Requête refusée** | le fournisseur refuse la requête **pour ce qu’elle est** (HTTP 400, 413, 422) : **une** reprise pour confirmer, puis renoncement (motif `requete_refusee`), et l’alerte `notes_impossibles` le dit avec la cause exacte. ⛔ Ce n’est pas une panne : elle sera refusée à l’identique jusqu’à une mise à jour de Feedys ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021, [D-032](../00-Projet/DECISIONS_LOG.md)). ⚠️ Clé (401), crédit (402), accès (403) et modèle inconnu (404) restent des indisponibilités : ils se règlent sans code, et le filet attend |
 | **À plusieurs conteneurs** | la réservation est un `update … for update skip locked` : un retour n’est repris que par un seul |
 
 ### Refaire une note à la main — dans l’image, sans `pnpm`
@@ -1085,12 +1098,16 @@ refaire » ; la fiche porte le bouton **« Refaire la note »**. Il demande la n
 ordinaire, dit ce qui s’est passé, et ⛔ refuse un retour qui a déjà sa note ou un entretien encore
 en cours. Il se joue **une fois le modèle rétabli** — l’alerte de fin d’incident donne la liste.
 
+⚠️ « sans note — requête refusée par le fournisseur, à refaire après mise à jour » se joue, lui,
+**une fois Feedys mis à jour** : le refus tient à la requête que Feedys construit, et attendre n’y
+change rien ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021).
+
 ⚠️ Pour voir en base ce qui reste à refaire :
 
 ```sql
-select id, cree_le, synthese_reprises, synthese_impossible_le
+select id, cree_le, synthese_reprises, synthese_impossible_le, synthese_impossible_motif
   from retours
- where synthese_impossible_motif = 'plafond'
+ where synthese_impossible_motif in ('plafond', 'requete_refusee')
    and not exists (select 1 from syntheses s where s.retour_id = retours.id)
  order by cree_le;
 ```
@@ -1100,10 +1117,16 @@ select id, cree_le, synthese_reprises, synthese_impossible_le
 ```
 Feedys · filet — 20 entretien(s) refermé(s) par silence, 18 passé(s) en aval, 0 en échec, 2 reporté(s).
 Feedys · filet — 2 note(s) pas encore écrite(s) : les passes suivantes les redemanderont …
-Feedys · filet — 5 note(s) redemandée(s) : 4 écrite(s), 0 encore en attente, 1 devenue(s) impossible(s), 0 sans parole à synthétiser.
+Feedys · filet — 5 note(s) redemandée(s) : 4 écrite(s), 0 encore en attente, 1 devenue(s) impossible(s), 0 sans parole à synthétiser, 0 refusée(s) par le fournisseur.
 Feedys ⚠️  filet — 1 note(s) devenue(s) impossible(s) : <id>. La parole est en base ; « Refaire la note » …
+Feedys ⚠️  filet — 1 note(s) refusée(s) par le fournisseur : <id>. Ce n’est pas une panne : il refuse la requête …
 Feedys ⚠️  veille — ⚠️ Feedys · <produit> · <origine> · Le modèle échoue : 4 appel(s) sur 4 depuis une heure. …
 ```
+
+⛔ **« Refusée par le fournisseur » n’est pas une panne d’Anthropic.** La cause exacte — statut, type
+et message de l’API — est sur la ligne `production de la synthèse — requête refusée par le
+fournisseur : HTTP 400 invalid_request_error — …`, et dans l’alerte. Elle décrit la requête, jamais
+la parole.
 
 ⚠️ **« En échec » et « reporté » ne sont plus une perte** : les reprises y reviendront. Ce qui
 s’alerte, c’est le **renoncement** — une note que le filet ne redemandera plus.
@@ -1134,7 +1157,7 @@ désormais, et chaque ligne dit où elle se calcule et qui la lit
 | **Retours par semaine** | si ça tombe à zéro, le produit est mort — bien avant qu’une erreur ne le dise | alerte à 0 sur 7 jours — jugé sur la création du produit s’il n’a jamais rien reçu | à chaque passe du filet, en base (`max(retours.cree_le)`) | le prestataire, par Telegram |
 | **Part de `source = voix`** | la thèse du produit ([VISION.md](../00-Projet/VISION.md)) | alerte sous 40 % sur 30 jours, à partir de 10 retours ; rétablie à 45 % | à chaque passe, en base | le prestataire, par Telegram |
 | **Échecs d’appel au modèle** | la boucle d’entretien et la note | alerte au-delà de 5 % sur une heure, à partir de 20 appels — **ou trois échecs sans une réussite** ; rétablie sous 2 % | à chaque appel, **en mémoire** : un redémarrage l’oublie, et « inconnu » n’ouvre ni ne ferme rien | le prestataire, par Telegram |
-| **Notes devenues impossibles** | le filet a renoncé : il faut refaire ces notes à la main | dès la première | à chaque passe, en base (`synthese_impossible_motif = 'plafond'`) | le prestataire, par Telegram — la fin d’incident liste ce qui reste à refaire |
+| **Notes devenues impossibles** | le filet a renoncé : il faut refaire ces notes à la main. ⚠️ Le message distingue le modèle qui **n’a pas répondu** de la requête **refusée par le fournisseur**, avec sa cause — deux gestes différents (BUGS_LOG 021) | dès la première | à chaque passe, en base (`synthese_impossible_motif in ('plafond', 'requete_refusee')`) | le prestataire, par Telegram — la fin d’incident liste ce qui reste à refaire |
 
 ⚠️ **Les deux premiers ne sont pas de la supervision technique, et c’est le point.** Feedys peut
 fonctionner parfaitement et ne servir à personne — c’est le mode de défaillance le plus probable,

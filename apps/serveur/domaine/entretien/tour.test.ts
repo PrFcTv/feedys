@@ -109,6 +109,29 @@ function tourAvecQuestion(question: string | null): TourEntretien {
   }
 }
 
+/**
+ * ⛔ BUGS_LOG 021, côté entretien. Un tour qui n’apporte aucun texte — un corps
+ *    vide, de l’audio sans transcript — n’écrit rien : le fil finit alors sur la
+ *    question du bot, et partait tel quel. Le fournisseur le refusait en 400, et
+ *    le widget disait « le bot n’est pas joignable ».
+ */
+describe('⛔ un tour sans texte, juste après une question', () => {
+  it('le modèle est appelé, et la conversation qu’il reçoit finit sur la parole', async () => {
+    const base = baseAvec([
+      { role: 'collaborateur', texte: PAROLE },
+      { role: 'bot', texte: 'C’est nouveau ?' },
+    ])
+    const modele = modeleBouchon({ tours: [tourAvecQuestion(null)] })
+
+    const resultat = await jouerTour({ ...ACCES, texte: '   ' }, portsAvec(base, modele))
+
+    expect(resultat.ok).toBe(true)
+    expect(modele.recues).toHaveLength(1)
+    // ⚠️ La question compte toujours : elle a été posée.
+    expect(modele.recues[0]?.relancesRestantes).toBe(MAX_RELANCES - 1)
+  })
+})
+
 describe('⛔ deux relances au maximum, et le verrou est côté serveur', () => {
   it('compte une relance par ligne `bot` du fil, et rien d’autre', () => {
     expect(

@@ -919,3 +919,85 @@ l’annonce aux collaborateurs.
 ⚠️ **La leçon est celle de 019, et elle revient** : §Le cas Kamal avait été « vérifié contre
 Kamal 2.12.0 » — sur la configuration de référence et sur le code. **Personne ne l’avait démarré.**
 Une procédure d’installation lue n’est pas une procédure jouée.
+
+## 021 — Un panneau refermé sur une question du bot perd la note, et l’alerte accuse le fournisseur
+
+**Statut** : ✅ Résolu (2026-10-07, PR #33, publié en `1.1.1`)
+**Constaté le** : 2026-10-06, en production, image `1.1.0`, `FEEDYS_MODELE=claude-sonnet-5`
+**Où** : `apps/serveur/domaine/entretien/prompts.ts` §messagesDuFil,
+`apps/serveur/domaine/entretien/modele.ts`, `apps/serveur/domaine/synthese/produire.ts`,
+`apps/serveur/domaine/synthese/reprise.ts`, `db/migrations/0010_indices.sql`
+
+**Symptôme** — un retour écrit, un message du collaborateur, puis la première relance du bot ; la
+personne referme le panneau sans répondre, le retour passe `abandonne`. Sa note n’arrive jamais.
+Chaque demande échoue sur :
+
+```
+AI_APICallError: This model does not support assistant message prefill.
+The conversation must end with a user message.          (HTTP 400, invalid_request_error)
+```
+
+`produireSynthese` rend `modele_indisponible` ; le filet la redemande **huit fois en vingt et une
+heures**, puis la déclare impossible, motif `plafond`. Telegram reçoit `modele_en_echec` — « Si ça
+dure : la clé, et le plafond du workspace » —, puis `notes_impossibles` — « le modèle n’a pas
+répondu après toutes les reprises ». **Les deux messages mentent** : le modèle a répondu, et
+ni la clé ni le plafond n’y étaient pour rien. Contre-épreuve en base : les autres retours de
+l’installation finissaient tous sur une ligne `collaborateur`, et tous avaient leur note.
+
+Et, constaté dans la même installation à la mise en service : sous le rôle de **service**, tout
+chargement de retour échouait en `42501` sur `indices`. Le droit avait été posé à la main le
+2026-09-17.
+
+**Cause** — trois faits.
+
+1. `modeleClaude().synthese()` passait `messagesDuFil(fil)` tel quel. Un entretien qui s’arrête sur
+   une relance sans réponse — `abandon`, et aussi `limite` quand la seconde relance reste sans
+   réponse — donne un fil qui finit sur `bot`, donc une conversation qui finit sur `assistant`. Les
+   modèles Claude récents refusent ce « prefill ». ⚠️ **Le même chemin existait dans `tour()`** :
+   un tour sans texte après une question (corps vide, audio sans transcript) n’écrit rien, et le
+   fil part en finissant sur la question. Et en tête : une relance « inaudible » avant toute parole
+   écrite donnait une conversation qui **commence** par `assistant`.
+2. `produireSynthese` traduisait **toute** exception en `modele_indisponible`. Un 400 — la requête
+   refusée pour ce qu’elle est, à l’identique à chaque essai — était traité comme une panne
+   passagère : huit reprises muettes, puis `plafond`.
+3. `0010_indices.sql` crée `indices` **sans aucun GRANT** à `feedys_app`. Le propriétaire contourne
+   les GRANT : rien ne se voit en développement.
+
+**Correctif** — [D-032](../00-Projet/DECISIONS_LOG.md).
+
+1. **Un seul endroit garantit la forme** : `messagesDuFil` retire les lignes du bot qui ne sont
+   suivies d’aucune parole, et celles qui précèdent toute parole. La conversation commence et finit
+   sur un message `user` — pour `tour()` comme pour `synthese()`. Le prompt système dit **le fait**
+   qu’une question est restée sans réponse, jamais son texte : la question est rédigée par le
+   modèle sur la foi de la parole, la recopier dans le système y ferait entrer la parole par un
+   détour. S’il ne reste aucune parole, `rien_a_synthetiser` — et rien ne part : le vrai modèle
+   vérifie les exigences du fournisseur **avant** d’appeler.
+2. **`classerEchec`** (`modele.ts`) sépare le **refus** de la requête — 400, 413, 422 — de
+   l’**indisponibilité** — 5xx, 529, 429, 408, délai, réseau, et les refus de **compte** 401, 402,
+   403, 404, qui se règlent sans code. Un refus donne `requete_refusee` : le filet le confirme
+   **une fois**, puis renonce avec ce motif (migration `0013`). L’alerte `notes_impossibles`, celle
+   du modèle en échec, le journal et le back-office disent « refusée par le fournisseur », avec la
+   cause exacte — statut, type, message de l’API —, et le geste : mettre Feedys à jour.
+3. **`0012_droits_indices.sql`** pose le GRANT, idempotent : sans effet là où il a été posé à la
+   main, il répare toute autre base.
+
+**Ce qui l’a laissé passer** — trois trous, un par cause.
+
+- ⛔ **Le bouchon du modèle acceptait n’importe quelle conversation.** Aucun test ne pouvait voir un
+  refus que seule l’API réelle opposait. Il refuse désormais ce que l’API refuse, en 400
+  `invalid_request_error` (`exigencesDuFournisseur`, la même définition que le vrai modèle). Les
+  tests de régression — `produire.test.ts`, `tour.test.ts`, `modele.test.ts` — ont été écrits
+  d’abord et vus **rouges** sur l’ancien `messagesDuFil` : sept échecs, dont le corps HTTP réel
+  qu’envoie `@ai-sdk/anthropic`, capturé par un `fetch` bouchonné.
+- **Aucun test ne distinguait un 400 d’un 529.** `modele.test.ts` classe désormais chaque statut, le
+  délai dépassé, le réseau, et la dernière erreur d’un `RetryError`.
+- **Le test de rôles vérifiait qu’un `DELETE` échoue sur `indices` — et il échouait, puisque le rôle
+  n’y avait AUCUN droit.** Vert pour la mauvaise raison, sur une liste recopiée. Il lit maintenant
+  **chaque table dans le catalogue** et exige exactement `SELECT, INSERT, UPDATE` (sauf `audit` et
+  `migrations`) ; vu rouge sans `0012`, sur `indices · SELECT/INSERT/UPDATE : manquant`. Et
+  `reprise.integration.test.ts` rejoue l’incident contre un vrai Postgres, par le vrai chemin, avec
+  le bouchon fidèle — le cas « refusée » rougit sans `0013`, sur le CHECK.
+
+⚠️ **La leçon** : un bouchon plus tolérant que ce qu’il remplace fabrique des tests qui ne peuvent
+pas échouer là où la production échoue. Et un refus n’est pas une panne : le confondre a fait
+chercher à l’exploitant, pendant vingt et une heures, une indisponibilité qui n’existait pas.

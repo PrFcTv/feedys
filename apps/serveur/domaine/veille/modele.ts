@@ -17,6 +17,7 @@
  *    le port, il n’appelle aucun fournisseur.
  */
 import type { Modele } from '../entretien/modele'
+import { classerEchec } from '../entretien/modele'
 
 /** La fenêtre : une heure. */
 export const FENETRE_MODELE_MS = 60 * 60 * 1000
@@ -51,12 +52,22 @@ export const REUSSITES_RETABLI = 5
 export interface AppelModele {
   readonly instant: number
   readonly ok: boolean
+  /**
+   * La cause, quand le fournisseur a REFUSÉ la requête (BUGS_LOG 021).
+   * ⚠️ Un refus compte comme un échec — le produit échoue, quelle qu’en soit la
+   *    raison —, mais l’alerte doit pouvoir dire que ce n’est pas une panne.
+   */
+  readonly refus?: string
 }
 
 export type EtatModele = {
   readonly etat: 'en_echec' | 'sain' | 'inconnu'
   readonly appels: number
   readonly echecs: number
+  /** Dont combien sont des refus de la requête, et pas des pannes. */
+  readonly refus?: number
+  /** La cause du dernier refus — statut, type, message du fournisseur. */
+  readonly dernierRefus?: string | null
 }
 
 /** La décision, sur une liste d’appels. ⚠️ Pure : `modele.test.ts` la tient. */
@@ -64,7 +75,14 @@ export function etatModele(appels: readonly AppelModele[], maintenant: number): 
   const recents = appels.filter((appel) => maintenant - appel.instant <= FENETRE_MODELE_MS)
   const echecs = recents.filter((appel) => !appel.ok).length
   const n = recents.length
-  const bilan = { appels: n, echecs }
+  const refuses = recents.filter((appel) => appel.refus !== undefined)
+  const bilan = {
+    appels: n,
+    echecs,
+    ...(refuses.length === 0
+      ? {}
+      : { refus: refuses.length, dernierRefus: refuses[refuses.length - 1]?.refus ?? null }),
+  }
 
   if (n === 0) return { etat: 'inconnu', ...bilan }
 
@@ -83,7 +101,8 @@ export function etatModele(appels: readonly AppelModele[], maintenant: number): 
 }
 
 export interface FenetreModele {
-  noter(ok: boolean): void
+  /** `refus` : la cause, quand l’échec est un refus de la requête. */
+  noter(ok: boolean, refus?: string): void
   etat(): EtatModele
 }
 
@@ -98,9 +117,9 @@ export function creerFenetreModele(horloge: () => number = () => Date.now()): Fe
   let appels: AppelModele[] = []
 
   return {
-    noter(ok) {
+    noter(ok, refus) {
       const maintenant = horloge()
-      appels.push({ instant: maintenant, ok })
+      appels.push(refus === undefined ? { instant: maintenant, ok } : { instant: maintenant, ok, refus })
       appels = appels
         .filter((appel) => maintenant - appel.instant <= FENETRE_MODELE_MS)
         .slice(-TAILLE_MAX)
@@ -124,7 +143,8 @@ export function mesurerModele(modele: Modele, fenetre: FenetreModele): Modele {
       fenetre.noter(true)
       return resultat
     } catch (erreur) {
-      fenetre.noter(false)
+      const echec = classerEchec(erreur)
+      fenetre.noter(false, echec.nature === 'refus' ? echec.cause : undefined)
       throw erreur
     }
   }

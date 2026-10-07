@@ -1808,3 +1808,63 @@ Et le montage Kamal, écrit mais jamais démarré, cassait à quatre endroits (m
   plus. S’ils se multiplient, un seul point d’entrée (`node outils/feedys.mjs <commande>`)
   deviendra plus lisible.
 - **P-023** : l’écran de gestion des produits rendrait l’outil embarqué inutile en production.
+
+## D-032 — Une requête refusée n’est pas une panne : un troisième motif, et une seule reprise
+
+**2026-10-07**, P-032.
+
+### Le problème
+
+Le filet de [D-030] traitait toute exception du modèle comme une indisponibilité : huit reprises
+espacées sur vingt et une heures, puis `plafond`. Un 400 du fournisseur — la conversation finissait
+sur `assistant`, refusée à chaque essai à l’identique — y est passé tout entier, et les deux alertes
+ont accusé le modèle et la clé ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021). Le motif ne pouvait pas
+dire mieux : `retours_synthese_impossible_motif_connu` n’admettait que `plafond` et
+`rien_a_synthetiser`.
+
+### Ce qu’on a choisi
+
+- **Deux natures d’échec, décidées à un seul endroit** — `classerEchec`, dans `modele.ts`, seul
+  fichier qui connaisse le fournisseur :
+  - **refus** : 4xx **hors** 408, 409, 429 **et hors 401, 402, 403, 404**, non retentable — en
+    pratique 400, 413, 422. La requête est refusée pour ce qu’elle est ; seul un correctif de Feedys
+    la fera passer ;
+  - **indisponibilité** : tout le reste — 5xx, 529, 429, 408, délai, réseau, sortie hors schéma.
+- ⚠️ **401, 402, 403 et 404 restent des indisponibilités, et c’est un écart délibéré à la règle
+  « 4xx hors 408/429 »** posée par le prompt. Ce sont des refus de **compte** — clé révoquée, crédit
+  épuisé (402 `billing_error`), accès retiré, `FEEDYS_MODELE` mal écrit. Ils se règlent sans
+  toucher au code, et la **même** requête passe ensuite. Les traiter en refus ferait renoncer le
+  filet sur chaque note d’une clé révoquée — exactement ce que [D-030] a promis de rattraper tout
+  seul. Le crédit épuisé est un 402, pas un 400 : la séparation se fait sur le statut, **sans
+  jamais lire le texte du message**.
+- **Un troisième motif, `requete_refusee`, et une migration pour lui** (`0013`, qui remplace le
+  CHECK). ⛔ Pas `plafond` réemployé : les deux attendent « Refaire la note », mais pas après le même
+  geste — attendre le modèle dans un cas, **mettre Feedys à jour** dans l’autre —, et l’alerte, la
+  liste et la fiche doivent pouvoir dire lequel.
+- **Une reprise, pas zéro.** La tentative de fin d’entretien n’a pas de port pour renoncer, et un
+  refus isolé et bizarre ne doit pas condamner une note. La première reprise du filet — cinq
+  minutes plus tard — confirme, puis renonce. Coût : un appel.
+- **La cause va jusqu’à l’alerte.** Statut, type et message de l’API, bornés à 300 caractères :
+  ils décrivent la **requête**, jamais la parole. Pour une erreur qui n’est pas une `APICallError`,
+  on ne garde que son **nom** — le message d’une sortie hors schéma pourrait porter ce que le
+  modèle a rédigé. La fenêtre du modèle retient le dernier refus **en mémoire**, comme elle retient
+  déjà les échecs ; après un redémarrage, l’alerte renvoie au journal.
+- **Un refus compte toujours comme un échec du modèle** dans le seuil de `modele_en_echec` : le
+  produit échoue, quelle qu’en soit la raison, et un tour refusé ne laisse aucune autre trace. Ce
+  qui change, c’est ce que l’alerte en **dit**.
+
+### Ce qu’on n’a pas fait
+
+- ⛔ **Pas de colonne pour la cause par retour.** Elle est dans le journal et dans l’alerte ; une
+  colonne de plus pour un incident par version ne paierait pas.
+- ⛔ **Pas de nouveau genre d’alerte.** `notes_impossibles` couvre les deux renoncements, avec deux
+  phrases ; un genre de plus aurait demandé une migration de `alertes_genre_connu` pour dire la
+  même chose.
+- ⛔ **Pas de comparaison de messages d’erreur.** Le jour où l’API reformule, une règle sur le
+  texte se tait sans prévenir.
+
+### Ce qui la renverserait
+
+- **Un 400 qui se règle sans code** — un réglage de compte que l’API signalerait en 400. Il
+  faudrait le sortir des refus par son `type` d’erreur, jamais par son message.
+- **Plusieurs incidents de refus par version** : la cause par retour mériterait alors sa colonne.

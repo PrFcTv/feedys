@@ -124,6 +124,16 @@ describe('reprendre', () => {
     expect(ports.renonces).toEqual([['r1', 'plafond']])
   })
 
+  it('⛔ une requête REFUSÉE : renonce dès la première reprise, avec son motif (BUGS_LOG 021)', async () => {
+    const ports = bouchon([{ retourId: 'r1', reprises: 1 }], { r1: 'requete_refusee' })
+
+    const bilan = await reprendre(ports, { maintenant: MAINTENANT })
+
+    // ⛔ Pas huit reprises muettes, et pas `plafond` : le modèle a répondu.
+    expect(ports.renonces).toEqual([['r1', 'requete_refusee']])
+    expect(bilan).toMatchObject({ refusees: ['r1'], impossibles: [], enAttente: 0 })
+  })
+
   it('⛔ une exception vaut un échec du modèle, et ne bloque pas les suivants', async () => {
     const ports = bouchon(
       [

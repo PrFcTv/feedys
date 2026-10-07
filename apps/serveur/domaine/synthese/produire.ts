@@ -10,7 +10,9 @@
  * ⛔ Module pur : ni base, ni réseau, ni horloge (architecture.md §3).
  */
 import type { Modele } from '../entretien/modele'
+import { classerEchec } from '../entretien/modele'
 import type { ContexteEntretien, FinEntretien, TourFil } from '../entretien/prompts'
+import { messagesDuFil } from '../entretien/prompts'
 
 import type { Confiance, Synthese } from './schema'
 import { verifierCitations } from './verbatim'
@@ -61,11 +63,20 @@ export interface PortsSynthese {
   readonly signaler?: (quoi: string, erreur: unknown) => void
 }
 
+/**
+ * ⚠️ `modele_indisponible` et `requete_refusee` ne se confondent pas, et c’est
+ *    toute la leçon de [BUGS_LOG](../../../../03-Bugs/BUGS_LOG.md) 021. Le
+ *    premier se rattrape en attendant : le filet le redemande. Le second est
+ *    refusé POUR CE QU’IL EST, et le sera à l’identique dans vingt et une
+ *    heures : le redemander huit fois, c’est faire chercher à l’exploitant une
+ *    panne du fournisseur qui n’existe pas ([D-032]).
+ */
 export type MotifRefusSynthese =
   | 'retour_inconnu'
   | 'deja_faite'
   | 'rien_a_synthetiser'
   | 'modele_indisponible'
+  | 'requete_refusee'
 
 export type ResultatSynthese =
   | { readonly ok: true; readonly synthese: SyntheseAEcrire }
@@ -124,8 +135,14 @@ export async function produireSynthese(
   // ⛔ Produite une fois, jamais réécrite (01-Specs/synthese.md).
   if (await ports.depot.dejaFaite(retourId)) return { ok: false, motif: 'deja_faite' }
 
+  // ⚠️ Deux conditions, et la seconde découle de la première : s’il y a de la
+  //    parole, il reste au moins un message `user` une fois les relances sans
+  //    réponse retirées. Elle est écrite quand même — c’est ELLE que le
+  //    fournisseur exige, et rien ne doit partir qu’il refuserait.
   const paroles = parolesDe(retour.fil)
-  if (paroles.length === 0) return { ok: false, motif: 'rien_a_synthetiser' }
+  if (paroles.length === 0 || messagesDuFil(retour.fil).length === 0) {
+    return { ok: false, motif: 'rien_a_synthetiser' }
+  }
 
   const fin = finDe(retour.statut, retour.relancesPosees, maximumRelances)
 
@@ -133,8 +150,16 @@ export async function produireSynthese(
   try {
     rendu = await ports.modele.synthese({ contexte: retour.contexte, fil: retour.fil, fin })
   } catch (erreur) {
-    ports.signaler?.('production de la synthèse', erreur)
-    return { ok: false, motif: 'modele_indisponible' }
+    const echec = classerEchec(erreur)
+    // ⚠️ La cause est dans le libellé : c’est la ligne que l’exploitant lira.
+    //    Elle décrit la requête, jamais la parole (`modele.ts` §classerEchec).
+    ports.signaler?.(
+      echec.nature === 'refus'
+        ? `production de la synthèse — requête refusée par le fournisseur : ${echec.cause}`
+        : `production de la synthèse — modèle indisponible : ${echec.cause}`,
+      erreur,
+    )
+    return { ok: false, motif: echec.nature === 'refus' ? 'requete_refusee' : 'modele_indisponible' }
   }
 
   const { gardees, jetees } = verifierCitations(rendu.synthese.citations, paroles)

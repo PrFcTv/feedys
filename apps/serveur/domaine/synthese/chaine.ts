@@ -45,6 +45,14 @@ export async function synthetiserEtNotifier(
         new Error(resultat.motif),
       )
     }
+    // ⛔ Pas « le filet la redemandera » : il la redemandera UNE fois, pour
+    //    confirmer, puis il renoncera (`reprise.ts`, BUGS_LOG 021).
+    if (resultat.motif === 'requete_refusee') {
+      ports.synthese.signaler?.(
+        `synthèse du retour ${retourId} — requête refusée par le fournisseur : ce n’est pas une panne. Le filet confirmera une fois, puis renoncera`,
+        new Error(resultat.motif),
+      )
+    }
     return resultat.motif
   }
 

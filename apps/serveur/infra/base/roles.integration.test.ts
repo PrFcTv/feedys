@@ -200,22 +200,89 @@ describe('ce que le rôle de service peut, et ne peut pas', () => {
     expect(rows[0]?.['n']).toBe(2)
   })
 
-  it('⛔ ne peut supprimer dans AUCUNE des tables métier', async () => {
-    for (const table of [
-      'produits',
-      'retours',
-      'messages',
-      'contextes',
-      'indices',
-      'syntheses',
-      'notifications',
-      'audit',
-      'alertes',
-    ]) {
+  it('⛔ ne peut supprimer dans AUCUNE des tables', async () => {
+    for (const table of await tablesDuSchema()) {
       expect(await refuse(service, `delete from ${table}`)).toBe(PRIVILEGE_INSUFFISANT)
     }
   })
 })
+
+/**
+ * ⛔ LE TEST QUI AURAIT ATTRAPÉ L’OUBLI DE 0010 (BUGS_LOG 021).
+ *
+ * ⚠️ La liste ci-dessus vérifiait qu’un `DELETE` échoue sur `indices` — et il
+ *    échouait, puisque `feedys_app` n’y avait AUCUN droit. Le test était vert
+ *    pour la mauvaise raison : un refus partout ressemble à un refus voulu. En
+ *    production, sous le rôle de service, tout chargement de retour tombait en
+ *    `42501`, jusqu’à un GRANT posé à la main.
+ *
+ * ⛔ Deux règles, pour que la prochaine table ne passe pas à travers :
+ *    1. les tables viennent du CATALOGUE, pas d’une liste recopiée — une table
+ *       ajoutée sans son GRANT rougit ici sans que personne n’ait à y penser ;
+ *    2. on vérifie ce qui DOIT passer, pas seulement ce qui doit échouer.
+ */
+describe('⛔ chaque table porte les droits de feedys_app', () => {
+  /**
+   * Les exceptions, et elles sont écrites : tout le reste est lu, ajouté et
+   * mis à jour par le service.
+   */
+  const ATTENDUS: Readonly<Record<string, readonly string[]>> = {
+    // ⛔ Zone gelée : lire et ajouter, rien d’autre (conventions-db.md).
+    audit: ['SELECT', 'INSERT'],
+    // ⚠️ Posée par le runner, lue par la sonde `/sante` (0003).
+    migrations: ['SELECT'],
+  }
+  const ORDINAIRES = ['SELECT', 'INSERT', 'UPDATE']
+  const TOUS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']
+
+  it('le catalogue connaît au moins les tables qu’on sait exister', async () => {
+    // ⚠️ Un garde-fou contre un test vide : une requête de catalogue fausse
+    //    rendrait zéro table, et la boucle suivante serait verte sans rien voir.
+    expect(await tablesDuSchema()).toEqual(
+      expect.arrayContaining(['retours', 'messages', 'indices', 'alertes', 'audit', 'migrations']),
+    )
+  })
+
+  it('chaque table : exactement les droits attendus, ni plus ni moins', async () => {
+    const ecarts: string[] = []
+
+    for (const table of await tablesDuSchema()) {
+      const attendus = ATTENDUS[table] ?? ORDINAIRES
+
+      for (const privilege of TOUS) {
+        const { rows } = await proprietaire.query<{ a: boolean }>(
+          `select has_table_privilege('feedys_app', $1, $2) as a`,
+          [`public.${table}`, privilege],
+        )
+        const a = rows[0]?.a === true
+        if (a !== attendus.includes(privilege)) {
+          ecarts.push(`${table} · ${privilege} : ${a ? 'accordé' : 'manquant'}`)
+        }
+      }
+    }
+
+    // ⚠️ Toute la liste d’un coup : un oubli en cache souvent un autre.
+    expect(ecarts).toEqual([])
+  })
+
+  it('et le rôle de service lit pour de bon chaque table — `indices` compris', async () => {
+    for (const table of await tablesDuSchema()) {
+      expect(await refuse(service, `select count(*) from ${table}`), table).toBeUndefined()
+    }
+  })
+})
+
+/** Les tables ordinaires du schéma `public`, lues dans le catalogue. */
+async function tablesDuSchema(): Promise<string[]> {
+  const { rows } = await proprietaire.query<{ nom: string }>(`
+    select c.relname as nom
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
+     order by c.relname
+  `)
+  return rows.map((ligne) => ligne.nom)
+}
 
 describe('la sonde /sante, sous le rôle de service', () => {
   /**

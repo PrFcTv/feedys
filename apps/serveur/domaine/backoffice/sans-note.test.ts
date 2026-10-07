@@ -2,11 +2,20 @@ import { describe, expect, it } from 'vitest'
 
 import type { MotifRefusRefaire } from '../synthese/refaire'
 
-import { LIBELLES_SANS_NOTE, REFUS_REFAIRE, etatSansNote } from './sans-note'
+import { LIBELLES_SANS_NOTE, REFUS_REFAIRE, aRefaire, etatSansNote } from './sans-note'
 
 describe('etatSansNote', () => {
   it('le renoncement faute de modèle se dit — c’est un geste à faire', () => {
     expect(etatSansNote({ reprises: 8, impossibleMotif: 'plafond' })).toBe('impossible')
+  })
+
+  it('⛔ une requête refusée ne se dit PAS « le modèle n’a pas répondu » (BUGS_LOG 021)', () => {
+    const etat = etatSansNote({ reprises: 1, impossibleMotif: 'requete_refusee' })
+
+    expect(etat).toBe('refusee')
+    expect(aRefaire(etat)).toBe(true)
+    expect(LIBELLES_SANS_NOTE[etat]).not.toContain('n’a pas répondu')
+    expect(LIBELLES_SANS_NOTE[etat]).toContain('mise à jour')
   })
 
   it('l’absence de parole se dit — il n’y aura jamais de note', () => {
@@ -34,6 +43,7 @@ describe('etatSansNote', () => {
       'deja_faite',
       'rien_a_synthetiser',
       'modele_indisponible',
+      'requete_refusee',
     ]
     for (const motif of motifs) expect(REFUS_REFAIRE[motif]).toBeTruthy()
   })

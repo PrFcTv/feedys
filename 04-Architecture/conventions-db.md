@@ -80,7 +80,7 @@ Un logiciel métier qui embarque le widget. Voir [D-005](../00-Projet/DECISIONS_
 | `synthese_reprises` | `integer` NULL | combien de fois le filet a redemandé la note (P-030). NULL = jamais |
 | `synthese_reprise_le` | `timestamptz` NULL | la dernière reprise — l’espacement **et** la réservation |
 | `synthese_impossible_le` | `timestamptz` NULL | le filet a renoncé. ⛔ Terminal pour le filet, pas pour un humain |
-| `synthese_impossible_motif` | `text` NULL | `plafond` ou `rien_a_synthetiser`, sous CHECK. Présent si et seulement si la date l’est |
+| `synthese_impossible_motif` | `text` NULL | `plafond`, `rien_a_synthetiser` ou `requete_refusee` (0013, BUGS_LOG 021), sous CHECK. Présent si et seulement si la date l’est |
 
 ⚠️ **`source` n’est pas décoratif** : c’est la mesure du pari du produit
 ([VISION.md](../00-Projet/VISION.md)). Si 90 % des retours sont en `texte`, la thèse est fausse.
@@ -231,8 +231,16 @@ réclamer celui de 0006, qui en était absent.
 
 ## Les privilèges
 
-Le rôle applicatif reçoit `SELECT, INSERT, UPDATE` sur les tables métier — `alertes` comprise —,
-**et `SELECT, INSERT` seulement sur `audit`**.
+Le rôle applicatif reçoit `SELECT, INSERT, UPDATE` sur les tables métier — `alertes` et `indices`
+comprises —, **et `SELECT, INSERT` seulement sur `audit`**.
+
+⛔ **Une table se crée avec son GRANT, dans la même migration.** `0010_indices.sql` l’a oublié :
+le propriétaire contourne tous les GRANT, donc rien ne l’a vu en développement, et sous le rôle de
+service tout chargement de retour échouait en `42501` — jusqu’à un `grant` posé à la main en
+production, rattrapé par `0012` ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021). Le test de rôles
+(`roles.integration.test.ts`) lit désormais **chaque table dans le catalogue** et exige exactement
+ces droits : une table qui arrive sans son GRANT rougit, sans que personne n’ait à l’ajouter à une
+liste.
 
 ⚠️ **La table `migrations` a son propre `GRANT SELECT`** ([0003](../db/migrations/), P-018). Elle
 n’est créée par aucune migration — le runner la pose lui-même — et n’en portait donc aucun. Or la

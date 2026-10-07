@@ -12,7 +12,7 @@
 import Link from 'next/link'
 
 import { age } from '../../domaine/backoffice/dates'
-import { LIBELLES_SANS_NOTE } from '../../domaine/backoffice/sans-note'
+import { LIBELLES_SANS_NOTE, aRefaire } from '../../domaine/backoffice/sans-note'
 import type { LigneListe } from '../../infra/base/depot-bo'
 import { Meta, PastilleConfiance, PastilleStatut, PastilleType } from '../pastille'
 
@@ -31,7 +31,7 @@ export function LigneRetour({
       <div className="flex items-baseline gap-3">
         <span className="min-w-0 flex-1 truncate font-medium text-encre">
           {retour.titre ?? (
-            <span className={retour.sansNote === 'impossible' ? 'text-signal italic' : 'text-encre-3 italic'}>
+            <span className={aRefaire(retour.sansNote) ? 'text-signal italic' : 'text-encre-3 italic'}>
               {LIBELLES_SANS_NOTE[retour.sansNote]}
             </span>
           )}

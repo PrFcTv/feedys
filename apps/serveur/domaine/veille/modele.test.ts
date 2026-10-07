@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { DemandeSynthese, DemandeTour } from '../entretien/prompts'
 import type { Modele } from '../entretien/modele'
+import { refusDuFournisseur } from '../entretien/modele'
 
 import type { AppelModele } from './modele'
 import {
@@ -104,6 +105,30 @@ describe('mesurerModele', () => {
     const erreur = await mesure.tour(DEMANDE_TOUR).catch((e: unknown) => e)
 
     expect((erreur as Error).message).toBe('529 overloaded')
+  })
+
+  it('⛔ un refus de la requête est compté, ET reconnu — l’alerte pourra le dire (BUGS_LOG 021)', async () => {
+    const fenetre = creerFenetreModele(() => T)
+    const refuse: Modele = {
+      identifiant: 'modele-de-test',
+      tour: async () => {
+        throw new Error('529 overloaded')
+      },
+      synthese: async () => {
+        throw refusDuFournisseur(400, 'invalid_request_error', 'la requête est refusée')
+      },
+    }
+    const mesure = mesurerModele(refuse, fenetre)
+
+    await mesure.tour(DEMANDE_TOUR).catch(() => undefined)
+    await mesure.synthese(DEMANDE_SYNTHESE).catch(() => undefined)
+
+    expect(fenetre.etat()).toMatchObject({
+      appels: 2,
+      echecs: 2,
+      refus: 1,
+      dernierRefus: 'HTTP 400 invalid_request_error — la requête est refusée',
+    })
   })
 
   it('ne grossit pas sans fin', () => {
