@@ -40,6 +40,7 @@ prendrait pour un défaut d’affichage.
 |---|---|
 | « sans note — le modèle sera relancé » | le filet la redemande tout seul. Rien à faire |
 | « sans note — le modèle n’a pas répondu, à refaire » | ⛔ le filet a renoncé : **« Refaire la note »** sur la fiche. En rouge |
+| « sans note — requête refusée par le fournisseur, à refaire après mise à jour » | ⛔ le fournisseur refuse la requête que Feedys envoie — pas une panne. Mettre Feedys à jour, puis **« Refaire la note »**. En rouge ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021) |
 | « sans note — rien à synthétiser » | le fil ne contient aucune parole écrite — il n’y aura pas de note |
 | « sans note — synthèse absente » | pas encore de note, et le filet n’y est pas encore revenu |
 

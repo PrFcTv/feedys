@@ -161,7 +161,7 @@ model Retour {
   syntheseRepriseLe       DateTime? @map("synthese_reprise_le") @db.Timestamptz(6)
   /// ⛔ Terminal pour le filet seulement : « Refaire la note » reste possible.
   syntheseImpossibleLe    DateTime? @map("synthese_impossible_le") @db.Timestamptz(6)
-  /// `plafond` ou `rien_a_synthetiser`, sous contrainte CHECK en base.
+  /// `plafond`, `rien_a_synthetiser` ou `requete_refusee` (0013), sous contrainte CHECK en base.
   syntheseImpossibleMotif String?   @map("synthese_impossible_motif")
   creeLe           DateTime     @default(now()) @map("cree_le") @db.Timestamptz(6)
   majLe            DateTime     @default(now()) @updatedAt @map("maj_le") @db.Timestamptz(6)

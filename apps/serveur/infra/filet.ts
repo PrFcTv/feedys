@@ -142,7 +142,20 @@ export async function passe(options: OptionsFilet = {}): Promise<void> {
           journal.info(
             `filet — ${bilan.reprises} note(s) redemandée(s) : ${bilan.ecrites} écrite(s), ` +
               `${bilan.enAttente} encore en attente, ${bilan.impossibles.length} devenue(s) impossible(s), ` +
-              `${bilan.sansParole} sans parole à synthétiser.`,
+              `${bilan.sansParole} sans parole à synthétiser, ${bilan.refusees.length} refusée(s) par le fournisseur.`,
+          )
+        }
+
+        // ⛔ PAS UNE PANNE, ET LA LIGNE LE DIT (BUGS_LOG 021) : sinon l’exploitant
+        //    cherche du côté du fournisseur ce qui est un défaut de Feedys. La
+        //    cause exacte — statut, type, message — est sur la ligne de la
+        //    synthèse qui précède.
+        if (bilan.refusees.length > 0) {
+          journal.alerte(
+            `filet — ${bilan.refusees.length} note(s) refusée(s) par le fournisseur : ` +
+              `${bilan.refusees.join(', ')}. Ce n’est pas une panne : il refuse la requête que ` +
+              'Feedys lui envoie, et la refusera à l’identique. Mettre Feedys à jour, puis ' +
+              '« Refaire la note » sur chaque fiche.',
           )
         }
 

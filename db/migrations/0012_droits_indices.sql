@@ -1,0 +1,26 @@
+-- 0012_droits_indices.sql — le GRANT que 0010 avait oublié (P-032)
+--
+-- Source de vérité du schéma : 04-Architecture/conventions-db.md.
+--
+-- ⚠️ CE QUE CE FICHIER RÉPARE ([03-Bugs/BUGS_LOG.md] 021). `0010_indices.sql`
+--    crée la table `indices` et n’accorde RIEN à `feedys_app`. Sous le rôle de
+--    propriétaire, personne ne le voit : il contourne tous les GRANT. Sous le
+--    rôle de SERVICE — celui que la production doit utiliser (D-009) —, tout
+--    chargement de retour lit `indices` et échoue en `42501`.
+--
+-- ⚠️ En production, le droit a été posé À LA MAIN le 2026-09-17, à
+--    l’identique de cette ligne. `grant` est idempotent : sur cette base-là, ce
+--    fichier ne change rien ; sur toute autre, il pose ce qui manquait.
+--
+-- ⛔ Ce qui l’aurait attrapé, et qui l’attrapera la prochaine fois :
+--    `apps/serveur/infra/base/roles.integration.test.ts` §chaque table vérifie
+--    désormais les droits de `feedys_app` sur CHAQUE table du schéma, lue dans
+--    le catalogue — pas sur une liste recopiée, qui aurait oublié `indices`
+--    exactement comme 0010.
+--
+-- ⛔ Aucun GRANT DELETE, comme partout (0001_socle.sql §Les privilèges).
+--
+-- ⚠️ Ce fichier ne porte ni BEGIN ni COMMIT : le runner enveloppe chaque
+--    migration dans sa propre transaction.
+
+grant select, insert, update on indices to feedys_app;

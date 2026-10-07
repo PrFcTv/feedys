@@ -38,6 +38,7 @@ export type MotifRefusRefaire =
   | 'deja_faite'
   | 'rien_a_synthetiser'
   | 'modele_indisponible'
+  | 'requete_refusee'
 
 export type IssueRefaire = { readonly ok: true } | { readonly ok: false; readonly motif: MotifRefusRefaire }
 

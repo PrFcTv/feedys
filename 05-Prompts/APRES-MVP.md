@@ -1230,6 +1230,32 @@ est refusée (401).
 
 ---
 
+## P-032 · La note perdue quand le panneau se referme sur une question du bot — ✅ fait
+
+**Objectif** — un incident de production, sur `1.1.0` : un retour abandonné juste après une
+relance n’a jamais eu sa note. Huit reprises sur vingt et une heures, puis « impossible », et deux
+alertes Telegram qui accusaient le modèle et la clé.
+
+**Constaté** ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021) : la conversation partait en finissant sur
+`assistant`, que les modèles récents refusent en 400 ; ce 400 était traité comme une panne ; et
+`0010_indices.sql` n’avait donné aucun droit sur `indices` au rôle de service.
+
+**Fait** ([D-032](../00-Projet/DECISIONS_LOG.md)) —
+
+1. `messagesDuFil` garantit une conversation qui commence et finit sur la parole, pour `tour()`
+   comme pour `synthese()` ; le prompt système dit qu’une question est restée sans réponse, jamais
+   son texte ;
+2. `classerEchec` sépare le refus de la requête de l’indisponibilité ; motif `requete_refusee`
+   (migration `0013`), une seule reprise, et des alertes qui disent la vraie cause ;
+3. `0012_droits_indices.sql`, et un test de rôles qui lit chaque table dans le catalogue ;
+4. un bouchon qui refuse ce que l’API refuse ;
+5. publication de `1.1.1`.
+
+**La suite** — monter `1.1.1` sur l’installation touchée, puis « Refaire la note » sur la fiche du
+retour perdu. ⛔ Aucun SQL à la main.
+
+---
+
 # Ce qui n’est pas encore un prompt
 
 ⚠️ Ces sujets sont ouverts et **n’ont volontairement pas de prompt** : leur déclencheur n’est pas

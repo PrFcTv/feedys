@@ -408,6 +408,7 @@ promet de ne pas mentir.
 | Le modèle ne répond pas / expire | La carte n’apparaît pas, le champ texte reste, « Envoyer » fonctionne. **Le retour brut part quand même** — jamais perdu. |
 | Le transcript est vide ou inintelligible | Une seule relance : « Je n’ai pas bien saisi — vous pouvez redire ? ». Puis on envoie le brut. |
 | Le collaborateur répond à côté | Ça compte comme un tour. On ne réinsiste pas sur la même question. |
+| Un tour n’apporte aucun texte après une question (corps vide, audio sans transcript) | La question compte, et ne part pas en message : la conversation envoyée au modèle finit toujours sur la parole. Le prompt système dit qu’elle est restée sans réponse, pour qu’il ne la repose pas à l’identique ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021). |
 | Le collaborateur ferme le panneau en cours d’entretien | Le retour est **conservé et envoyé** en l’état, marqué `abandonne`. Un retour partiel vaut mieux que rien. |
 | Le filet referme pendant que le panneau est encore ouvert | Ce que la personne écrit ensuite est **écrit dans le fil quand même**, avant toute garde de statut, et la note est reproduite si elle n’est pas partie ([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 009). |
 | Le collaborateur dit quelque chose de personnel ou sur quelqu’un | Le bot ne relance pas, ne commente pas, transmet tel quel. Ce n’est pas son rôle d’arbitrer. |

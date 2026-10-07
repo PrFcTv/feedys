@@ -180,8 +180,26 @@ describe('les faits', () => {
     await reprise.renoncer(sansParole, 'rien_a_synthetiser')
 
     const depot = creerDepotVeille(bassin)
-    expect(await depot.impossiblesDepuis(null)).toEqual({ ids: [plafond], total: 1 })
-    expect(await depot.impossiblesDepuis(new Date(Date.now() + 60_000))).toEqual({ ids: [], total: 0 })
+    expect(await depot.impossiblesDepuis(null)).toEqual({ ids: [plafond], total: 1, refusees: 0 })
+    expect(await depot.impossiblesDepuis(new Date(Date.now() + 60_000))).toEqual({
+      ids: [],
+      total: 0,
+      refusees: 0,
+    })
+  })
+
+  it('⛔ les notes refusées sont dans la liste, et comptées À PART (BUGS_LOG 021)', async () => {
+    const plafond = await retour()
+    const refusee = await retour()
+    const reprise = creerDepotReprise(bassin)
+    await reprise.renoncer(plafond, 'plafond')
+    await reprise.renoncer(refusee, 'requete_refusee')
+
+    const notes = await creerDepotVeille(bassin).impossiblesDepuis(null)
+
+    expect(notes.total).toBe(2)
+    expect(notes.refusees).toBe(1)
+    expect([...notes.ids].sort()).toEqual([plafond, refusee].sort())
   })
 
   it('le compte reste juste au-delà de la liste', async () => {

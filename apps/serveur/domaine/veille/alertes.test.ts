@@ -233,6 +233,70 @@ describe('⛔ une alerte ne contient ni parole ni nom', () => {
   })
 })
 
+/**
+ * ⛔ BUGS_LOG 021. L’alerte disait « le modèle n’a pas répondu » et « si ça dure :
+ *    la clé » sur un 400 que le fournisseur rendait à chaque appel. L’exploitant
+ *    a cherché une panne d’Anthropic qui n’existait pas.
+ */
+describe('⛔ un refus de la requête n’est pas annoncé comme une panne', () => {
+  const CAUSE =
+    'HTTP 400 invalid_request_error — This model does not support assistant message prefill. The conversation must end with a user message.'
+
+  it('notes refusées : l’alerte dit le refus, sa cause, et le geste — pas « n’a pas répondu »', async () => {
+    const m = monde({
+      impossibles: { ids: ['r_1'], total: 1, refusees: 1 },
+      modele: { etat: 'en_echec', appels: 3, echecs: 3, refus: 3, dernierRefus: CAUSE },
+    })
+
+    await veiller(m.ports, MAINTENANT)
+
+    const alerte = m.envoyes.find((texte) => texte.includes('/bo/r/r_1'))
+    expect(alerte).toContain('1 note(s) refusée(s) par le fournisseur')
+    expect(alerte).toContain('Ce n’est pas une panne')
+    expect(alerte).toContain(`Cause : ${CAUSE}`)
+    expect(alerte).toContain('mettre Feedys à jour')
+    expect(alerte).not.toContain('n’a pas répondu')
+  })
+
+  it('sans cause en mémoire — un redémarrage —, elle renvoie au journal', () => {
+    const message = OUVERTURES.notes_impossibles(INSTALLATION, { ids: ['r_1'], total: 1, refusees: 1 })
+
+    expect(message).toContain('le journal du conteneur')
+  })
+
+  it('les deux à la fois : chacune sa phrase, et les comptes sont justes', () => {
+    const message = OUVERTURES.notes_impossibles(
+      INSTALLATION,
+      { ids: ['r_1', 'r_2', 'r_3'], total: 3, refusees: 1 },
+      CAUSE,
+    )
+
+    expect(message).toContain('2 note(s) devenue(s) impossible(s) : le modèle n’a pas répondu')
+    expect(message).toContain('1 note(s) refusée(s) par le fournisseur')
+  })
+
+  it('le modèle en échec par refus : ni la clé ni le plafond — c’est Feedys', () => {
+    const message = OUVERTURES.modele_en_echec(INSTALLATION, {
+      etat: 'en_echec',
+      appels: 4,
+      echecs: 4,
+      refus: 4,
+      dernierRefus: CAUSE,
+    })
+
+    expect(message).toContain('Dont 4 refus de la requête par le fournisseur')
+    expect(message).toContain(`Dernier refus : ${CAUSE}`)
+    expect(message).toContain('c’est Feedys qu’il faut mettre à jour')
+    expect(message).not.toContain('seront redemandées toutes seules')
+  })
+
+  it('⚠️ une panne ordinaire garde son message d’avant', () => {
+    expect(OUVERTURES.modele_en_echec(INSTALLATION, EN_ECHEC)).toContain(
+      'Si ça dure : la clé, et le plafond du workspace',
+    )
+  })
+})
+
 describe('les seuils d’usage', () => {
   it('⛔ plus aucun retour depuis sept jours : incident', () => {
     const vieux = new Date(MAINTENANT.getTime() - SILENCE_MAX_MS - 1)

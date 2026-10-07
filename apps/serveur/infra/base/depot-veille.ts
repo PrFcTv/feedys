@@ -59,14 +59,18 @@ const DERNIERE_FERMETURE = `
 `
 
 /**
- * ⚠️ `plafond` seulement : un retour sans parole n’est pas une panne.
- * ⚠️ Onze au plus pour la liste — le compte, lui, est entier.
+ * ⚠️ `plafond` et `requete_refusee` : les deux attendent un geste à la main. Un
+ *    retour sans parole, lui, n’en attend aucun.
+ * ⚠️ Le compte des refus est rendu À PART : l’alerte ne dit pas la même chose
+ *    d’un modèle qui n’a pas répondu et d’une requête refusée (BUGS_LOG 021).
+ * ⚠️ Onze au plus pour la liste — les comptes, eux, sont entiers.
  */
 const IMPOSSIBLES = `
   select id,
-         count(*) over () as total
+         count(*) over () as total,
+         count(*) filter (where synthese_impossible_motif = 'requete_refusee') over () as refusees
     from retours
-   where synthese_impossible_motif = 'plafond'
+   where synthese_impossible_motif in ('plafond', 'requete_refusee')
      and ($1::timestamptz is null or synthese_impossible_le > $1::timestamptz)
    order by synthese_impossible_le asc
    limit 11
@@ -171,6 +175,7 @@ export function creerDepotVeille(bassin: Bassin): DepotVeille {
       return {
         ids: lignes.map((ligne) => String(ligne['id'])),
         total: lignes.length === 0 ? 0 : Number(lignes[0]?.['total']),
+        refusees: lignes.length === 0 ? 0 : Number(lignes[0]?.['refusees']),
       }
     },
 

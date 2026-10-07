@@ -136,7 +136,7 @@ export function assemblerSysteme(gabarit: string, demande: DemandeTour): string 
     .replace(MARQUE_CONTEXTE, rendreContexte(demande.contexte))
     .replace(MARQUE_METIER, metier)
     .replace(MARQUE_INDICES, rendreIndices(demande.contexte))
-    .replace(MARQUE_RELANCES, consigneRelances(demande.relancesRestantes))
+    .replace(MARQUE_RELANCES, consigneRelancesPour(demande))
     .replace(/\n{3,}/g, '\n\n')
 }
 
@@ -262,6 +262,16 @@ export function rendreMetier(contexte: ContexteEntretien): string {
   return ['CONTEXTE MÉTIER ET SITUATION', ...lignes].join('\n')
 }
 
+/**
+ * ⚠️ Collée à la consigne d’arrêt, et pas ailleurs : une question restée sans
+ *    réponse est une question COMPTÉE (`tour.ts` §relancesPosees) — le modèle
+ *    doit le lire au même endroit que ce qu’il lui reste.
+ */
+function consigneRelancesPour(demande: DemandeTour): string {
+  const consigne = consigneRelances(demande.relancesRestantes)
+  return questionSansReponse(demande.fil) ? `${consigne}\n${SANS_REPONSE_TOUR}` : consigne
+}
+
 /** La consigne d’arrêt, dans les mots du modèle. Le verrou, lui, est dans `tour.ts`. */
 export function consigneRelances(restantes: number): string {
   if (restantes <= 0) {
@@ -295,8 +305,33 @@ export function consigneRelances(restantes: number): string {
  *
  * ⚠️ Les messages vides sont écartés : l’ingestion écrit une ligne à texte vide
  *    quand seul l’audio est arrivé, et un fournisseur refuse un message vide.
+ *
+ * ⛔ LA CONVERSATION COMMENCE ET FINIT SUR LA PAROLE — un message `user` aux deux
+ *    bouts, toujours ([BUGS_LOG](../../../../03-Bugs/BUGS_LOG.md) 021). Les
+ *    modèles récents refusent un fil qui finit sur `assistant` (le « prefill »),
+ *    et c’est ce que donne un panneau refermé sur une relance. Les lignes du bot
+ *    qui ne sont suivies d’aucune parole sont donc retirées — elles ne
+ *    contiennent rien que la personne ait dit, et le prompt système dit, lui,
+ *    qu’une question est restée sans réponse (`questionSansReponse`). Même
+ *    chose en tête : une relance « inaudible » qui précède toute parole écrite.
+ *
+ * ⚠️ C’est l’UNIQUE endroit qui le garantit : `tour()` et `synthese()` passent
+ *    tous deux par ici. Un fil sans aucune parole rend une liste vide — et rien
+ *    ne part chez le fournisseur (`modele.ts` §exigencesDuFournisseur).
  */
 export function messagesDuFil(fil: readonly TourFil[]): MessageModele[] {
+  const messages = messagesNonVides(fil)
+
+  const premier = messages.findIndex((message) => message.role === 'user')
+  if (premier === -1) return []
+
+  let dernier = messages.length - 1
+  while (messages[dernier]?.role !== 'user') dernier -= 1
+
+  return messages.slice(premier, dernier + 1)
+}
+
+function messagesNonVides(fil: readonly TourFil[]): MessageModele[] {
   const messages: MessageModele[] = []
 
   for (const tour of fil) {
@@ -307,6 +342,35 @@ export function messagesDuFil(fil: readonly TourFil[]): MessageModele[] {
 
   return messages
 }
+
+/**
+ * La dernière question du bot est-elle restée sans réponse écrite ?
+ *
+ * ⚠️ Le cas ordinaire est le panneau refermé sur une relance. L’autre est un
+ *    tour qui n’apporte aucun texte — un corps vide, ou de l’audio sans
+ *    transcript : rien n’est écrit, et le fil finit encore sur la question.
+ *
+ * ⛔ UN FAIT, DIT AU PROMPT SYSTÈME — jamais le texte de la question. Elle a été
+ *    rédigée par le modèle sur la foi de la parole : la recopier dans le prompt
+ *    système y ferait entrer, par un détour, ce qui n’a le droit d’y être sous
+ *    aucune forme.
+ */
+export function questionSansReponse(fil: readonly TourFil[]): boolean {
+  const messages = messagesNonVides(fil)
+  return (
+    messages[messages.length - 1]?.role === 'assistant' &&
+    messages.some((message) => message.role === 'user')
+  )
+}
+
+const SANS_REPONSE_TOUR =
+  'Ta dernière question n’a reçu aucune réponse écrite : elle ne figure pas ' +
+  'dans les messages. Ne la repose pas à l’identique.'
+
+const SANS_REPONSE_SYNTHESE =
+  'La dernière question posée pendant l’entretien est restée sans réponse : ' +
+  'elle ne figure pas dans les messages. Ne devine pas ce qu’elle demandait — ' +
+  'si ça manque, dis-le dans questions_ouvertes.'
 
 /**
  * ─── LA SYNTHÈSE ────────────────────────────────────────────────────────────
@@ -336,7 +400,7 @@ export function assemblerSyntheseSysteme(gabarit: string, demande: DemandeSynthe
   return gabarit
     .replace(MARQUE_CONTEXTE, rendreContexte(demande.contexte))
     .replace(MARQUE_METIER, metier)
-    .replace(MARQUE_FIN, consigneFin(demande.fin))
+    .replace(MARQUE_FIN, consigneFin(demande.fin, questionSansReponse(demande.fil)))
     .replace(/\n{3,}/g, '\n\n')
 }
 
@@ -346,7 +410,12 @@ export function assemblerSyntheseSysteme(gabarit: string, demande: DemandeSynthe
  *    lui-même — abandon, aucune citation retenue — sont plafonnés après coup
  *    dans `domaine/synthese/produire.ts`.
  */
-export function consigneFin(fin: FinEntretien): string {
+export function consigneFin(fin: FinEntretien, sansReponse = false): string {
+  const fait = consigneFinSeule(fin)
+  return sansReponse ? `${fait}\n${SANS_REPONSE_SYNTHESE}` : fait
+}
+
+function consigneFinSeule(fin: FinEntretien): string {
   if (fin === 'abandon') {
     return (
       'La personne a refermé le panneau en cours d’entretien. Ce que tu as est ' +

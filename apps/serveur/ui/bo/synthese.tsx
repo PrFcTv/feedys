@@ -152,6 +152,19 @@ export function SansSynthese({
         Refaites la note quand le modèle répond de nouveau.
       </>
     )
+  } else if (suivi.etat === 'refusee') {
+    // ⛔ PAS « le modèle n’a pas répondu » : il a répondu, il a refusé la
+    //    requête. Le dire autrement fait chercher une panne qui n’existe pas
+    //    (BUGS_LOG 021).
+    texte = (
+      <>
+        Le fournisseur du modèle a refusé la requête que Feedys lui envoie — ce n’est pas une
+        panne, et elle sera refusée à l’identique tant que Feedys n’est pas corrigé. Le filet a
+        renoncé
+        {suivi.impossibleLe ? ` le ${dateComplete(suivi.impossibleLe, fuseau)}` : ''}, et la cause
+        exacte est dans le journal. {intact} Refaites la note une fois Feedys mis à jour.
+      </>
+    )
   } else if (suivi.etat === 'en_reprise') {
     texte = (
       <>

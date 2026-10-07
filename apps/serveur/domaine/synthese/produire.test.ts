@@ -507,4 +507,79 @@ describe('ce qu’on refuse', () => {
     expect(base.ecrits).toEqual([])
     expect(signaler).toHaveBeenCalledOnce()
   })
+
+  it('⛔ une requête REFUSÉE n’est pas un modèle indisponible', async () => {
+    const base = baseAvec()
+    const signaler = vi.fn()
+
+    const resultat = await produireSynthese(
+      RETOUR,
+      { ...portsAvec(base, modeleBouchon({ refuseSynthese: true })), signaler },
+      MAX_RELANCES,
+    )
+
+    expect(resultat).toEqual({ ok: false, motif: 'requete_refusee' })
+    expect(base.ecrits).toEqual([])
+    // ⚠️ La cause part au journal : c’est elle que l’exploitant cherchera.
+    expect(String(signaler.mock.calls[0]?.[0])).toContain('HTTP 400 invalid_request_error')
+  })
+})
+
+/**
+ * ⛔ BUGS_LOG 021 — le panneau refermé sur une question du bot.
+ *
+ * Le fil finit sur `bot` : la relance est restée sans réponse. Envoyé tel quel,
+ * il finissait sur un message `assistant`, que l’API refuse en 400 — huit
+ * reprises plus tard, la note était déclarée impossible. Le bouchon refuse
+ * désormais ce que l’API refuse : ces tests rougissent sans la correction.
+ */
+describe('⛔ un entretien qui finit sur une question du bot', () => {
+  const RELANCE = 'C’est arrivé depuis un moment, ou c’est nouveau ?'
+  const FIL_SUR_UNE_RELANCE: TourFil[] = [
+    { role: 'collaborateur', texte: PAROLE },
+    { role: 'bot', texte: RELANCE },
+  ]
+
+  it('abandon sur la relance : la note est produite', async () => {
+    const base = baseAvec({ statut: 'abandonne', fil: FIL_SUR_UNE_RELANCE, relancesPosees: 1 })
+    const modele = modeleBouchon()
+
+    const resultat = await produireSynthese(RETOUR, portsAvec(base, modele), MAX_RELANCES)
+
+    expect(resultat.ok).toBe(true)
+    expect(modele.recuesSynthese[0]?.fin).toBe('abandon')
+  })
+
+  it('limite atteinte sur la seconde relance : la note est produite', async () => {
+    const base = baseAvec({
+      statut: 'envoye',
+      fil: [...FIL, { role: 'bot', texte: 'Ça vous bloque, ou ça vous ralentit ?' }],
+      relancesPosees: MAX_RELANCES,
+    })
+
+    const resultat = await produireSynthese(RETOUR, portsAvec(base, modeleBouchon()), MAX_RELANCES)
+
+    expect(resultat.ok).toBe(true)
+  })
+
+  it('la relance sans réponse ne part pas en message — et la fin de la conversation est la parole', () => {
+    const messages = messagesDuFil(FIL_SUR_UNE_RELANCE)
+
+    expect(messages).toEqual([{ role: 'user', content: PAROLE }])
+  })
+
+  it('⛔ un fil où ne restent que des lignes du bot : rien à synthétiser, et aucun appel', async () => {
+    const modele = modeleBouchon()
+    const base = baseAvec({
+      fil: [
+        { role: 'collaborateur', texte: '' },
+        { role: 'bot', texte: 'Vous pouvez redire ?' },
+      ],
+    })
+
+    const resultat = await produireSynthese(RETOUR, portsAvec(base, modele), MAX_RELANCES)
+
+    expect(resultat).toEqual({ ok: false, motif: 'rien_a_synthetiser' })
+    expect(modele.recuesSynthese).toHaveLength(0)
+  })
 })

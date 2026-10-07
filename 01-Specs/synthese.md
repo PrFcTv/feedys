@@ -86,6 +86,14 @@ avalé. Les trois chemins de [entretien.md](entretien.md) y mènent :
 | deux relances atteintes | `envoye` | « l’entretien s’est arrêté sur la limite, pas parce qu’il était complet » |
 | abandon | `abandonne` | « la personne a refermé le panneau ; rien n’est confirmé » |
 
+⛔ **La conversation envoyée au modèle commence et finit sur la parole** — un message `user` aux
+deux bouts. Quand l’entretien s’arrête sur une relance restée sans réponse (abandon, limite), cette
+relance **ne part pas** : elle ne contient rien que la personne ait dit, et les modèles récents
+refusent une conversation qui finit sur `assistant`. Le prompt système dit seulement **le fait** —
+« la dernière question est restée sans réponse » —, jamais le texte de la question
+([BUGS_LOG](../03-Bugs/BUGS_LOG.md) 021). S’il ne reste aucune parole, c’est `rien_a_synthetiser` :
+rien ne part.
+
 ⛔ **Une synthèse qui rate ne perd rien.** Le retour est en base depuis l’ingestion et clos depuis
 la fin d’entretien ; il lui manque sa note, c’est tout — et **le filet la redemande tout seul**
 (§Quand elle rate).
@@ -102,6 +110,13 @@ modèle perdait la note pour toujours, et l’outil cité n’écrit rien ([BUGS
 - **Au plafond, il renonce**, le back-office le dit, et une alerte part.
 - ⛔ **Un retour sans parole n’est jamais retenté** : un retour dicté sans transcript ne produira
   jamais de note.
+- ⛔ **Une requête refusée n’est pas une panne** ([D-032](../00-Projet/DECISIONS_LOG.md)). Quand le
+  fournisseur refuse la requête **pour ce qu’elle est** — HTTP 400, 413, 422 —, elle le sera à
+  l’identique jusqu’à un correctif de Feedys. Le filet la redemande **une fois**, pour confirmer,
+  puis renonce avec le motif `requete_refusee` ; l’alerte et le back-office disent « refusée par le
+  fournisseur », avec la cause exacte, et pas « le modèle n’a pas répondu ». ⚠️ Un refus qui tient au
+  **compte** — clé (401), crédit (402), accès (403), modèle inconnu (404) — reste une
+  indisponibilité : il se règle sans toucher au code, et le filet attend qu’on l’ait réglé.
 - **« Refaire la note »**, sur la fiche du back-office, la demande à la main — ⛔ jamais pour un retour
   qui a déjà la sienne, ni pour un entretien en cours.
 
